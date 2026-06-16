@@ -21,6 +21,7 @@ mod components;
 mod highlight;
 mod lang;
 mod plugins;
+mod relay;
 mod state;
 mod theme;
 

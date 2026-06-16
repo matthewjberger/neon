@@ -3,6 +3,11 @@
 //! from disk so a fresh `trunk build` shows up on relaunch; release builds
 //! embed the bundle into the executable.
 
+#[cfg(feature = "agent")]
+mod agent;
+#[cfg(feature = "agent")]
+mod chat;
+
 use rust_embed::RustEmbed;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -86,6 +91,15 @@ impl ApplicationHandler for App {
             .with_navigation_handler(|url| {
                 url.starts_with("http://127.0.0.1") || url.starts_with("https://127.0.0.1")
             });
+        #[cfg(feature = "agent")]
+        let builder = builder.with_ipc_handler(|request| match request.body().as_str() {
+            "enable-mcp" => agent::start(),
+            "open-chat" => {
+                agent::start();
+                chat::start();
+            }
+            _ => {}
+        });
         #[cfg(target_os = "windows")]
         let builder = {
             use wry::WebViewBuilderExtWindows;

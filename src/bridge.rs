@@ -2,6 +2,9 @@
 //! free functions below. Maps each `WorkerMessage` to a signal write and sends
 //! `ClientMessage`s as `postMessage` envelopes.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use leptos::prelude::*;
 use protocol::{CANVAS_KEY, ClientMessage, LogKind, MESSAGE_KEY, WorkerMessage};
 use wasm_bindgen::prelude::*;
@@ -24,6 +27,9 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
     options.set_type(WorkerType::Module);
     let worker =
         Worker::new_with_options("runtime/worker.js", &options).expect("failed to spawn worker");
+
+    let relay_socket: crate::relay::RelaySocket = Rc::new(RefCell::new(None));
+    let response_socket = relay_socket.clone();
 
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
         let data = event.data();
@@ -68,13 +74,16 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
                     });
                 });
             }
-            WorkerMessage::Agent(_) => {}
+            WorkerMessage::Agent(response) => {
+                crate::relay::send_response(&response_socket, &response);
+            }
         }
     });
     worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
 
     let bridge = Bridge { worker };
+    crate::relay::start(state, bridge.clone(), relay_socket);
     send_init(&bridge, offscreen, width, height);
     bridge
 }

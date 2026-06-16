@@ -8,8 +8,33 @@ edition = "2024"
 name = "neon"
 path = "src/main.rs"
 
+[features]
+default = ["agent"]
+# The Claude bridge: the MCP HTTP endpoint, the page relay websocket, and the
+# chat relay to a claude subprocess. Runtime gated, the sockets open only when
+# the page sends its open-chat signal.
+agent = [
+    "dep:tokio",
+    "dep:tokio-tungstenite",
+    "dep:futures-util",
+    "dep:serde_json",
+    "dep:protocol",
+]
+
 [dependencies]
 wry = "0.55"
 winit = "0.30"
 rust-embed = "8"
 tiny_http = "0.12"
+protocol = { path = "../protocol", optional = true }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "time",
+    "process",
+    "io-util",
+], optional = true }
+tokio-tungstenite = { version = "0.24", optional = true }
+futures-util = { version = "0.3", optional = true }
+serde_json = { version = "1", optional = true }
