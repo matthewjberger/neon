@@ -21,13 +21,17 @@ status bar shows its language by extension.
 ## Project search
 
 The Search view (`SPC /` or `SPC s p`) runs a query across the workspace on the
-desktop, which walks the tree with the `ignore` crate so it respects
-`.gitignore`. Each hit is a file and line. Click it to open the file and jump to
-the line. References and multi-location go-to results land in this same panel.
+desktop with ripgrep's own engine: the `grep` line searcher over an `ignore`
+parallel walk that respects `.gitignore`. The query is a smart-case regex,
+case-insensitive until you type an uppercase letter, and a query that is not
+valid regex matches literally. Each hit is a file and line. Click it to open the
+file and jump to the line. References and multi-location go-to results land in
+this same panel.
 
 ## The filesystem bridge
 
 The page has no disk access, so `desktop/src/fs.rs` runs every file operation
-natively: the folder picker, directory listing, file read and write, and search.
+natively: the folder picker, directory listing, file read and write, and the
+ripgrep-engine search.
 The page client (`src/fs.rs`) sends `FsRequest`s and applies each `FsResponse` to
 the tree, the open buffers, and the search results.

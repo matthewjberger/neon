@@ -237,8 +237,9 @@ path for file buffers.
 
 The page has no disk access, so the filesystem bridge (`desktop/src/fs.rs`, a
 websocket relay) runs every file operation natively: the folder picker, directory
-listing, file read and write, and a project search that walks the workspace with
-the `ignore` crate so it respects gitignore. The page client (`src/fs.rs`) sends
+listing, file read and write, and a project search that runs ripgrep's engine
+(the `grep` searcher over an `ignore` parallel walk) as a smart-case regex,
+respecting gitignore. The page client (`src/fs.rs`) sends
 `FsRequest`s and applies each `FsResponse` to the tree, the open file buffers, and
 the search results.
 

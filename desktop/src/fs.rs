@@ -159,46 +159,97 @@ async fn handle(request: FsRequest) -> FsResponse {
     }
 }
 
-const SEARCH_LIMIT: usize = 500;
+const SEARCH_LIMIT: usize = 1000;
 
+/// Searches the workspace with ripgrep's own engine: the query is a smart-case
+/// regex (case-insensitive unless it has an uppercase letter), the walk respects
+/// gitignore and runs in parallel, and each file is scanned with
+/// `grep`'s line searcher. Falls back to a literal match if the regex is invalid.
 fn search(root: &str, query: &str) -> Vec<protocol::SearchHit> {
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use grep::regex::RegexMatcherBuilder;
+    use grep::searcher::Searcher;
+    use grep::searcher::sinks::UTF8;
+    use ignore::WalkState;
+
     if query.is_empty() {
         return Vec::new();
     }
-    let needle = query.to_lowercase();
-    let mut hits = Vec::new();
-    for entry in ignore::WalkBuilder::new(root)
+    let smart_case = !query.chars().any(|character| character.is_uppercase());
+    let builder = {
+        let mut builder = RegexMatcherBuilder::new();
+        builder.case_insensitive(smart_case);
+        builder
+    };
+    let matcher = match builder.build(query) {
+        Ok(matcher) => matcher,
+        Err(_) => match builder.build(&escape_regex(query)) {
+            Ok(matcher) => matcher,
+            Err(_) => return Vec::new(),
+        },
+    };
+
+    let hits = Arc::new(Mutex::new(Vec::new()));
+    let count = Arc::new(AtomicUsize::new(0));
+    ignore::WalkBuilder::new(root)
         .hidden(true)
-        .build()
-        .flatten()
-    {
-        if hits.len() >= SEARCH_LIMIT {
-            break;
-        }
-        if !entry
-            .file_type()
-            .is_some_and(|file_type| file_type.is_file())
-        {
-            continue;
-        }
-        let path = entry.path();
-        let Ok(text) = std::fs::read_to_string(path) else {
-            continue;
-        };
-        for (number, line) in text.lines().enumerate() {
-            if line.to_lowercase().contains(&needle) {
-                hits.push(protocol::SearchHit {
-                    path: path.to_string_lossy().to_string(),
-                    line: number as u32 + 1,
-                    text: line.trim().chars().take(200).collect(),
-                });
-                if hits.len() >= SEARCH_LIMIT {
-                    break;
+        .build_parallel()
+        .run(|| {
+            let matcher = matcher.clone();
+            let hits = hits.clone();
+            let count = count.clone();
+            Box::new(move |result| {
+                if count.load(Ordering::Relaxed) >= SEARCH_LIMIT {
+                    return WalkState::Quit;
                 }
-            }
-        }
-    }
+                let Ok(entry) = result else {
+                    return WalkState::Continue;
+                };
+                if !entry
+                    .file_type()
+                    .is_some_and(|file_type| file_type.is_file())
+                {
+                    return WalkState::Continue;
+                }
+                let path = entry.path().to_path_buf();
+                let display = path.to_string_lossy().to_string();
+                let sink = UTF8(|number, line| {
+                    if count.fetch_add(1, Ordering::Relaxed) >= SEARCH_LIMIT {
+                        return Ok(false);
+                    }
+                    hits.lock().unwrap().push(protocol::SearchHit {
+                        path: display.clone(),
+                        line: number as u32,
+                        text: line.trim().chars().take(200).collect(),
+                    });
+                    Ok(true)
+                });
+                let _ = Searcher::new().search_path(&matcher, &path, sink);
+                WalkState::Continue
+            })
+        });
+
+    let mut hits = Arc::try_unwrap(hits)
+        .map(|lock| lock.into_inner().unwrap_or_default())
+        .unwrap_or_default();
+    hits.truncate(SEARCH_LIMIT);
     hits
+}
+
+/// Escapes the regex metacharacters in a query so it matches literally.
+fn escape_regex(query: &str) -> String {
+    const META: &str = r".+*?()|[]{}^$\";
+    let mut escaped = String::with_capacity(query.len());
+    for character in query.chars() {
+        if META.contains(character) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 async fn list_dir(path: &Path) -> Result<Vec<DirEntry>, String> {

@@ -23,7 +23,7 @@ pub fn SearchPanel(state: EditorState) -> impl IntoView {
             </div>
             <input
                 class="search-input"
-                placeholder="Search project"
+                placeholder="Search project (regex)"
                 prop:value=move || query.get()
                 on:input=move |event| query.set(event_target_value(&event))
                 on:keydown=move |event| {
