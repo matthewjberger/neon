@@ -1,0 +1,63 @@
+[workspace]
+members = ["desktop", "protocol", "worker", "lang"]
+resolver = "2"
+
+[package]
+name = "neon"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[dependencies]
+leptos = { version = "0.7", features = ["csr"] }
+protocol = { path = "protocol" }
+wasm-bindgen = "=0.2.115"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "HtmlInputElement",
+    "HtmlTextAreaElement",
+    "HtmlDivElement",
+    "HtmlPreElement",
+    "OffscreenCanvas",
+    "CssStyleDeclaration",
+    "DomRect",
+    "DomRectReadOnly",
+    "DomTokenList",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+    "MessageEvent",
+    "Event",
+    "EventTarget",
+    "AddEventListenerOptions",
+    "InputEvent",
+    "PointerEvent",
+    "MouseEvent",
+    "WheelEvent",
+    "KeyboardEvent",
+    "ResizeObserver",
+    "ResizeObserverEntry",
+    "Storage",
+    "Location",
+    "Performance",
+    "Url",
+    "Blob",
+    "BlobPropertyBag",
+    "WebSocket",
+    "BinaryType",
+] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

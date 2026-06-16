@@ -1,0 +1,15 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[[bin]]
+name = "neon"
+path = "src/main.rs"
+
+[dependencies]
+wry = "0.55"
+winit = "0.30"
+rust-embed = "8"
+tiny_http = "0.12"

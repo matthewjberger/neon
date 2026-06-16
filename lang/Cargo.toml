@@ -1,0 +1,23 @@
+[package]
+name = "lang"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+protocol = { path = "../protocol" }
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "=0.2.115"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = ["DedicatedWorkerGlobalScope", "MessageEvent"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rhai = { version = "1.23", default-features = false, features = ["std", "sync", "wasm-bindgen"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rhai = { version = "1.23", default-features = false, features = ["std", "sync"] }

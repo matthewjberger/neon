@@ -1,0 +1,8 @@
+pub mod chat;
+pub mod console;
+pub mod editor_pane;
+pub mod loader;
+pub mod plugin_panel;
+pub mod reference;
+pub mod toolbar;
+pub mod viewport;
