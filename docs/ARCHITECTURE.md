@@ -157,13 +157,19 @@ tools and pipes the `claude` subprocess is the remaining piece.
 A second plugin kind, editor plugins, runs in a page-side rhai engine
 (`src/editor_plugins.rs`). An editor plugin's `on_key()` reads `key`, `mode`,
 `ctrl`/`shift`/`alt`, and a persistent `state` map, and pushes ops the host
-applies: `Consume`, `SetMode`, `SetStatus`, `Insert`, `Move`, `MoveLine`,
-`LineStart`/`LineEnd`, `NextWord`/`PrevWord`, `DeleteForward`/`DeleteBackward`,
-`DeleteLine`, plus the ops that drive the editor itself: `RunCommand` (run a
-named editor command), `OpenPalette`, and `ShowMenu`/`HideMenu` (publish the
-which-key menu). The dispatch mirrors the scene-plugin model, on the editor
-instead of the scene, and runs synchronously in the keydown handler so modal
-editing has no latency.
+applies. The host owns the buffer text, so the ops do real editing: caret motion
+(`Move`, `MoveLine`, `LineStart`/`LineEnd`, `SmartLineStart`, `NextWord`/
+`PrevWord`, `FindChar`), edits (`Insert`, `DeleteForward`/`DeleteBackward`,
+`DeleteWordForward`/`DeleteWordBackward`, `DeleteLine`, `DeleteToLineEnd`,
+`DuplicateLine`, `MoveLineUp`/`MoveLineDown`, `JoinLines`, `Indent`/`Outdent`,
+`ToggleComment`), and editor control (`SetMode`, `SetStatus`, `Consume`,
+`RunCommand`, `OpenPalette`, `ShowMenu`/`HideMenu`). The dispatch mirrors the
+scene-plugin model, on the editor instead of the scene, and runs synchronously in
+the keydown handler so modal editing has no latency. The catalog ships many of
+these as opt-in plugins: Emacs keys, auto pairs, better escape (jk), comment
+toggle, line tools, word delete, join lines, smart home, jump to char, blank
+lines, the comment object, and move lines, alongside the Vim and Spacemacs
+layers.
 
 Editor commands live in one registry (`src/commands.rs`): split and focus panes,
 toggle the panels, switch the sidebar view, run or pause, reset, cycle themes,

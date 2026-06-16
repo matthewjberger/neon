@@ -62,6 +62,76 @@ pub fn catalog() -> Vec<CatalogEntry> {
             source: PULSE_RING,
         },
         CatalogEntry {
+            id: "example-wave-grid",
+            name: "Wave Grid",
+            kind: PluginKind::Scene,
+            description: "A grid of spheres rippling like water.",
+            source: WAVE_GRID,
+        },
+        CatalogEntry {
+            id: "example-orbits",
+            name: "Orbits",
+            kind: PluginKind::Scene,
+            description: "Bodies orbiting a glowing center, a little solar system.",
+            source: ORBITS,
+        },
+        CatalogEntry {
+            id: "example-spiral",
+            name: "Spiral",
+            kind: PluginKind::Scene,
+            description: "A rotating spiral arm climbing upward.",
+            source: SPIRAL,
+        },
+        CatalogEntry {
+            id: "example-lissajous",
+            name: "Lissajous",
+            kind: PluginKind::Scene,
+            description: "A Lissajous curve traced in space, drifting with time.",
+            source: LISSAJOUS,
+        },
+        CatalogEntry {
+            id: "example-starfield",
+            name: "Starfield",
+            kind: PluginKind::Scene,
+            description: "A warp starfield streaming toward the camera.",
+            source: STARFIELD,
+        },
+        CatalogEntry {
+            id: "example-helix",
+            name: "Double Helix",
+            kind: PluginKind::Scene,
+            description: "Two strands winding around each other, rotating.",
+            source: HELIX,
+        },
+        CatalogEntry {
+            id: "example-bouncing-balls",
+            name: "Bouncing Balls",
+            kind: PluginKind::Scene,
+            description: "Balls dropped under gravity, bouncing off the floor.",
+            source: BOUNCING_BALLS,
+        },
+        CatalogEntry {
+            id: "example-snowfall",
+            name: "Snowfall",
+            kind: PluginKind::Scene,
+            description: "Snow that drifts sideways as it falls.",
+            source: SNOWFALL,
+        },
+        CatalogEntry {
+            id: "example-breathing-sphere",
+            name: "Breathing Sphere",
+            kind: PluginKind::Scene,
+            description: "A single sphere easing its radius and hue with time.",
+            source: BREATHING_SPHERE,
+        },
+        CatalogEntry {
+            id: "example-fireworks",
+            name: "Fireworks",
+            kind: PluginKind::Scene,
+            description: "Random bursts of sparks that arc out and fade.",
+            source: FIREWORKS,
+        },
+        CatalogEntry {
             id: "spacemacs",
             name: "Spacemacs",
             kind: PluginKind::Editor,
@@ -81,6 +151,90 @@ pub fn catalog() -> Vec<CatalogEntry> {
             kind: PluginKind::Editor,
             description: "A starter editor plugin showing the on_key API.",
             source: EDITOR_TEMPLATE,
+        },
+        CatalogEntry {
+            id: "emacs",
+            name: "Emacs Keys",
+            kind: PluginKind::Editor,
+            description: "Non-modal Ctrl and Alt motions and kills: Ctrl+A/E/B/N/P/D/K, Alt+F/B/D.",
+            source: EMACS,
+        },
+        CatalogEntry {
+            id: "auto-pairs",
+            name: "Auto Pairs",
+            kind: PluginKind::Editor,
+            description: "Insert the matching bracket or quote and keep the caret between them.",
+            source: AUTO_PAIRS,
+        },
+        CatalogEntry {
+            id: "better-escape",
+            name: "Better Escape",
+            kind: PluginKind::Editor,
+            description: "Type jk in insert mode to leave it, hands on the home row.",
+            source: BETTER_ESCAPE,
+        },
+        CatalogEntry {
+            id: "comment-toggle",
+            name: "Comment Toggle",
+            kind: PluginKind::Editor,
+            description: "Ctrl+/ comments or uncomments the current line.",
+            source: COMMENT_TOGGLE,
+        },
+        CatalogEntry {
+            id: "line-tools",
+            name: "Line Tools",
+            kind: PluginKind::Editor,
+            description: "Move (Alt+Up/Down), duplicate, delete, and indent lines, VSCode-style.",
+            source: LINE_TOOLS,
+        },
+        CatalogEntry {
+            id: "word-motions",
+            name: "Word Delete",
+            kind: PluginKind::Editor,
+            description: "Ctrl+Backspace and Ctrl+Delete remove the word before or after the caret.",
+            source: WORD_MOTIONS,
+        },
+        CatalogEntry {
+            id: "join-lines",
+            name: "Join Lines",
+            kind: PluginKind::Editor,
+            description: "Ctrl+J pulls the next line up onto the current one.",
+            source: JOIN_LINES,
+        },
+        CatalogEntry {
+            id: "smart-home",
+            name: "Smart Home",
+            kind: PluginKind::Editor,
+            description: "Home jumps to the first non-whitespace character, then the line start.",
+            source: SMART_HOME,
+        },
+        CatalogEntry {
+            id: "jump-to-char",
+            name: "Jump to Char",
+            kind: PluginKind::Editor,
+            description: "The vim f motion: press f then a character to jump to it on the line.",
+            source: JUMP_TO_CHAR,
+        },
+        CatalogEntry {
+            id: "blank-lines",
+            name: "Blank Lines",
+            kind: PluginKind::Editor,
+            description: "In normal mode, ] space opens a line below, [ space one above.",
+            source: BLANK_LINES,
+        },
+        CatalogEntry {
+            id: "commentary",
+            name: "Comment Object",
+            kind: PluginKind::Editor,
+            description: "The gcc motion: toggle the comment on the current line in normal mode.",
+            source: COMMENTARY,
+        },
+        CatalogEntry {
+            id: "move-lines",
+            name: "Move Lines",
+            kind: PluginKind::Editor,
+            description: "Alt+j and Alt+k shuffle the current line down or up.",
+            source: MOVE_LINES,
         },
     ]
 }
@@ -173,6 +327,29 @@ pub fn default_editor_plugins() -> Vec<PluginSource> {
 const SPACEMACS: &str = include_str!("../editor_stdlib/spacemacs.rhai");
 const VIM_SOURCE: &str = include_str!("../editor_stdlib/vim.rhai");
 const EDITOR_TEMPLATE: &str = include_str!("../editor_stdlib/editor_template.rhai");
+const EMACS: &str = include_str!("../editor_stdlib/emacs.rhai");
+const AUTO_PAIRS: &str = include_str!("../editor_stdlib/auto_pairs.rhai");
+const BETTER_ESCAPE: &str = include_str!("../editor_stdlib/better_escape.rhai");
+const COMMENT_TOGGLE: &str = include_str!("../editor_stdlib/line_comment.rhai");
+const LINE_TOOLS: &str = include_str!("../editor_stdlib/line_tools.rhai");
+const WORD_MOTIONS: &str = include_str!("../editor_stdlib/word_motions.rhai");
+const JOIN_LINES: &str = include_str!("../editor_stdlib/join_lines.rhai");
+const SMART_HOME: &str = include_str!("../editor_stdlib/smart_home.rhai");
+const JUMP_TO_CHAR: &str = include_str!("../editor_stdlib/jump_to_char.rhai");
+const BLANK_LINES: &str = include_str!("../editor_stdlib/blank_lines.rhai");
+const COMMENTARY: &str = include_str!("../editor_stdlib/commentary.rhai");
+const MOVE_LINES: &str = include_str!("../editor_stdlib/move_lines.rhai");
+
+const WAVE_GRID: &str = include_str!("../examples/wave_grid.rhai");
+const ORBITS: &str = include_str!("../examples/orbits.rhai");
+const SPIRAL: &str = include_str!("../examples/spiral.rhai");
+const LISSAJOUS: &str = include_str!("../examples/lissajous.rhai");
+const STARFIELD: &str = include_str!("../examples/starfield.rhai");
+const HELIX: &str = include_str!("../examples/helix.rhai");
+const BOUNCING_BALLS: &str = include_str!("../examples/bouncing_balls.rhai");
+const SNOWFALL: &str = include_str!("../examples/snowfall.rhai");
+const BREATHING_SPHERE: &str = include_str!("../examples/breathing_sphere.rhai");
+const FIREWORKS: &str = include_str!("../examples/fireworks.rhai");
 
 const TEMPLATE_SCENE: &str = r#"// TEMPLATE: how to write a Neon plugin.
 //

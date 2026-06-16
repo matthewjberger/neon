@@ -46,6 +46,18 @@ enum EditorOp {
     DeleteForward(i64),
     DeleteBackward(i64),
     DeleteLine,
+    DeleteToLineEnd,
+    DeleteWordBackward,
+    DeleteWordForward,
+    DuplicateLine,
+    MoveLineUp,
+    MoveLineDown,
+    JoinLines,
+    Indent,
+    Outdent,
+    SmartLineStart,
+    ToggleComment(String),
+    FindChar(String),
     RunCommand(String),
     OpenPalette,
     ShowMenu(LeaderMenu),
@@ -144,6 +156,16 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "NextWord" => Some(EditorOp::NextWord),
             "PrevWord" => Some(EditorOp::PrevWord),
             "DeleteLine" => Some(EditorOp::DeleteLine),
+            "DeleteToLineEnd" => Some(EditorOp::DeleteToLineEnd),
+            "DeleteWordBackward" => Some(EditorOp::DeleteWordBackward),
+            "DeleteWordForward" => Some(EditorOp::DeleteWordForward),
+            "DuplicateLine" => Some(EditorOp::DuplicateLine),
+            "MoveLineUp" => Some(EditorOp::MoveLineUp),
+            "MoveLineDown" => Some(EditorOp::MoveLineDown),
+            "JoinLines" => Some(EditorOp::JoinLines),
+            "Indent" => Some(EditorOp::Indent),
+            "Outdent" => Some(EditorOp::Outdent),
+            "SmartLineStart" => Some(EditorOp::SmartLineStart),
             "OpenPalette" => Some(EditorOp::OpenPalette),
             "HideMenu" => Some(EditorOp::HideMenu),
             _ => None,
@@ -153,6 +175,8 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
     let (name, payload) = map.into_iter().next()?;
     match name.as_str() {
         "ShowMenu" => parse_menu(payload).map(EditorOp::ShowMenu),
+        "ToggleComment" => Some(EditorOp::ToggleComment(payload.into_string().ok()?)),
+        "FindChar" => Some(EditorOp::FindChar(payload.into_string().ok()?)),
         "SetMode" => Some(EditorOp::SetMode(payload.into_string().ok()?)),
         "SetStatus" => Some(EditorOp::SetStatus(payload.into_string().ok()?)),
         "Insert" => Some(EditorOp::Insert(payload.into_string().ok()?)),
@@ -247,6 +271,153 @@ fn apply(
                     text.drain(start..end);
                     caret = start.min(text.len());
                     changed = true;
+                }
+            }
+            EditorOp::DeleteToLineEnd => {
+                let end = line_end(&text, caret);
+                if end > caret {
+                    text.drain(caret..end);
+                    changed = true;
+                } else if caret < text.len() && text[caret] == '\n' {
+                    text.remove(caret);
+                    changed = true;
+                }
+            }
+            EditorOp::DeleteWordBackward => {
+                let start = prev_word(&text, caret);
+                if caret > start {
+                    text.drain(start..caret);
+                    caret = start;
+                    changed = true;
+                }
+            }
+            EditorOp::DeleteWordForward => {
+                let end = next_word(&text, caret);
+                if end > caret {
+                    text.drain(caret..end);
+                    changed = true;
+                }
+            }
+            EditorOp::DuplicateLine => {
+                let start = line_start(&text, caret);
+                let end = line_end(&text, caret);
+                let mut inserted = vec!['\n'];
+                inserted.extend_from_slice(&text[start..end]);
+                text.splice(end..end, inserted);
+                caret += end - start + 1;
+                changed = true;
+            }
+            EditorOp::MoveLineUp => {
+                let start = line_start(&text, caret);
+                if start > 0 {
+                    let end = line_end(&text, caret);
+                    let previous_start = line_start(&text, start - 1);
+                    let column = caret - start;
+                    let mut region: Vec<char> = text[start..end].to_vec();
+                    region.push('\n');
+                    region.extend_from_slice(&text[previous_start..start - 1]);
+                    text.splice(previous_start..end, region);
+                    caret = previous_start + column;
+                    changed = true;
+                }
+            }
+            EditorOp::MoveLineDown => {
+                let end = line_end(&text, caret);
+                if end < text.len() {
+                    let start = line_start(&text, caret);
+                    let next_start = end + 1;
+                    let next_end = line_end(&text, next_start);
+                    let column = caret - start;
+                    let next_line: Vec<char> = text[next_start..next_end].to_vec();
+                    let mut region = next_line.clone();
+                    region.push('\n');
+                    region.extend_from_slice(&text[start..end]);
+                    text.splice(start..next_end, region);
+                    caret = start + next_line.len() + 1 + column;
+                    changed = true;
+                }
+            }
+            EditorOp::JoinLines => {
+                let end = line_end(&text, caret);
+                if end < text.len() {
+                    text.remove(end);
+                    caret = end;
+                    changed = true;
+                }
+            }
+            EditorOp::Indent => {
+                let start = line_start(&text, caret);
+                text.splice(start..start, [' ', ' ', ' ', ' ']);
+                caret += 4;
+                changed = true;
+            }
+            EditorOp::Outdent => {
+                let start = line_start(&text, caret);
+                let mut removed = 0;
+                while removed < 4 && start + removed < text.len() && text[start + removed] == ' ' {
+                    removed += 1;
+                }
+                if removed > 0 {
+                    text.drain(start..start + removed);
+                    caret = caret.saturating_sub(removed);
+                    changed = true;
+                }
+            }
+            EditorOp::SmartLineStart => {
+                let start = line_start(&text, caret);
+                let end = line_end(&text, caret);
+                let mut first = start;
+                while first < end && (text[first] == ' ' || text[first] == '\t') {
+                    first += 1;
+                }
+                caret = if caret == first { start } else { first };
+            }
+            EditorOp::ToggleComment(marker) => {
+                let marker: Vec<char> = marker.chars().collect();
+                if !marker.is_empty() {
+                    let start = line_start(&text, caret);
+                    let end = line_end(&text, caret);
+                    let mut first = start;
+                    while first < end && (text[first] == ' ' || text[first] == '\t') {
+                        first += 1;
+                    }
+                    let present = first + marker.len() <= end
+                        && text[first..first + marker.len()] == marker[..];
+                    if present {
+                        let mut stop = first + marker.len();
+                        if stop < end && text[stop] == ' ' {
+                            stop += 1;
+                        }
+                        let removed = stop - first;
+                        text.drain(first..stop);
+                        if caret >= stop {
+                            caret -= removed;
+                        } else if caret > first {
+                            caret = first;
+                        }
+                    } else {
+                        let mut inserted = marker.clone();
+                        inserted.push(' ');
+                        let added = inserted.len();
+                        text.splice(first..first, inserted);
+                        if caret >= first {
+                            caret += added;
+                        }
+                    }
+                    changed = true;
+                }
+            }
+            EditorOp::FindChar(target) => {
+                if let Some(needle) = target.chars().next() {
+                    let end = line_end(&text, caret);
+                    let mut index = caret + 1;
+                    while index < end {
+                        if text[index] == needle {
+                            caret = index;
+                            break;
+                        }
+                        index += 1;
+                    }
                 }
             }
             EditorOp::RunCommand(id) => state.command_request.set(Some(id)),

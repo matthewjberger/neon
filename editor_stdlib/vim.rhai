@@ -19,10 +19,25 @@ fn on_key() {
     if pending == "d" {
         state.pending = "";
         if key == "d" { ops.push("DeleteLine"); }
+        else if key == "w" { ops.push("DeleteWordForward"); }
+        else if key == "b" { ops.push("DeleteWordBackward"); }
+        return;
+    }
+    if pending == ">" {
+        state.pending = "";
+        if key == ">" { ops.push("Indent"); }
+        return;
+    }
+    if pending == "<" {
+        state.pending = "";
+        if key == "<" { ops.push("Outdent"); }
         return;
     }
 
     if key == "i" { ops.push(#{ SetMode: "insert" }); }
+    else if key == "J" { ops.push("JoinLines"); }
+    else if key == ">" { state.pending = ">"; ops.push(#{ SetStatus: ">-" }); }
+    else if key == "<" { state.pending = "<"; ops.push(#{ SetStatus: "<-" }); }
     else if key == "a" { ops.push(#{ Move: 1 }); ops.push(#{ SetMode: "insert" }); }
     else if key == "A" { ops.push("LineEnd"); ops.push(#{ SetMode: "insert" }); }
     else if key == "o" { ops.push("LineEnd"); ops.push(#{ Insert: "\n" }); ops.push(#{ SetMode: "insert" }); }

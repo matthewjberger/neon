@@ -315,6 +315,79 @@ mod tests {
     }
 
     #[test]
+    fn catalog_plugins_compile() {
+        let sources: &[(&str, &str)] = &[
+            ("emacs", include_str!("../../editor_stdlib/emacs.rhai")),
+            (
+                "auto_pairs",
+                include_str!("../../editor_stdlib/auto_pairs.rhai"),
+            ),
+            (
+                "better_escape",
+                include_str!("../../editor_stdlib/better_escape.rhai"),
+            ),
+            (
+                "line_comment",
+                include_str!("../../editor_stdlib/line_comment.rhai"),
+            ),
+            (
+                "line_tools",
+                include_str!("../../editor_stdlib/line_tools.rhai"),
+            ),
+            (
+                "word_motions",
+                include_str!("../../editor_stdlib/word_motions.rhai"),
+            ),
+            (
+                "join_lines",
+                include_str!("../../editor_stdlib/join_lines.rhai"),
+            ),
+            (
+                "smart_home",
+                include_str!("../../editor_stdlib/smart_home.rhai"),
+            ),
+            (
+                "jump_to_char",
+                include_str!("../../editor_stdlib/jump_to_char.rhai"),
+            ),
+            (
+                "blank_lines",
+                include_str!("../../editor_stdlib/blank_lines.rhai"),
+            ),
+            (
+                "commentary",
+                include_str!("../../editor_stdlib/commentary.rhai"),
+            ),
+            (
+                "move_lines",
+                include_str!("../../editor_stdlib/move_lines.rhai"),
+            ),
+            ("wave_grid", include_str!("../../examples/wave_grid.rhai")),
+            ("orbits", include_str!("../../examples/orbits.rhai")),
+            ("spiral", include_str!("../../examples/spiral.rhai")),
+            ("lissajous", include_str!("../../examples/lissajous.rhai")),
+            ("starfield", include_str!("../../examples/starfield.rhai")),
+            ("helix", include_str!("../../examples/helix.rhai")),
+            (
+                "bouncing_balls",
+                include_str!("../../examples/bouncing_balls.rhai"),
+            ),
+            ("snowfall", include_str!("../../examples/snowfall.rhai")),
+            (
+                "breathing_sphere",
+                include_str!("../../examples/breathing_sphere.rhai"),
+            ),
+            ("fireworks", include_str!("../../examples/fireworks.rhai")),
+        ];
+        let engine = super::make_engine();
+        for (name, source) in sources {
+            if let Err(error) = engine.compile(source) {
+                panic!("{name} does not compile: {error}");
+            }
+        }
+    }
+
+    #[test]
     fn editor_plugins_compile() {
         let engine = super::make_engine();
         if let Err(error) = engine.compile(VIM) {

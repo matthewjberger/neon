@@ -147,8 +147,10 @@ scene. They run in a neon-owned rhai engine on the page (for latency, since they
 touch the editor synchronously). An editor plugin's `on_key()` reads the keystroke
 and a persistent `state` map and pushes ops the host applies:
 
-- **Buffer and cursor:** insert and delete text, move the caret by character,
-  line, or word, jump to line ends, change mode, set the status line.
+- **Buffer and cursor:** the host owns the text, so the ops do real editing:
+  caret motion (character, line, word, smart line start, find char), edits
+  (insert, delete char/word/line, kill to line end, duplicate line, move line up
+  or down, join, indent, outdent, toggle comment), and mode and status.
 - **Editor commands:** `RunCommand` runs any entry in the editor-command registry
   (`src/commands.rs`): split and focus panes, toggle the panels, switch the
   sidebar, run or pause, reset, cycle themes, open buffers, open the palette or
@@ -158,8 +160,10 @@ and a persistent `state` map and pushes ops the host applies:
   together in the plugin.
 
 The default plugin is a Spacemacs layer: vim modal editing plus an `SPC` leader
-whose which-key menu carries window management. A Vim layer and a template ship
-alongside it. The nightshade `Command`/`Event` bus is closed (engine-defined, no
+whose which-key menu carries window management. The catalog ships many more as
+opt-in: a Vim and an Emacs layer, auto pairs, better escape, comment toggle and
+the gcc comment object, line tools, word delete, join lines, smart home, jump to
+char, blank lines, and move lines, plus a stack of scene-plugin examples. The nightshade `Command`/`Event` bus is closed (engine-defined, no
 custom-emit), so the editor API is a neon layer on top, not a ride on that bus.
 The two plugin kinds share authoring (rhai, hooks, viewable source), so it stays
 one experience.
