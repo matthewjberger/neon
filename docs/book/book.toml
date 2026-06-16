@@ -11,7 +11,7 @@ edition = "2024"
 default-theme = "dark"
 preferred-dark-theme = "ayu"
 mathjax-support = false
-site-url = "/neon/"
+site-url = "/neon/book/"
 git-repository-url = "https://github.com/matthewjberger/neon"
 
 [output.html.fold]

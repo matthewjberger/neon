@@ -22,15 +22,79 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout neon
+        uses: actions/checkout@v5
+        with:
+          path: neon
+
+      - name: Checkout nightshade
+        uses: actions/checkout@v5
+        with:
+          repository: matthewjberger/nightshade
+          path: nightshade
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          workspaces: |
+            neon -> target
+
+      - name: Cache Trunk binary
+        id: cache-trunk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/trunk
+          key: trunk-${{ runner.os }}-v0.21.14
+
+      - name: Download and install Trunk binary
+        if: steps.cache-trunk.outputs.cache-hit != 'true'
+        run: wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf- && mv trunk ~/.cargo/bin/
+
+      - name: Cache wasm-bindgen binary
+        id: cache-wasm-bindgen
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-${{ runner.os }}-v0.2.115
+
+      - name: Download and install wasm-bindgen binary
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: wget -qO- https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.115/wasm-bindgen-0.2.115-x86_64-unknown-linux-musl.tar.gz | tar -xzf- && mv wasm-bindgen-0.2.115-x86_64-unknown-linux-musl/wasm-bindgen ~/.cargo/bin/
+
+      - name: Cache wasm-opt binary
+        id: cache-wasm-opt
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-opt
+          key: wasm-opt-${{ runner.os }}-version_123
+
+      - name: Download and install wasm-opt binary
+        if: steps.cache-wasm-opt.outputs.cache-hit != 'true'
+        run: wget -qO- https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz | tar -xzf- && mv binaryen-version_123/bin/wasm-opt ~/.cargo/bin/
+
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: '0.4.52'
 
-      - name: Build book
-        run: mdbook build docs/book --dest-dir "$GITHUB_WORKSPACE/site"
+      - name: Build the workers
+        working-directory: neon
+        run: just workers
+
+      - name: Build the editor
+        working-directory: neon
+        run: trunk build --release --public-url /neon/ --dist "$GITHUB_WORKSPACE/site"
+
+      - name: Build the book
+        run: mdbook build neon/docs/book --dest-dir "$GITHUB_WORKSPACE/site/book"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

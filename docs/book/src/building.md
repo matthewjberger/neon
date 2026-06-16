@@ -34,9 +34,13 @@ cd docs/book
 just serve     # or: mdbook serve --open
 ```
 
-It deploys to GitHub Pages on every push to `main` through
-`.github/workflows/pages.yml`. The workflow builds the book with mdBook and
-publishes it, and Pages serves it at the project URL.
+## Deploying to Pages
+
+`.github/workflows/pages.yml` publishes to GitHub Pages on every push to `main`.
+It checks out neon and a sibling nightshade, builds the workers and a release web
+bundle, builds the book with mdBook, and lays them out as one site: the live
+editor at the project root and the book under `book`. So the editor runs at
+`/neon/` and the book reads at `/neon/book/`.
 
 ## Publishing crates
 
