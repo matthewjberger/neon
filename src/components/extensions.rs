@@ -52,6 +52,7 @@ fn kind_label(kind: PluginKind) -> &'static str {
         PluginKind::Scene => "scene",
         PluginKind::Editor => "editor",
         PluginKind::Builtin => "built-in",
+        PluginKind::File => "file",
     }
 }
 

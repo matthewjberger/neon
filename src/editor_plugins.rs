@@ -266,14 +266,7 @@ fn apply(
     }
 
     if changed {
-        state.editable_set(kind).update(|plugins| {
-            if let Some(plugin) = plugins
-                .iter_mut()
-                .find(|plugin| Some(&plugin.id) == id.as_ref())
-            {
-                plugin.source = value.clone();
-            }
-        });
+        state.set_buffer_text(kind, &id, value.clone());
     }
     changed
 }
@@ -383,14 +376,7 @@ pub fn insert_text(
     textarea.set_value(&value);
     let caret = (caret + count) as u32;
     let _ = textarea.set_selection_range(caret, caret);
-    state.editable_set(kind).update(|plugins| {
-        if let Some(plugin) = plugins
-            .iter_mut()
-            .find(|plugin| Some(&plugin.id) == id.as_ref())
-        {
-            plugin.source = value.clone();
-        }
-    });
+    state.set_buffer_text(kind, &id, value.clone());
 }
 
 /// Whether any editor plugin is enabled, so the editor pane should route keys.

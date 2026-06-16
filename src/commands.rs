@@ -22,6 +22,10 @@ pub enum EditorCommand {
     ToggleChat,
     ShowInstalled,
     ShowManager,
+    ShowFiles,
+    OpenFolder,
+    SaveFile,
+    ToggleLspLog,
     NewPlugin,
     RunPause,
     ResetScene,
@@ -45,6 +49,10 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "toggle-chat" => EditorCommand::ToggleChat,
         "show-installed" => EditorCommand::ShowInstalled,
         "show-manager" => EditorCommand::ShowManager,
+        "show-files" => EditorCommand::ShowFiles,
+        "open-folder" => EditorCommand::OpenFolder,
+        "save-file" => EditorCommand::SaveFile,
+        "toggle-lsp-log" => EditorCommand::ToggleLspLog,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
         "reset-scene" => EditorCommand::ResetScene,
@@ -86,6 +94,13 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         (
             "View: plugin manager".to_string(),
             EditorCommand::ShowManager,
+        ),
+        ("View: files".to_string(), EditorCommand::ShowFiles),
+        ("Open folder".to_string(), EditorCommand::OpenFolder),
+        ("Save file".to_string(), EditorCommand::SaveFile),
+        (
+            "Toggle rust-analyzer log".to_string(),
+            EditorCommand::ToggleLspLog,
         ),
         ("New plugin".to_string(), EditorCommand::NewPlugin),
         ("Run or pause plugins".to_string(), EditorCommand::RunPause),
@@ -145,6 +160,18 @@ pub fn run(
         EditorCommand::ToggleChat => state.chat_open.update(|open| *open = !*open),
         EditorCommand::ShowInstalled => state.sidebar_view.set(SidebarView::Installed),
         EditorCommand::ShowManager => state.sidebar_view.set(SidebarView::Extensions),
+        EditorCommand::ShowFiles => state.sidebar_view.set(SidebarView::Files),
+        EditorCommand::OpenFolder => crate::fs::open_folder(),
+        EditorCommand::SaveFile => {
+            let pane = state.focused();
+            if pane.kind == PluginKind::File
+                && let Some(path) = pane.active
+            {
+                let text = state.buffer_source(PluginKind::File, &Some(path.clone()));
+                crate::fs::write_file(&path, text);
+            }
+        }
+        EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");
             let id = plugin.id.clone();

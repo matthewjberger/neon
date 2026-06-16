@@ -9,6 +9,8 @@ Plugins come in two kinds, both authored in the editor and both with their sourc
 
 The standard library and the built-in editor plugins are visible and editable, but locked from writing, so you can read exactly how everything works.
 
+It also edits real files. Open a folder and the file tree, edit and save files on disk, and for Rust projects neon starts rust-analyzer (discovered through rustup, so only rustup and cargo are needed) for live diagnostics, with an LSP log panel. Spawning the server is gated behind a consent prompt.
+
 ## Run
 
 ```sh
@@ -38,7 +40,7 @@ Three isolated contexts, one wire format. See `DESIGN.md` for the full design.
 - **Main thread (`src/`, the `neon` crate):** the Leptos UI. The code editor (a Rust syntax-highlighting overlay over a native textarea), the command palette, the which-key menu, the plugin manager, the console, the reference, and the engine viewport host. No engine, no rhai, no npm.
 - **Engine worker (`worker/`):** the `nightshade-api` facade plus the offscreen renderer. Runs the scene plugins each tick with `run_scripts`, applies the `Command`s they produce, renders the scene, and exports the command manifest and the standard library to the page.
 - **Language worker (`lang/`):** links only `rhai`. Compile-checks plugin source and validates command calls against the manifest, off the render thread.
-- **Desktop (`desktop/`):** a `wry` webview shell that serves and embeds the web bundle, plus the Claude bridge.
+- **Desktop (`desktop/`):** a `wry` webview shell that serves and embeds the web bundle, plus the Claude bridge, a filesystem bridge (disk access for the page), and a language-server bridge that spawns rust-analyzer and frames LSP over stdio.
 
 Supporting crates and folders: `protocol/` holds the shared serde wire types, `worker/stdlib/` is the standard rhai library for scene plugins, and `editor_stdlib/` is the built-in editor plugins (Spacemacs, Vim, a template).
 

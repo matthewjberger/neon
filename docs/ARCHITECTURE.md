@@ -34,7 +34,10 @@ the others.
 - **Language worker (`lang/`).** Links only `rhai`. Compile-checks plugin source
   and flags unknown command calls off the render thread.
 - **Desktop shell (`desktop/`).** A `wry` webview that serves and embeds the web
-  bundle, and hosts the Claude MCP bridge and chat relay.
+  bundle, and hosts four relays: the Claude MCP bridge and chat relay, a
+  filesystem bridge (disk access for the page through `rfd` and `tokio::fs`), and
+  a language-server bridge that discovers rust-analyzer through rustup, spawns it,
+  and frames LSP JSON-RPC over stdio.
 
 The only JavaScript is `runtime/worker.js` and `runtime/lang_worker.js`, a few
 lines each that boot the respective wasm modules and buffer early messages. No
@@ -165,6 +168,21 @@ neon layer on top, sharing the rhai authoring experience.
 The buffer, cursor, command, and split-pane surface is implemented. Tile,
 terminal, and richer multi-buffer manipulation extend the same op and command
 vocabulary as that UI infrastructure grows.
+
+## Files and rust-analyzer
+
+Buffers are not only plugins. A pane can show a file opened from disk through the
+filesystem bridge: open a folder, browse the lazily loaded tree, edit, and save.
+A file buffer carries its path, text, and dirty flag in `state.files`, and the
+status bar shows its language by extension.
+
+For a Rust file the page acts as an LSP client (`src/lsp.rs`). After a consent
+prompt (spawning a process), it asks the desktop to start rust-analyzer, runs the
+initialize handshake, syncs open files with `didOpen` and `didChange` (the
+overlay model, so the server sees unsaved edits), and turns `publishDiagnostics`
+into the editor's diagnostics strip. The LSP log panel shows the server's output.
+The rhai language worker still drives plugin diagnostics; rust-analyzer is the
+parallel path for file buffers.
 
 ## Build
 

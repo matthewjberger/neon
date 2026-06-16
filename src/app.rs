@@ -14,11 +14,14 @@ use crate::components::chat::ChatPane;
 use crate::components::console::Console;
 use crate::components::editor_pane::EditorPane;
 use crate::components::extensions::Extensions;
+use crate::components::file_tree::FileTree;
 use crate::components::help::Help;
 use crate::components::loader::Loader;
+use crate::components::lsp_panel::{LspConsent, LspLog};
 use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
 use crate::components::reference::Reference;
+use crate::components::status_bar::StatusBar;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
 use crate::components::which_key::WhichKey;
@@ -35,6 +38,9 @@ pub fn App() -> impl IntoView {
     let state = EditorState::new();
     let bridge = StoredValue::new_local(None::<Bridge>);
     let lang = StoredValue::new_local(Some(lang::connect(state)));
+
+    crate::ipc::notify_host("enable-fs");
+    crate::fs::start(state);
 
     theme::apply_theme(&state.theme.get_untracked());
 
@@ -54,7 +60,8 @@ pub fn App() -> impl IntoView {
 
     Effect::new(move |_| {
         state.active_id();
-        state.diagnostics.set(Vec::new());
+        state.active_kind();
+        crate::lsp::refresh_diagnostics(state);
     });
 
     Effect::new(move |_| {
@@ -90,6 +97,13 @@ pub fn App() -> impl IntoView {
         if event.key() == "F1" {
             event.prevent_default();
             state.help_open.set(true);
+            return;
+        }
+        if event.ctrl_key() && event.key().eq_ignore_ascii_case("s") {
+            event.prevent_default();
+            if let Some(command) = commands::command_from_id("save-file") {
+                commands::run(command, state, bridge);
+            }
             return;
         }
         if event.key() == "Escape" && state.help_open.get_untracked() {
@@ -172,6 +186,7 @@ pub fn App() -> impl IntoView {
                 {move || match state.sidebar_view.get() {
                     SidebarView::Installed => view! { <PluginPanel bridge state /> }.into_any(),
                     SidebarView::Extensions => view! { <Extensions bridge state /> }.into_any(),
+                    SidebarView::Files => view! { <FileTree state /> }.into_any(),
                 }}
                 <div
                     class="editor-area"
@@ -215,8 +230,11 @@ pub fn App() -> impl IntoView {
                     </Show>
                 </div>
             </div>
+            <StatusBar state />
             <Reference state />
             <WhichKey state />
+            <LspConsent state />
+            <LspLog state />
             <Palette bridge state />
             <Help state />
             <ChatPane state />

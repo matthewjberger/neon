@@ -79,14 +79,10 @@ pub fn EditorPane(
             return;
         }
         let value = event_target_value(&event);
-        let Some(id) = id else {
+        if id.is_none() {
             return;
-        };
-        state.editable_set(kind).update(|plugins| {
-            if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
-                plugin.source = value.clone();
-            }
-        });
+        }
+        state.set_buffer_text(kind, &id, value);
         commit(bridge, lang, state, pane_key, debounce, request_id);
     };
 
@@ -221,17 +217,22 @@ fn commit(
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
-    let kind = state
+    let pane = state
         .panes
-        .with_untracked(|panes| {
-            panes
-                .iter()
-                .find(|pane| pane.key == pane_key)
-                .map(|pane| pane.kind)
-        })
-        .unwrap_or(PluginKind::Scene);
-    if kind == PluginKind::Scene {
-        schedule_apply(bridge, lang, state, pane_key, debounce, request_id);
+        .with_untracked(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned());
+    let Some(pane) = pane else {
+        return;
+    };
+    match pane.kind {
+        PluginKind::Scene => {
+            schedule_apply(bridge, lang, state, pane_key, debounce, request_id);
+        }
+        PluginKind::File => {
+            if let Some(path) = pane.active {
+                crate::lsp::did_change(state, &path);
+            }
+        }
+        _ => {}
     }
 }
 

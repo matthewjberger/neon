@@ -6,13 +6,35 @@ use leptos::prelude::*;
 use protocol::{CommandInfo, Diagnostic, LogEntry, PluginSource, SelectedEntity, StdModule};
 
 /// Which set the open buffer belongs to: scene plugins run in the engine worker,
-/// editor plugins run on the page and drive the editor through key dispatch, and
-/// built-ins are the standard library, viewable but locked.
+/// editor plugins run on the page and drive the editor through key dispatch,
+/// built-ins are the standard library (viewable but locked), and files are real
+/// files on disk opened through the desktop filesystem bridge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PluginKind {
     Scene,
     Editor,
     Builtin,
+    File,
+}
+
+/// A file opened from disk: its absolute path, current text, and whether it has
+/// unsaved edits.
+#[derive(Clone, PartialEq)]
+pub struct FileBuffer {
+    pub path: String,
+    pub text: String,
+    pub dirty: bool,
+}
+
+/// One node in the file tree: a directory or file, with lazily loaded children
+/// and an expanded flag for directories.
+#[derive(Clone, PartialEq)]
+pub struct TreeNode {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub expanded: bool,
+    pub children: Vec<TreeNode>,
 }
 
 /// Which view the sidebar shows, switched from the activity bar.
@@ -20,6 +42,7 @@ pub enum PluginKind {
 pub enum SidebarView {
     Installed,
     Extensions,
+    Files,
 }
 
 /// One row in the leader menu: the key to press and what it does. A label that
@@ -69,6 +92,20 @@ pub struct EditorState {
     pub panes: RwSignal<Vec<Pane>>,
     /// The key of the focused pane.
     pub focused_key: RwSignal<usize>,
+    /// Files opened from disk through the desktop filesystem bridge.
+    pub files: RwSignal<Vec<FileBuffer>>,
+    /// The opened workspace folder, the LSP root, if any.
+    pub workspace_root: RwSignal<Option<String>>,
+    /// The file tree under the workspace root.
+    pub tree: RwSignal<Vec<TreeNode>>,
+    /// Whether the language server has been started for this session.
+    pub lsp_started: RwSignal<bool>,
+    /// Whether the consent toast asking to start rust-analyzer is showing.
+    pub lsp_consent: RwSignal<bool>,
+    /// The language-server log lines, for the LSP log panel.
+    pub lsp_log: RwSignal<Vec<String>>,
+    /// Whether the LSP log panel is shown.
+    pub lsp_log_open: RwSignal<bool>,
     /// Editor plugins: rhai that handles keystrokes through the Editor API. Run
     /// on the page, never sent to the worker.
     pub editor_plugins: RwSignal<Vec<PluginSource>>,
@@ -129,6 +166,13 @@ impl EditorState {
                 flex: 1.0,
             }]),
             focused_key: RwSignal::new(0),
+            files: RwSignal::new(Vec::new()),
+            workspace_root: RwSignal::new(None),
+            tree: RwSignal::new(Vec::new()),
+            lsp_started: RwSignal::new(false),
+            lsp_consent: RwSignal::new(false),
+            lsp_log: RwSignal::new(Vec::new()),
+            lsp_log_open: RwSignal::new(false),
             editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
             editor_mode: RwSignal::new("normal".to_string()),
             status: RwSignal::new(String::new()),
@@ -150,38 +194,85 @@ impl EditorState {
         }
     }
 
-    /// A buffer's source by kind and id, from the scene set, the editor set, or
-    /// the read-only standard library.
+    /// A buffer's source by kind and id, from the scene set, the editor set, the
+    /// read-only standard library, or an open file.
     pub fn buffer_source(&self, kind: PluginKind, id: &Option<String>) -> String {
-        if kind == PluginKind::Builtin {
-            return self.stdlib.with(|modules| {
+        match kind {
+            PluginKind::Builtin => self.stdlib.with(|modules| {
                 modules
                     .iter()
                     .find(|module| Some(&module.name) == id.as_ref())
                     .map(|module| module.source.clone())
                     .unwrap_or_default()
-            });
+            }),
+            PluginKind::File => self.files.with(|files| {
+                files
+                    .iter()
+                    .find(|file| Some(&file.path) == id.as_ref())
+                    .map(|file| file.text.clone())
+                    .unwrap_or_default()
+            }),
+            _ => self.editable_set(kind).with(|plugins| {
+                plugins
+                    .iter()
+                    .find(|plugin| Some(&plugin.id) == id.as_ref())
+                    .map(|plugin| plugin.source.clone())
+                    .unwrap_or_default()
+            }),
         }
-        self.editable_set(kind).with(|plugins| {
-            plugins
-                .iter()
-                .find(|plugin| Some(&plugin.id) == id.as_ref())
-                .map(|plugin| plugin.source.clone())
-                .unwrap_or_default()
-        })
     }
 
     /// A buffer's display name by kind and id.
     pub fn buffer_name(&self, kind: PluginKind, id: &Option<String>) -> String {
-        if kind == PluginKind::Builtin {
-            return id.clone().unwrap_or_default();
+        match kind {
+            PluginKind::Builtin => id.clone().unwrap_or_default(),
+            PluginKind::File => id
+                .as_ref()
+                .map(|path| basename(path).to_string())
+                .unwrap_or_default(),
+            _ => self.editable_set(kind).with(|plugins| {
+                plugins
+                    .iter()
+                    .find(|plugin| Some(&plugin.id) == id.as_ref())
+                    .map(|plugin| plugin.name.clone())
+                    .unwrap_or_default()
+            }),
         }
-        self.editable_set(kind).with(|plugins| {
-            plugins
+    }
+
+    /// Writes a buffer's text into the right store. Files mark dirty; plugins
+    /// update their source. Built-ins are read-only and ignored.
+    pub fn set_buffer_text(&self, kind: PluginKind, id: &Option<String>, text: String) {
+        let Some(id) = id else {
+            return;
+        };
+        match kind {
+            PluginKind::Builtin => {}
+            PluginKind::File => self.files.update(|files| {
+                if let Some(file) = files.iter_mut().find(|file| &file.path == id) {
+                    file.text = text;
+                    file.dirty = true;
+                }
+            }),
+            _ => self.editable_set(kind).update(|plugins| {
+                if let Some(plugin) = plugins.iter_mut().find(|plugin| &plugin.id == id) {
+                    plugin.source = text;
+                }
+            }),
+        }
+    }
+
+    /// Whether a file buffer has unsaved edits.
+    pub fn is_dirty(&self, kind: PluginKind, id: &Option<String>) -> bool {
+        if kind != PluginKind::File {
+            return false;
+        }
+        self.files.with(|files| {
+            files
                 .iter()
-                .find(|plugin| Some(&plugin.id) == id.as_ref())
-                .map(|plugin| plugin.name.clone())
-                .unwrap_or_default()
+                .find(|file| Some(&file.path) == id.as_ref())
+                .map(|file| file.dirty)
+                .unwrap_or(false)
         })
     }
 
@@ -335,6 +426,28 @@ impl EditorState {
 /// Whether a buffer kind is read-only.
 pub fn kind_readonly(kind: PluginKind) -> bool {
     kind == PluginKind::Builtin
+}
+
+/// The final path component of a file path, for the tab and status bar.
+pub fn basename(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// A language id from a file's extension, for highlighting and LSP routing.
+pub fn language_for_path(path: &str) -> &'static str {
+    match path.rsplit('.').next().unwrap_or_default() {
+        "rs" => "rust",
+        "toml" => "toml",
+        "md" | "markdown" => "markdown",
+        "json" => "json",
+        "rhai" => "rhai",
+        "js" | "mjs" => "javascript",
+        "ts" => "typescript",
+        "wgsl" => "wgsl",
+        "css" => "css",
+        "html" => "html",
+        _ => "plaintext",
+    }
 }
 
 impl Default for EditorState {

@@ -49,7 +49,7 @@ pub fn ChatPane(state: EditorState) -> impl IntoView {
         }
         if !started.get_value() {
             started.set_value(true);
-            notify_host("open-chat");
+            crate::ipc::notify_host("open-chat");
             connect(socket, messages, connected, busy);
         }
     });
@@ -269,25 +269,5 @@ fn truncate(text: &str, limit: usize) -> String {
     } else {
         let kept: String = text.chars().take(limit).collect();
         format!("{kept}...")
-    }
-}
-
-/// Sends a message to the desktop shell over the webview IPC channel. A no-op in
-/// a plain browser.
-fn notify_host(message: &str) {
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let Ok(ipc) = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("ipc")) else {
-        return;
-    };
-    if ipc.is_undefined() || ipc.is_null() {
-        return;
-    }
-    let Ok(post) = js_sys::Reflect::get(&ipc, &JsValue::from_str("postMessage")) else {
-        return;
-    };
-    if let Ok(function) = post.dyn_into::<js_sys::Function>() {
-        let _ = function.call1(&ipc, &JsValue::from_str(message));
     }
 }
