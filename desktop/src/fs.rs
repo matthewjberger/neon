@@ -105,6 +105,14 @@ async fn handle(request: FsRequest) -> FsResponse {
                 },
             }
         }
+        FsRequest::OpenRoot { request_id, path } => {
+            let entries = list_dir(Path::new(&path)).await.unwrap_or_default();
+            FsResponse::Folder {
+                request_id,
+                root: Some(path),
+                entries,
+            }
+        }
         FsRequest::ListDir { request_id, path } => match list_dir(Path::new(&path)).await {
             Ok(entries) => FsResponse::Dir {
                 request_id,

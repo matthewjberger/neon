@@ -19,6 +19,7 @@ const RECONNECT_MS: i32 = 1000;
 
 thread_local! {
     static SOCKET: RefCell<Option<WebSocket>> = const { RefCell::new(None) };
+    static RESTORED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Opens the filesystem relay and keeps it open, reconnecting on drop.
@@ -40,6 +41,15 @@ fn connect(state: EditorState) {
     });
     websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
+
+    let onopen = Closure::<dyn FnMut()>::new(move || {
+        if !RESTORED.with(std::cell::Cell::get) {
+            RESTORED.with(|flag| flag.set(true));
+            crate::session::restore();
+        }
+    });
+    websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+    onopen.forget();
 
     let onclose = Closure::<dyn FnMut()>::new(move || schedule_reconnect(state));
     websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
@@ -75,6 +85,14 @@ fn send(request: &FsRequest) {
 /// Opens the native folder picker.
 pub fn open_folder() {
     send(&FsRequest::OpenFolder { request_id: 0 });
+}
+
+/// Opens a known folder by path, no dialog, to restore a session.
+pub fn open_root(path: &str) {
+    send(&FsRequest::OpenRoot {
+        request_id: 0,
+        path: path.to_string(),
+    });
 }
 
 /// Lists one directory's children, to expand a tree node.

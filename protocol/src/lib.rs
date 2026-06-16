@@ -256,6 +256,9 @@ pub struct SearchHit {
 pub enum FsRequest {
     /// Open the native folder picker and list its root.
     OpenFolder { request_id: u64 },
+    /// Open a known folder by path and list its root, no dialog. Used to restore
+    /// the last session.
+    OpenRoot { request_id: u64, path: String },
     /// List one directory's immediate children.
     ListDir { request_id: u64, path: String },
     /// Read a file's full text.

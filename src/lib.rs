@@ -28,6 +28,7 @@ mod lang;
 mod lsp;
 mod plugins;
 mod relay;
+mod session;
 mod state;
 mod theme;
 

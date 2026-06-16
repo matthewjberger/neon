@@ -61,6 +61,12 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
+        state.workspace_root.get();
+        state.files.get();
+        crate::session::save(state);
+    });
+
+    Effect::new(move |_| {
         state.active_id();
         state.active_kind();
         crate::lsp::refresh_diagnostics(state);
