@@ -12,7 +12,9 @@ pub fn Reference(state: EditorState) -> impl IntoView {
 
     let commands = move || {
         let needle = filter.get().to_lowercase();
-        state.commands.get()
+        state
+            .commands
+            .get()
             .into_iter()
             .filter(|command| needle.is_empty() || command.method.contains(&needle))
             .collect::<Vec<_>>()
@@ -20,7 +22,9 @@ pub fn Reference(state: EditorState) -> impl IntoView {
 
     let helpers = move || {
         let needle = filter.get().to_lowercase();
-        state.stdlib.get()
+        state
+            .stdlib
+            .get()
             .into_iter()
             .flat_map(|module| module.helpers)
             .filter(|helper| needle.is_empty() || helper.name.contains(&needle))

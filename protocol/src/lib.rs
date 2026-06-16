@@ -39,24 +39,56 @@ pub struct PluginSource {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     /// Sent once with the `OffscreenCanvas` in the transfer list.
-    Init { width: f32, height: f32 },
-    Resize { width: f32, height: f32 },
-    PointerMove { x: f32, y: f32 },
-    PointerButton { button: u8, pressed: bool },
-    Wheel { delta: f32 },
-    Touch { id: u64, phase: TouchPhase, x: f32, y: f32 },
-    Key { code: String, pressed: bool, text: Option<String> },
+    Init {
+        width: f32,
+        height: f32,
+    },
+    Resize {
+        width: f32,
+        height: f32,
+    },
+    PointerMove {
+        x: f32,
+        y: f32,
+    },
+    PointerButton {
+        button: u8,
+        pressed: bool,
+    },
+    Wheel {
+        delta: f32,
+    },
+    Touch {
+        id: u64,
+        phase: TouchPhase,
+        x: f32,
+        y: f32,
+    },
+    Key {
+        code: String,
+        pressed: bool,
+        text: Option<String>,
+    },
     /// A click without drag: pick and select the entity at this position.
-    Pick { x: f32, y: f32 },
+    Pick {
+        x: f32,
+        y: f32,
+    },
     /// Replace the whole scene-plugin set. The worker rebuilds its global
     /// scripts from the enabled plugins and resets the runtime.
-    SetPlugins { plugins: Vec<PluginSource> },
+    SetPlugins {
+        plugins: Vec<PluginSource>,
+    },
     /// Run one command built in the console, as a json `Command`.
-    SubmitCommand { command: String },
+    SubmitCommand {
+        command: String,
+    },
     /// Drop everything the plugins spawned and restore the base scene.
     ResetScene,
     /// Pause or resume the plugin runtime without unloading anything.
-    SetRunning { running: bool },
+    SetRunning {
+        running: bool,
+    },
     /// An agent request routed to the worker (scene domain). The page relays it
     /// from the MCP bridge.
     Agent(Box<AgentRequest>),
@@ -153,12 +185,27 @@ pub enum WorkerMessage {
         command_schema: String,
         stdlib: Vec<StdModule>,
     },
-    Stats { fps: f32, entity_count: u32 },
-    Selected { detail: Option<SelectedEntity> },
+    Stats {
+        fps: f32,
+        entity_count: u32,
+    },
+    /// The worker is rebuilding the scene from the plugin set. Drives the top
+    /// progress bar. Posted around a reset or a plugin sync.
+    Busy {
+        active: bool,
+    },
+    Selected {
+        detail: Option<SelectedEntity>,
+    },
     /// The traffic from the last script tick, for the console.
-    Report { entries: Vec<LogEntry> },
+    Report {
+        entries: Vec<LogEntry>,
+    },
     /// A plugin runtime error, attributed to a plugin id when known.
-    PluginError { plugin: Option<String>, message: String },
+    PluginError {
+        plugin: Option<String>,
+        message: String,
+    },
     /// An agent response routed back to the page, to forward to the MCP bridge.
     Agent(Box<AgentResponse>),
 }

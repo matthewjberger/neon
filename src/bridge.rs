@@ -55,6 +55,7 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
                 state.fps.set(fps);
                 state.entity_count.set(entity_count);
             }
+            WorkerMessage::Busy { active } => state.busy.set(active),
             WorkerMessage::Selected { detail } => state.selected.set(detail),
             WorkerMessage::Report { entries } => {
                 state.log.update(|log| {

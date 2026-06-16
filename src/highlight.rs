@@ -6,9 +6,9 @@
 use std::collections::HashSet;
 
 const KEYWORDS: &[&str] = &[
-    "fn", "let", "const", "if", "else", "for", "in", "while", "loop", "return", "break", "continue",
-    "switch", "import", "export", "global", "private", "true", "false", "throw", "try", "catch",
-    "this",
+    "fn", "let", "const", "if", "else", "for", "in", "while", "loop", "return", "break",
+    "continue", "switch", "import", "export", "global", "private", "true", "false", "throw", "try",
+    "catch", "this",
 ];
 
 /// Splits rhai source into (css class, text) runs for the highlight layer.

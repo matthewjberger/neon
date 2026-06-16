@@ -72,7 +72,15 @@ pub fn EditorPane(
                     plugin.source = value.clone();
                 }
             });
-        commit(bridge, lang, state, active, active_kind, debounce, request_id);
+        commit(
+            bridge,
+            lang,
+            state,
+            active,
+            active_kind,
+            debounce,
+            request_id,
+        );
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
@@ -83,7 +91,15 @@ pub fn EditorPane(
             event.prevent_default();
             if let Some(element) = textarea.get() {
                 editor_plugins::insert_text(state, active, active_kind, &element, "    ");
-                commit(bridge, lang, state, active, active_kind, debounce, request_id);
+                commit(
+                    bridge,
+                    lang,
+                    state,
+                    active,
+                    active_kind,
+                    debounce,
+                    request_id,
+                );
             }
             return;
         }
@@ -98,21 +114,34 @@ pub fn EditorPane(
             active,
             active_kind,
             &element,
-            &event.key(),
-            event.ctrl_key(),
-            event.shift_key(),
-            event.alt_key(),
+            &editor_plugins::KeyEvent {
+                key: event.key(),
+                ctrl: event.ctrl_key(),
+                shift: event.shift_key(),
+                alt: event.alt_key(),
+            },
         );
         if outcome.consumed {
             event.prevent_default();
         }
         if outcome.changed {
-            commit(bridge, lang, state, active, active_kind, debounce, request_id);
+            commit(
+                bridge,
+                lang,
+                state,
+                active,
+                active_kind,
+                debounce,
+                request_id,
+            );
         }
     };
 
     view! {
-        <div class="editor-pane">
+        <div
+            class="editor-pane"
+            class:focused=move || state.split.get() && state.focus_secondary.get() == secondary
+        >
             <Show
                 when=move || active.get().is_some()
                 fallback=|| view! { <div class="editor-empty">"Open a plugin to edit"</div> }
@@ -201,7 +230,15 @@ fn commit(
     request_id: StoredValue<u32>,
 ) {
     if active_kind.get_untracked() == PluginKind::Scene {
-        schedule_apply(bridge, lang, state, active, active_kind, debounce, request_id);
+        schedule_apply(
+            bridge,
+            lang,
+            state,
+            active,
+            active_kind,
+            debounce,
+            request_id,
+        );
     }
 }
 
@@ -235,7 +272,10 @@ fn schedule_apply(
         }
     });
     let handle = window
-        .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), APPLY_DELAY_MS)
+        .set_timeout_with_callback_and_timeout_and_arguments_0(
+            callback.unchecked_ref(),
+            APPLY_DELAY_MS,
+        )
         .unwrap_or(0);
     debounce.set_value(Some(handle));
 }

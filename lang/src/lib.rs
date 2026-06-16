@@ -6,7 +6,9 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-use protocol::{CommandInfo, Diagnostic, LangRequest, LangResponse, MESSAGE_KEY, Severity, StdModule};
+use protocol::{
+    CommandInfo, Diagnostic, LangRequest, LangResponse, MESSAGE_KEY, Severity, StdModule,
+};
 use rhai::Engine;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
@@ -17,9 +19,31 @@ thread_local! {
 }
 
 const BUILTINS: &[&str] = &[
-    "push", "tag", "last", "log", "print", "len", "clear", "pad", "to_float", "to_int", "abs",
-    "sin", "cos", "tan", "sqrt", "floor", "ceil", "round", "min", "max", "random", "random_range",
-    "random_int", "entity_ref", "result",
+    "push",
+    "tag",
+    "last",
+    "log",
+    "print",
+    "len",
+    "clear",
+    "pad",
+    "to_float",
+    "to_int",
+    "abs",
+    "sin",
+    "cos",
+    "tan",
+    "sqrt",
+    "floor",
+    "ceil",
+    "round",
+    "min",
+    "max",
+    "random",
+    "random_range",
+    "random_int",
+    "entity_ref",
+    "result",
 ];
 
 #[wasm_bindgen(start)]
@@ -225,6 +249,17 @@ mod tests {
         })
     }
 
+    fn menu_title(ops: &rhai::Array) -> Option<String> {
+        ops.iter().find_map(|op| {
+            op.clone()
+                .try_cast::<rhai::Map>()
+                .and_then(|map| map.get("ShowMenu").cloned())
+                .and_then(|value| value.try_cast::<rhai::Map>())
+                .and_then(|menu| menu.get("title").cloned())
+                .and_then(|title| title.into_string().ok())
+        })
+    }
+
     #[test]
     fn spacemacs_compiles() {
         let engine = super::make_engine();
@@ -241,7 +276,29 @@ mod tests {
         run_key(&engine, &ast, &mut state_map, " ");
         run_key(&engine, &ast, &mut state_map, "w");
         let ops = run_key(&engine, &ast, &mut state_map, "v");
-        assert!(runs_command(&ops, "split-editor"), "SPC w v did not split");
+        assert!(
+            runs_command(&ops, "split-right"),
+            "SPC w v did not split right"
+        );
+    }
+
+    #[test]
+    fn spacemacs_leader_opens_menu() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        let ops = run_key(&engine, &ast, &mut state_map, " ");
+        assert_eq!(
+            menu_title(&ops).as_deref(),
+            Some("Leader"),
+            "SPC did not open the leader menu"
+        );
+        let ops = run_key(&engine, &ast, &mut state_map, "w");
+        assert_eq!(
+            menu_title(&ops).as_deref(),
+            Some("+Windows"),
+            "SPC w did not open the window menu"
+        );
     }
 
     #[test]
@@ -251,7 +308,10 @@ mod tests {
         let mut state_map = rhai::Map::new();
         run_key(&engine, &ast, &mut state_map, " ");
         let ops = run_key(&engine, &ast, &mut state_map, " ");
-        assert!(runs_command(&ops, "open-palette"), "SPC SPC did not open the palette");
+        assert!(
+            runs_command(&ops, "open-palette"),
+            "SPC SPC did not open the palette"
+        );
     }
 
     #[test]

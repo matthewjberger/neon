@@ -38,6 +38,9 @@ pub fn initialize(scene: &mut Scene, world: &mut World) {
 /// Every live entity right now, the snapshot a reset restores to.
 pub fn live_entities(world: &World) -> Vec<Entity> {
     let mut entities = Vec::new();
-    world.core.query().iter(|entity, _, _| entities.push(entity));
+    world
+        .core
+        .query()
+        .iter(|entity, _, _| entities.push(entity));
     entities
 }

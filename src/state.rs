@@ -22,9 +22,27 @@ pub enum SidebarView {
     Extensions,
 }
 
+/// One row in the leader menu: the key to press and what it does. A label that
+/// starts with `+` is a submenu the key opens.
+#[derive(Clone, PartialEq)]
+pub struct LeaderItem {
+    pub key: String,
+    pub label: String,
+}
+
+/// The which-key menu an editor plugin publishes for the current leader prefix.
+/// The page renders it as the bottom panel while the prefix is pending.
+#[derive(Clone, PartialEq)]
+pub struct LeaderMenu {
+    pub title: String,
+    pub items: Vec<LeaderItem>,
+}
+
 #[derive(Clone, Copy)]
 pub struct EditorState {
     pub ready: RwSignal<bool>,
+    /// Whether the worker is rebuilding the scene, for the top progress bar.
+    pub busy: RwSignal<bool>,
     pub adapter: RwSignal<String>,
     pub fps: RwSignal<f32>,
     pub entity_count: RwSignal<u32>,
@@ -68,8 +86,14 @@ pub struct EditorState {
     pub palette_open: RwSignal<bool>,
     /// Whether the help and keybindings overlay is open.
     pub help_open: RwSignal<bool>,
+    /// The leader menu an editor plugin published for the pending prefix, shown
+    /// as the which-key panel. `None` when no leader sequence is active.
+    pub leader: RwSignal<Option<LeaderMenu>>,
     /// Whether the editor is split into two panes.
     pub split: RwSignal<bool>,
+    /// Split orientation: true lays the panes side by side (split right), false
+    /// stacks them (split below).
+    pub split_vertical: RwSignal<bool>,
     /// The secondary pane's open buffer when split.
     pub secondary: RwSignal<Option<String>>,
     pub secondary_kind: RwSignal<PluginKind>,
@@ -86,6 +110,7 @@ impl EditorState {
         let active = plugins.first().map(|plugin| plugin.id.clone());
         Self {
             ready: RwSignal::new(false),
+            busy: RwSignal::new(false),
             adapter: RwSignal::new(String::new()),
             fps: RwSignal::new(0.0),
             entity_count: RwSignal::new(0),
@@ -110,7 +135,9 @@ impl EditorState {
             theme: RwSignal::new(crate::theme::stored_theme()),
             palette_open: RwSignal::new(false),
             help_open: RwSignal::new(false),
+            leader: RwSignal::new(None),
             split: RwSignal::new(false),
+            split_vertical: RwSignal::new(true),
             secondary: RwSignal::new(None),
             secondary_kind: RwSignal::new(PluginKind::Scene),
             focus_secondary: RwSignal::new(false),

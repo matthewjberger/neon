@@ -13,7 +13,7 @@ use crate::theme::THEMES;
 /// One editor operation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditorCommand {
-    SplitEditor,
+    SplitEditor { vertical: bool },
     CloseSplit,
     FocusOther,
     TogglePreview,
@@ -35,7 +35,8 @@ pub enum EditorCommand {
 /// The id an editor plugin uses to invoke a static command.
 pub fn command_from_id(id: &str) -> Option<EditorCommand> {
     Some(match id {
-        "split-editor" => EditorCommand::SplitEditor,
+        "split-right" => EditorCommand::SplitEditor { vertical: true },
+        "split-below" => EditorCommand::SplitEditor { vertical: false },
         "close-split" => EditorCommand::CloseSplit,
         "focus-other" => EditorCommand::FocusOther,
         "toggle-preview" => EditorCommand::TogglePreview,
@@ -58,15 +59,34 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
 /// and an open command per installed plugin and built-in module.
 pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
     let mut items = vec![
-        ("Split editor".to_string(), EditorCommand::SplitEditor),
+        (
+            "Split right".to_string(),
+            EditorCommand::SplitEditor { vertical: true },
+        ),
+        (
+            "Split below".to_string(),
+            EditorCommand::SplitEditor { vertical: false },
+        ),
         ("Close split".to_string(), EditorCommand::CloseSplit),
         ("Focus other pane".to_string(), EditorCommand::FocusOther),
-        ("Toggle 3D preview".to_string(), EditorCommand::TogglePreview),
+        (
+            "Toggle 3D preview".to_string(),
+            EditorCommand::TogglePreview,
+        ),
         ("Toggle console".to_string(), EditorCommand::ToggleConsole),
-        ("Toggle reference".to_string(), EditorCommand::ToggleReference),
+        (
+            "Toggle reference".to_string(),
+            EditorCommand::ToggleReference,
+        ),
         ("Toggle Claude".to_string(), EditorCommand::ToggleChat),
-        ("View: installed plugins".to_string(), EditorCommand::ShowInstalled),
-        ("View: plugin manager".to_string(), EditorCommand::ShowManager),
+        (
+            "View: installed plugins".to_string(),
+            EditorCommand::ShowInstalled,
+        ),
+        (
+            "View: plugin manager".to_string(),
+            EditorCommand::ShowManager,
+        ),
         ("New plugin".to_string(), EditorCommand::NewPlugin),
         ("Run or pause plugins".to_string(), EditorCommand::RunPause),
         ("Reset scene".to_string(), EditorCommand::ResetScene),
@@ -74,7 +94,10 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Help: keybindings".to_string(), EditorCommand::OpenHelp),
     ];
     for (id, label) in THEMES {
-        items.push((format!("Theme: {label}"), EditorCommand::SetTheme(id.to_string())));
+        items.push((
+            format!("Theme: {label}"),
+            EditorCommand::SetTheme(id.to_string()),
+        ));
     }
     for plugin in state.plugins.get() {
         items.push((
@@ -113,9 +136,10 @@ pub fn run(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
 ) {
     match command {
-        EditorCommand::SplitEditor => {
+        EditorCommand::SplitEditor { vertical } => {
             state.secondary.set(state.active.get_untracked());
             state.secondary_kind.set(state.active_kind.get_untracked());
+            state.split_vertical.set(vertical);
             state.split.set(true);
         }
         EditorCommand::CloseSplit => {

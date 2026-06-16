@@ -13,7 +13,7 @@ use leptos::prelude::*;
 use rhai::{AST, Array, Dynamic, Engine, Map, Scope};
 use web_sys::HtmlTextAreaElement;
 
-use crate::state::{EditorState, PluginKind};
+use crate::state::{EditorState, LeaderItem, LeaderMenu, PluginKind};
 
 thread_local! {
     static ENGINE: Engine = make_engine();
@@ -48,6 +48,16 @@ enum EditorOp {
     DeleteLine,
     RunCommand(String),
     OpenPalette,
+    ShowMenu(LeaderMenu),
+    HideMenu,
+}
+
+/// One keystroke handed to the editor plugins.
+pub struct KeyEvent {
+    pub key: String,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
 }
 
 /// The result of dispatching a key to the editor plugins.
@@ -65,13 +75,10 @@ pub fn handle_key(
     active: RwSignal<Option<String>>,
     active_kind: RwSignal<PluginKind>,
     textarea: &HtmlTextAreaElement,
-    key: &str,
-    ctrl: bool,
-    shift: bool,
-    alt: bool,
+    event: &KeyEvent,
 ) -> KeyOutcome {
     let mode = state.editor_mode.get_untracked();
-    let ops = dispatch(state, key, &mode, ctrl, shift, alt);
+    let ops = dispatch(state, event, &mode);
     if ops.is_empty() {
         return KeyOutcome {
             consumed: false,
@@ -83,14 +90,7 @@ pub fn handle_key(
     KeyOutcome { consumed, changed }
 }
 
-fn dispatch(
-    state: EditorState,
-    key: &str,
-    mode: &str,
-    ctrl: bool,
-    shift: bool,
-    alt: bool,
-) -> Vec<EditorOp> {
+fn dispatch(state: EditorState, event: &KeyEvent, mode: &str) -> Vec<EditorOp> {
     let plugins = state.editor_plugins.get_untracked();
     let mut all_ops = Vec::new();
     for plugin in plugins.iter().filter(|plugin| plugin.enabled) {
@@ -106,11 +106,11 @@ fn dispatch(
         let mut scope = Scope::new();
         let plugin_state =
             STATES.with(|states| states.borrow().get(&plugin.id).cloned().unwrap_or_default());
-        scope.push("key", key.to_string());
+        scope.push("key", event.key.clone());
         scope.push("mode", mode.to_string());
-        scope.push("ctrl", ctrl);
-        scope.push("shift", shift);
-        scope.push("alt", alt);
+        scope.push("ctrl", event.ctrl);
+        scope.push("shift", event.shift);
+        scope.push("alt", event.alt);
         scope.push("ops", Array::new());
         scope.push("state", plugin_state);
         let ran = ENGINE
@@ -145,12 +145,14 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "PrevWord" => Some(EditorOp::PrevWord),
             "DeleteLine" => Some(EditorOp::DeleteLine),
             "OpenPalette" => Some(EditorOp::OpenPalette),
+            "HideMenu" => Some(EditorOp::HideMenu),
             _ => None,
         };
     }
     let map = value.clone().try_cast::<Map>()?;
     let (name, payload) = map.into_iter().next()?;
     match name.as_str() {
+        "ShowMenu" => parse_menu(payload).map(EditorOp::ShowMenu),
         "SetMode" => Some(EditorOp::SetMode(payload.into_string().ok()?)),
         "SetStatus" => Some(EditorOp::SetStatus(payload.into_string().ok()?)),
         "Insert" => Some(EditorOp::Insert(payload.into_string().ok()?)),
@@ -163,6 +165,30 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
     }
 }
 
+fn parse_menu(payload: Dynamic) -> Option<LeaderMenu> {
+    let map = payload.try_cast::<Map>()?;
+    let title = map
+        .get("title")
+        .and_then(|value| value.clone().into_string().ok())
+        .unwrap_or_default();
+    let items = map
+        .get("items")
+        .and_then(|value| value.clone().try_cast::<Array>())
+        .map(|array| {
+            array
+                .into_iter()
+                .filter_map(|entry| {
+                    let entry = entry.try_cast::<Map>()?;
+                    let key = entry.get("key")?.clone().into_string().ok()?;
+                    let label = entry.get("label")?.clone().into_string().ok()?;
+                    Some(LeaderItem { key, label })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(LeaderMenu { title, items })
+}
+
 /// Applies the ops to the textarea and the active buffer signal, returning
 /// whether the text changed.
 fn apply(
@@ -173,11 +199,7 @@ fn apply(
     ops: Vec<EditorOp>,
 ) -> bool {
     let mut text: Vec<char> = textarea.value().chars().collect();
-    let mut caret = textarea
-        .selection_start()
-        .ok()
-        .flatten()
-        .unwrap_or(0) as usize;
+    let mut caret = textarea.selection_start().ok().flatten().unwrap_or(0) as usize;
     caret = caret.min(text.len());
 
     let mut changed = false;
@@ -229,6 +251,8 @@ fn apply(
             }
             EditorOp::RunCommand(id) => state.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.palette_open.set(true),
+            EditorOp::ShowMenu(menu) => state.leader.set(Some(menu)),
+            EditorOp::HideMenu => state.leader.set(None),
         }
     }
 

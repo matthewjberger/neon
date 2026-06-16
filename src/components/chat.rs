@@ -186,7 +186,11 @@ fn handle_event(text: &str, messages: RwSignal<Vec<ChatEntry>>, busy: RwSignal<b
                 .get("model")
                 .and_then(Value::as_str)
                 .unwrap_or("a model");
-            push(messages, EntryKind::Info, format!("Session started ({model})"));
+            push(
+                messages,
+                EntryKind::Info,
+                format!("Session started ({model})"),
+            );
         }
         Some("assistant") => {
             let Some(content) = value.pointer("/message/content").and_then(Value::as_array) else {
@@ -223,7 +227,11 @@ fn handle_event(text: &str, messages: RwSignal<Vec<ChatEntry>>, busy: RwSignal<b
         }
         Some("result") => {
             busy.set(false);
-            if value.get("is_error").and_then(Value::as_bool).unwrap_or(false) {
+            if value
+                .get("is_error")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 let text = value
                     .get("result")
                     .and_then(Value::as_str)

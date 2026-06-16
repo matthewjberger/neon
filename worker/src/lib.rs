@@ -160,13 +160,17 @@ fn apply_client_message(world: &mut World, scene: &mut Scene, message: ClientMes
             post(&WorkerMessage::Selected { detail });
         }
         ClientMessage::SetPlugins { plugins } => {
+            post(&WorkerMessage::Busy { active: true });
             systems::plugins::set_plugins(scene, world, plugins);
+            post(&WorkerMessage::Busy { active: false });
         }
         ClientMessage::SubmitCommand { command } => {
             run_submitted_command(world, &command);
         }
         ClientMessage::ResetScene => {
+            post(&WorkerMessage::Busy { active: true });
             systems::plugins::reset(scene, world);
+            post(&WorkerMessage::Busy { active: false });
         }
         ClientMessage::SetRunning { running } => {
             systems::plugins::set_running(scene, running);

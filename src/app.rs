@@ -8,6 +8,7 @@ use protocol::ClientMessage;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::bridge::{self, Bridge};
+use crate::commands;
 use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::console::Console;
@@ -20,7 +21,7 @@ use crate::components::plugin_panel::PluginPanel;
 use crate::components::reference::Reference;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
-use crate::commands;
+use crate::components::which_key::WhichKey;
 use crate::lang;
 use crate::state::{EditorState, SidebarView};
 use crate::theme;
@@ -95,6 +96,9 @@ pub fn App() -> impl IntoView {
             state.help_open.set(false);
             return;
         }
+        if event.key() == "Escape" && state.leader.get_untracked().is_some() {
+            state.leader.set(None);
+        }
         if typing_in_field(&event) {
             return;
         }
@@ -136,7 +140,10 @@ pub fn App() -> impl IntoView {
                     SidebarView::Installed => view! { <PluginPanel bridge state /> }.into_any(),
                     SidebarView::Extensions => view! { <Extensions bridge state /> }.into_any(),
                 }}
-                <div class="editor-area">
+                <div
+                    class="editor-area"
+                    class:split-below=move || state.split.get() && !state.split_vertical.get()
+                >
                     <EditorPane
                         bridge
                         lang
@@ -167,6 +174,7 @@ pub fn App() -> impl IntoView {
                 </div>
             </div>
             <Reference state />
+            <WhichKey state />
             <Palette bridge state />
             <Help state />
             <ChatPane state />

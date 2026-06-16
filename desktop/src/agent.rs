@@ -278,7 +278,11 @@ async fn dispatch(
         "ping" => Some(rpc_result(id, json!({}))),
         "tools/list" => Some(rpc_result(id, json!({ "tools": tool_definitions() }))),
         "tools/call" => Some(handle_tool_call(shared, params, id).await),
-        _ => Some(rpc_error(id, -32601, &format!("method not found: {method}"))),
+        _ => Some(rpc_error(
+            id,
+            -32601,
+            &format!("method not found: {method}"),
+        )),
     }
 }
 

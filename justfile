@@ -48,8 +48,12 @@ dist: workers
 build-desktop: dist
     cargo build --release -p desktop
 
-# Runs cargo check and a format check across the workspace
-check:
+# Runs the language-worker tests
+test:
+    cargo test -p lang
+
+# Runs cargo check, the tests, and a format check across the workspace
+check: test
     cargo check -p protocol -p worker -p lang -p neon --target wasm32-unknown-unknown
     cargo check -p desktop
     cargo fmt --all -- --check

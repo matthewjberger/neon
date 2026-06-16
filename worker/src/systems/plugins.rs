@@ -37,9 +37,7 @@ pub fn reset(scene: &mut Scene, world: &mut World) {
             .core
             .entity_locations
             .get(entity.id)
-            .is_some_and(|location| {
-                location.allocated && location.generation == entity.generation
-            });
+            .is_some_and(|location| location.allocated && location.generation == entity.generation);
         if alive {
             despawn_recursive_immediate(world, entity);
         }
@@ -116,9 +114,12 @@ fn describe_command(command: &Command) -> (String, String) {
 
 fn event_label(event: &Event) -> String {
     match event {
-        Event::Collision { started, .. } => {
-            if *started { "collision started" } else { "collision ended" }.to_string()
+        Event::Collision { started, .. } => if *started {
+            "collision started"
+        } else {
+            "collision ended"
         }
+        .to_string(),
         Event::Despawned { .. } => "despawned".to_string(),
         Event::AnimationFinished { .. } => "animation finished".to_string(),
         Event::AnimationEvent { name, .. } => format!("animation event: {name}"),

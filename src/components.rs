@@ -10,3 +10,4 @@ pub mod plugin_panel;
 pub mod reference;
 pub mod toolbar;
 pub mod viewport;
+pub mod which_key;

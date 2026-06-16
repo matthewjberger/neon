@@ -31,13 +31,19 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
     (
         "Leader (SPC)",
         &[
+            ("SPC", "Open the leader menu (which-key)"),
             ("SPC SPC", "Command palette"),
-            ("SPC w v / s", "Split the editor"),
+            ("SPC w v / s", "Split the editor right / below"),
             ("SPC w d", "Close the split"),
             ("SPC w w", "Focus the other pane"),
-            ("SPC t p / c / r / a", "Toggle preview / console / reference / Claude"),
+            (
+                "SPC t p / c / r / a",
+                "Toggle preview / console / reference / Claude",
+            ),
             ("SPC b b", "Open a buffer"),
-            ("SPC p n", "New plugin"),
+            ("SPC p n / m / i", "New plugin / manager / installed"),
+            ("SPC r", "Run or pause"),
+            ("SPC T", "Next theme"),
             ("SPC ?", "This help"),
             (":", "Command palette"),
         ],
