@@ -10,6 +10,7 @@ pub mod find;
 pub mod help;
 pub mod jump_overlay;
 pub mod loader;
+pub mod lsp_menus;
 pub mod lsp_panel;
 pub mod palette;
 pub mod plugin_panel;

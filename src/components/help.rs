@@ -57,14 +57,22 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
                 "SPC s s / p / j",
                 "Find in buffer / search project / jump word",
             ),
-            ("SPC j j / l / w", "Jump to char / line / word"),
+            ("SPC j j / l / w / i", "Jump to char / line / word / symbol"),
             ("SPC j + / =", "Format the buffer (rust-analyzer)"),
-            ("SPC g g / d", "Go to definition (also gd)"),
+            (
+                "SPC g g / r / R / s",
+                "Definition (also gd) / references / rename / symbol",
+            ),
+            ("SPC a", "Code action (also SPC x .)"),
             (
                 "SPC x ; / d / j / k / J",
                 "Comment / duplicate / move down / up / join",
             ),
             ("SPC x > / <", "Indent / outdent"),
+            (
+                "SPC x u / U / s / w / r",
+                "Lower / upper case / sort lines / trim / rename",
+            ),
             (
                 "SPC t p / c / r / a / o / l",
                 "Toggle preview / console / reference / Claude / control panel / LSP log",

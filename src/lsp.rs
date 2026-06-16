@@ -9,14 +9,15 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use leptos::prelude::*;
-use protocol::{Diagnostic, LspClientMessage, LspServerMessage, Severity};
+use protocol::{Diagnostic, LspClientMessage, LspServerMessage, SearchHit, Severity};
 use serde_json::{Value, json};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlTextAreaElement, MessageEvent, WebSocket};
 
 use crate::state::{
-    CompletionEntry, CompletionMenu, EditorState, HoverCard, PluginKind, language_for_path,
+    CompletionEntry, CompletionMenu, EditorState, HoverCard, PluginKind, SidebarView, basename,
+    language_for_path,
 };
 
 enum Pending {
@@ -24,6 +25,21 @@ enum Pending {
     Hover { x: f64, y: f64 },
     Definition,
     Format { path: String },
+    References,
+    Symbols { path: String },
+    Rename,
+    CodeActions,
+}
+
+/// One ranged text edit from the server, before it is resolved to byte offsets
+/// against a specific document version.
+#[derive(Clone)]
+struct RangeEdit {
+    start_line: u32,
+    start_character: u32,
+    end_line: u32,
+    end_character: u32,
+    new_text: String,
 }
 
 const LSP_URL: &str = "ws://127.0.0.1:8793";
@@ -40,6 +56,9 @@ struct Client {
     diagnostics: HashMap<String, Vec<Diagnostic>>,
     pending: HashMap<i64, Pending>,
     suppress_completion: bool,
+    rename_position: Option<(String, u32, u32)>,
+    code_actions: Vec<Value>,
+    pending_edits: HashMap<String, Vec<RangeEdit>>,
 }
 
 impl Client {
@@ -52,6 +71,9 @@ impl Client {
             diagnostics: HashMap::new(),
             pending: HashMap::new(),
             suppress_completion: false,
+            rename_position: None,
+            code_actions: Vec::new(),
+            pending_edits: HashMap::new(),
         }
     }
 }
@@ -217,6 +239,146 @@ pub fn format_document(state: EditorState) {
             "options": { "tabSize": 4, "insertSpaces": true },
         }),
     );
+}
+
+/// Requests all references to the symbol at the caret into the search panel.
+pub fn request_references(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::References);
+    });
+    send_request_id(
+        id,
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+            "context": { "includeDeclaration": true },
+        }),
+    );
+}
+
+/// Requests the document symbols of the focused file into the search panel.
+pub fn request_symbols(state: EditorState) {
+    let Some((path, _, _)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client
+            .pending
+            .insert(id, Pending::Symbols { path: path.clone() });
+    });
+    send_request_id(
+        id,
+        "textDocument/documentSymbol",
+        json!({ "textDocument": { "uri": file_uri(&path) } }),
+    );
+}
+
+/// Opens the rename prompt for the symbol at the caret.
+pub fn start_rename(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let Some(element) = crate::components::find::active() else {
+        return;
+    };
+    let value = element.value();
+    let caret = element.selection_start().ok().flatten().unwrap_or(0);
+    let initial = word_at(&value, caret);
+    client(|client| client.rename_position = Some((path, line, character)));
+    state.rename.set(Some(initial));
+}
+
+/// Sends the rename request for the stored position with the new name.
+pub fn submit_rename(state: EditorState, new_name: &str) {
+    state.rename.set(None);
+    let trimmed = new_name.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    let Some((path, line, character)) = client(|client| client.rename_position.clone()) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::Rename);
+    });
+    send_request_id(
+        id,
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+            "newName": trimmed,
+        }),
+    );
+}
+
+/// Requests the code actions available at the caret into the action picker.
+pub fn request_code_actions(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::CodeActions);
+    });
+    send_request_id(
+        id,
+        "textDocument/codeAction",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "range": {
+                "start": { "line": line, "character": character },
+                "end": { "line": line, "character": character },
+            },
+            "context": { "diagnostics": [] },
+        }),
+    );
+}
+
+/// Runs the code action chosen from the picker by index.
+pub fn apply_code_action(state: EditorState, index: usize) {
+    state.code_actions.set(Vec::new());
+    let Some(action) = client(|client| client.code_actions.get(index).cloned()) else {
+        return;
+    };
+    if let Some(edit) = action.get("edit") {
+        apply_workspace_edit(state, edit);
+    }
+    if let Some(command) = action
+        .get("command")
+        .or(Some(&action))
+        .filter(|value| value.get("command").and_then(Value::as_str).is_some())
+    {
+        let name = command.get("command").and_then(Value::as_str);
+        let arguments = command.get("arguments").cloned().unwrap_or(json!([]));
+        if let Some(name) = name {
+            let id = next_id();
+            client(|client| {
+                client.pending.insert(id, Pending::Rename);
+            });
+            send_request_id(
+                id,
+                "workspace/executeCommand",
+                json!({ "command": name, "arguments": arguments }),
+            );
+        }
+    }
+}
+
+/// Applies edits queued for a file that was not open when a workspace edit
+/// arrived, called once the file's content is loaded.
+pub fn apply_pending_edits(state: EditorState, path: &str) {
+    let edits = client(|client| client.pending_edits.remove(path));
+    if let Some(edits) = edits {
+        apply_edits_to_file(state, path, &edits);
+    }
 }
 
 /// Moves the caret to the next or previous diagnostic in the focused file.
@@ -411,34 +573,199 @@ fn apply_format(state: EditorState, value: &Value, path: &str) {
     let Some(raw) = value.get("result").and_then(Value::as_array) else {
         return;
     };
-    if raw.is_empty() {
+    let edits = parse_edits(raw);
+    apply_edits_to_file(state, path, &edits);
+}
+
+fn apply_references(state: EditorState, value: &Value) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let hits: Vec<SearchHit> = items
+        .iter()
+        .filter_map(|item| {
+            let uri = item.get("uri").and_then(Value::as_str)?;
+            let line = item.pointer("/range/start/line").and_then(Value::as_u64)?;
+            let path = path_from_uri(uri);
+            let text = basename(&path).to_string();
+            Some(SearchHit {
+                path,
+                line: line as u32 + 1,
+                text,
+            })
+        })
+        .collect();
+    state.search_results.set(hits);
+    state.sidebar_view.set(SidebarView::Search);
+}
+
+fn apply_symbols(state: EditorState, value: &Value, path: &str) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let mut hits = Vec::new();
+    collect_symbols(items, path, &mut hits);
+    state.search_results.set(hits);
+    state.sidebar_view.set(SidebarView::Search);
+}
+
+fn collect_symbols(items: &[Value], path: &str, out: &mut Vec<SearchHit>) {
+    for item in items {
+        let name = item
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let line = item
+            .pointer("/selectionRange/start/line")
+            .or_else(|| item.pointer("/range/start/line"))
+            .or_else(|| item.pointer("/location/range/start/line"))
+            .and_then(Value::as_u64);
+        if let Some(line) = line {
+            let symbol_path = item
+                .pointer("/location/uri")
+                .and_then(Value::as_str)
+                .map(path_from_uri)
+                .unwrap_or_else(|| path.to_string());
+            out.push(SearchHit {
+                path: symbol_path,
+                line: line as u32 + 1,
+                text: name,
+            });
+        }
+        if let Some(children) = item.get("children").and_then(Value::as_array) {
+            collect_symbols(children, path, out);
+        }
+    }
+}
+
+fn apply_code_actions(state: EditorState, value: &Value) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let actions: Vec<Value> = items.to_vec();
+    let titles: Vec<String> = actions
+        .iter()
+        .filter_map(|action| {
+            action
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .collect();
+    client(|client| client.code_actions = actions);
+    state.code_actions.set(titles);
+}
+
+fn apply_workspace_edit(state: EditorState, edit: &Value) {
+    if let Some(changes) = edit.get("changes").and_then(Value::as_object) {
+        for (uri, edits) in changes {
+            if let Some(array) = edits.as_array() {
+                apply_uri_edits(state, uri, array);
+            }
+        }
+    }
+    if let Some(document_changes) = edit.get("documentChanges").and_then(Value::as_array) {
+        for change in document_changes {
+            let uri = change.pointer("/textDocument/uri").and_then(Value::as_str);
+            let edits = change.get("edits").and_then(Value::as_array);
+            if let (Some(uri), Some(edits)) = (uri, edits) {
+                apply_uri_edits(state, uri, edits);
+            }
+        }
+    }
+}
+
+fn apply_uri_edits(state: EditorState, uri: &str, raw: &[Value]) {
+    let path = path_from_uri(uri);
+    let edits = parse_edits(raw);
+    if edits.is_empty() {
+        return;
+    }
+    let open = state
+        .files
+        .with_untracked(|files| files.iter().any(|file| file.path == path));
+    if open {
+        apply_edits_to_file(state, &path, &edits);
+    } else {
+        client(|client| {
+            client.pending_edits.insert(path.clone(), edits);
+        });
+        crate::fs::read_file(&path);
+    }
+}
+
+fn word_at(value: &str, caret: u32) -> String {
+    let mut offset = 0;
+    let mut current = String::new();
+    let mut current_start = 0;
+    for unit in value.chars() {
+        let width = unit.len_utf16() as u32;
+        if unit.is_alphanumeric() || unit == '_' {
+            if current.is_empty() {
+                current_start = offset;
+            }
+            current.push(unit);
+        } else {
+            if !current.is_empty() && caret >= current_start && caret <= offset {
+                return current;
+            }
+            current.clear();
+        }
+        offset += width;
+    }
+    if !current.is_empty() && caret >= current_start && caret <= offset {
+        return current;
+    }
+    String::new()
+}
+
+fn parse_edits(raw: &[Value]) -> Vec<RangeEdit> {
+    raw.iter().filter_map(to_range_edit).collect()
+}
+
+fn to_range_edit(edit: &Value) -> Option<RangeEdit> {
+    Some(RangeEdit {
+        start_line: edit.pointer("/range/start/line").and_then(Value::as_u64)? as u32,
+        start_character: edit
+            .pointer("/range/start/character")
+            .and_then(Value::as_u64)? as u32,
+        end_line: edit.pointer("/range/end/line").and_then(Value::as_u64)? as u32,
+        end_character: edit
+            .pointer("/range/end/character")
+            .and_then(Value::as_u64)? as u32,
+        new_text: edit.get("newText").and_then(Value::as_str)?.to_string(),
+    })
+}
+
+/// Applies ranged edits to a string, resolving each range to a unit offset and
+/// splicing from the end so earlier offsets stay valid.
+fn apply_range_edits(text: &str, edits: &[RangeEdit]) -> String {
+    let mut resolved: Vec<(u32, u32, &str)> = edits
+        .iter()
+        .map(|edit| {
+            (
+                offset_of(text, edit.start_line, edit.start_character),
+                offset_of(text, edit.end_line, edit.end_character),
+                edit.new_text.as_str(),
+            )
+        })
+        .collect();
+    resolved.sort_by_key(|edit| std::cmp::Reverse(edit.0));
+    let mut result = text.to_string();
+    for (start, end, new_text) in resolved {
+        result = splice_utf16(&result, start, end, new_text);
+    }
+    result
+}
+
+/// Applies edits to an open file's buffer and notifies the server.
+fn apply_edits_to_file(state: EditorState, path: &str, edits: &[RangeEdit]) {
+    if edits.is_empty() {
         return;
     }
     let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
-    let mut edits: Vec<(u32, u32, String)> = raw
-        .iter()
-        .filter_map(|edit| {
-            let new_text = edit.get("newText").and_then(Value::as_str)?.to_string();
-            let start_line = edit.pointer("/range/start/line").and_then(Value::as_u64)? as u32;
-            let start_character = edit
-                .pointer("/range/start/character")
-                .and_then(Value::as_u64)? as u32;
-            let end_line = edit.pointer("/range/end/line").and_then(Value::as_u64)? as u32;
-            let end_character = edit
-                .pointer("/range/end/character")
-                .and_then(Value::as_u64)? as u32;
-            Some((
-                offset_of(&text, start_line, start_character),
-                offset_of(&text, end_line, end_character),
-                new_text,
-            ))
-        })
-        .collect();
-    edits.sort_by_key(|edit| std::cmp::Reverse(edit.0));
-    let mut result = text;
-    for (start, end, new_text) in edits {
-        result = splice_utf16(&result, start, end, &new_text);
-    }
+    let result = apply_range_edits(&text, edits);
     state.set_buffer_text(PluginKind::File, &Some(path.to_string()), result);
     did_change(state, path);
 }
@@ -629,11 +956,23 @@ fn handle(state: EditorState, message: LspServerMessage) {
 }
 
 fn handle_rpc(state: EditorState, value: Value) {
-    if value.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics") {
-        if let Some(params) = value.get("params") {
-            apply_diagnostics(state, params);
+    match value.get("method").and_then(Value::as_str) {
+        Some("textDocument/publishDiagnostics") => {
+            if let Some(params) = value.get("params") {
+                apply_diagnostics(state, params);
+            }
+            return;
         }
-        return;
+        Some("workspace/applyEdit") => {
+            if let Some(edit) = value.pointer("/params/edit") {
+                apply_workspace_edit(state, edit);
+            }
+            if let Some(id) = value.get("id") {
+                send_raw(json!({ "jsonrpc": "2.0", "id": id, "result": { "applied": true } }));
+            }
+            return;
+        }
+        _ => {}
     }
     let Some(id) = value.get("id").and_then(Value::as_i64) else {
         return;
@@ -644,6 +983,14 @@ fn handle_rpc(state: EditorState, value: Value) {
             Pending::Hover { x, y } => apply_hover(state, &value, x, y),
             Pending::Definition => apply_definition(state, &value),
             Pending::Format { path } => apply_format(state, &value, &path),
+            Pending::References => apply_references(state, &value),
+            Pending::Symbols { path } => apply_symbols(state, &value, &path),
+            Pending::Rename => {
+                if let Some(result) = value.get("result") {
+                    apply_workspace_edit(state, result);
+                }
+            }
+            Pending::CodeActions => apply_code_actions(state, &value),
         }
         return;
     }

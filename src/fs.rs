@@ -172,6 +172,7 @@ fn dispatch(state: EditorState, response: FsResponse) {
             });
             state.open_in_focused(PluginKind::File, Some(path.clone()));
             crate::lsp::did_open(state, &path);
+            crate::lsp::apply_pending_edits(state, &path);
         }
         FsResponse::Wrote { path, .. } => {
             state.files.update(|files| {

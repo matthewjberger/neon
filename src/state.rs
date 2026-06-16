@@ -226,6 +226,11 @@ pub struct EditorState {
     pub control_panel_open: RwSignal<bool>,
     /// The custom right-click menu, when open, with its anchor and items.
     pub context_menu: RwSignal<Option<ContextMenu>>,
+    /// The rename prompt's current text, when the rename box is open.
+    pub rename: RwSignal<Option<String>>,
+    /// The titles of the code actions offered for the caret, when the picker is
+    /// open. Empty means closed; the index selects the action.
+    pub code_actions: RwSignal<Vec<String>>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -294,6 +299,8 @@ impl EditorState {
             command_request: RwSignal::new(None),
             control_panel_open: RwSignal::new(false),
             context_menu: RwSignal::new(None),
+            rename: RwSignal::new(None),
+            code_actions: RwSignal::new(Vec::new()),
         }
     }
 

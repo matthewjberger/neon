@@ -13,10 +13,12 @@
 //          h/l/j/k   focus previous / next / next / previous
 //          w/W/=/x   focus other / previous / balance / close split
 //   SPC s  s/p///j   search: find buffer / project / project / jump word
-//   SPC j  j/l/w/+/= jump: char / line / word / format / format
-//   SPC g  g/d       goto: definition (also "gd" in normal mode)
+//   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
+//   SPC g  g/r/R/s   goto: definition (also "gd") / references / rename / symbol
+//   SPC a            code action (also SPC x .)
 //   SPC e  n/p/l     errors: next / previous / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
+//   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
 //          J/>/<     join lines / indent / outdent
 //   SPC t  p/c/r/a/o/l  toggles: preview / console / reference / Claude /
 //                       control panel / rust-analyzer log
@@ -42,6 +44,7 @@ fn leader_menu() {
         #{ key: "s", label: "+Search" },
         #{ key: "j", label: "+Jump" },
         #{ key: "g", label: "+Goto" },
+        #{ key: "a", label: "Code action" },
         #{ key: "x", label: "+Text" },
         #{ key: "t", label: "+Toggles" },
         #{ key: "e", label: "+Errors" },
@@ -94,7 +97,7 @@ fn search_menu() {
         #{ key: "s", label: "Find in buffer" },
         #{ key: "p", label: "Search project" },
         #{ key: "/", label: "Search project" },
-        #{ key: "j", label: "Jump to word" },
+        #{ key: "j", label: "Jump to symbol" },
     ] };
 }
 
@@ -103,6 +106,7 @@ fn jump_menu() {
         #{ key: "j", label: "Jump to char" },
         #{ key: "l", label: "Jump to line" },
         #{ key: "w", label: "Jump to word" },
+        #{ key: "i", label: "Jump to symbol" },
         #{ key: "+", label: "Format buffer" },
         #{ key: "=", label: "Format buffer" },
     ] };
@@ -112,6 +116,9 @@ fn goto_menu() {
     #{ title: "+Goto", items: [
         #{ key: "g", label: "Go to definition" },
         #{ key: "d", label: "Go to definition" },
+        #{ key: "r", label: "Find references" },
+        #{ key: "R", label: "Rename symbol" },
+        #{ key: "s", label: "Jump to symbol" },
     ] };
 }
 
@@ -124,6 +131,12 @@ fn text_menu() {
         #{ key: "J", label: "Join lines" },
         #{ key: ">", label: "Indent" },
         #{ key: "<", label: "Outdent" },
+        #{ key: "u", label: "Lower case word" },
+        #{ key: "U", label: "Upper case word" },
+        #{ key: "s", label: "Sort lines" },
+        #{ key: "w", label: "Delete trailing space" },
+        #{ key: "r", label: "Rename symbol" },
+        #{ key: ".", label: "Code action" },
     ] };
 }
 
@@ -188,6 +201,7 @@ fn on_key() {
         else if key == ";" { ops.push(#{ ToggleComment: "//" }); ops.push("HideMenu"); }
         else if key == "?" { ops.push(#{ RunCommand: "open-help" }); ops.push("HideMenu"); }
         else if key == "r" { ops.push(#{ RunCommand: "run-pause" }); ops.push("HideMenu"); }
+        else if key == "a" { ops.push(#{ RunCommand: "code-action" }); ops.push("HideMenu"); }
         else if key == "T" { ops.push(#{ RunCommand: "next-theme" }); ops.push("HideMenu"); }
         else if key == "f" { state.pending = "SPC f"; ops.push(#{ ShowMenu: file_menu() }); }
         else if key == "b" { state.pending = "SPC b"; ops.push(#{ ShowMenu: buffer_menu() }); }
@@ -243,7 +257,7 @@ fn on_key() {
         state.pending = "";
         if key == "s" { ops.push(#{ RunCommand: "find" }); }
         else if key == "p" || key == "/" { ops.push(#{ RunCommand: "show-search" }); }
-        else if key == "j" { ops.push(#{ RunCommand: "jump-word" }); }
+        else if key == "j" { ops.push(#{ RunCommand: "jump-symbol" }); }
         return;
     }
     if pending == "SPC j" {
@@ -253,6 +267,7 @@ fn on_key() {
         if key == "j" { ops.push(#{ RunCommand: "jump-char" }); }
         else if key == "l" { ops.push(#{ RunCommand: "jump-line" }); }
         else if key == "w" { ops.push(#{ RunCommand: "jump-word" }); }
+        else if key == "i" { ops.push(#{ RunCommand: "jump-symbol" }); }
         else if key == "+" || key == "=" { ops.push(#{ RunCommand: "format-document" }); }
         return;
     }
@@ -261,6 +276,9 @@ fn on_key() {
         ops.push("HideMenu");
         state.pending = "";
         if key == "g" || key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
+        else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
+        else if key == "R" { ops.push(#{ RunCommand: "rename-symbol" }); }
+        else if key == "s" { ops.push(#{ RunCommand: "jump-symbol" }); }
         return;
     }
     if pending == "SPC x" {
@@ -274,6 +292,12 @@ fn on_key() {
         else if key == "J" { ops.push("JoinLines"); }
         else if key == ">" { ops.push("Indent"); }
         else if key == "<" { ops.push("Outdent"); }
+        else if key == "u" { ops.push("LowerCaseWord"); }
+        else if key == "U" { ops.push("UpperCaseWord"); }
+        else if key == "s" { ops.push("SortLines"); }
+        else if key == "w" { ops.push("DeleteTrailingWhitespace"); }
+        else if key == "r" { ops.push(#{ RunCommand: "rename-symbol" }); }
+        else if key == "." { ops.push(#{ RunCommand: "code-action" }); }
         return;
     }
     if pending == "SPC t" {

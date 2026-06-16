@@ -21,6 +21,7 @@ use crate::components::find::FindBar;
 use crate::components::help::Help;
 use crate::components::jump_overlay::JumpOverlay;
 use crate::components::loader::Loader;
+use crate::components::lsp_menus::{CodeActionMenu, RenamePrompt};
 use crate::components::lsp_panel::{LspConsent, LspLog};
 use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
@@ -289,6 +290,8 @@ pub fn App() -> impl IntoView {
             <WhichKey state />
             <LspConsent state />
             <LspLog state />
+            <RenamePrompt state />
+            <CodeActionMenu state />
             <ControlPanel bridge state />
             <ContextMenuView bridge state />
             <Palette bridge state />

@@ -56,6 +56,10 @@ enum EditorOp {
     Indent,
     Outdent,
     SmartLineStart,
+    UpperCaseWord,
+    LowerCaseWord,
+    SortLines,
+    DeleteTrailingWhitespace,
     ToggleComment(String),
     FindChar(String),
     RunCommand(String),
@@ -166,6 +170,10 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "Indent" => Some(EditorOp::Indent),
             "Outdent" => Some(EditorOp::Outdent),
             "SmartLineStart" => Some(EditorOp::SmartLineStart),
+            "UpperCaseWord" => Some(EditorOp::UpperCaseWord),
+            "LowerCaseWord" => Some(EditorOp::LowerCaseWord),
+            "SortLines" => Some(EditorOp::SortLines),
+            "DeleteTrailingWhitespace" => Some(EditorOp::DeleteTrailingWhitespace),
             "OpenPalette" => Some(EditorOp::OpenPalette),
             "HideMenu" => Some(EditorOp::HideMenu),
             _ => None,
@@ -388,6 +396,51 @@ fn apply(
                     first += 1;
                 }
                 caret = if caret == first { start } else { first };
+            }
+            EditorOp::UpperCaseWord | EditorOp::LowerCaseWord => {
+                let upper = matches!(op, EditorOp::UpperCaseWord);
+                let mut start = caret;
+                while start > 0 && is_word(text[start - 1]) {
+                    start -= 1;
+                }
+                let mut end = caret;
+                while end < text.len() && is_word(text[end]) {
+                    end += 1;
+                }
+                if end > start {
+                    for character in text.iter_mut().take(end).skip(start) {
+                        *character = if upper {
+                            character.to_ascii_uppercase()
+                        } else {
+                            character.to_ascii_lowercase()
+                        };
+                    }
+                    changed = true;
+                }
+            }
+            EditorOp::SortLines => {
+                let content: String = text.iter().collect();
+                let mut lines: Vec<&str> = content.split('\n').collect();
+                lines.sort_unstable();
+                let sorted = lines.join("\n");
+                if sorted != content {
+                    text = sorted.chars().collect();
+                    caret = caret.min(text.len());
+                    changed = true;
+                }
+            }
+            EditorOp::DeleteTrailingWhitespace => {
+                let content: String = text.iter().collect();
+                let trimmed = content
+                    .split('\n')
+                    .map(|line| line.trim_end_matches([' ', '\t']))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if trimmed != content {
+                    text = trimmed.chars().collect();
+                    caret = caret.min(text.len());
+                    changed = true;
+                }
             }
             EditorOp::ToggleComment(marker) => {
                 let marker: Vec<char> = marker.chars().collect();
