@@ -77,6 +77,8 @@ pub struct BufferRef {
 pub struct CompletionEntry {
     pub label: String,
     pub insert: String,
+    pub detail: String,
+    pub kind: String,
 }
 
 /// The completion popup: the candidates, the caret pixel anchor, and the typed

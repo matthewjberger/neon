@@ -1185,16 +1185,46 @@ body {
 }
 
 .completion-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   padding: 3px 10px;
   color: var(--text);
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+}
+
+.completion-kind {
+  flex: 0 0 auto;
+  width: 52px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: right;
+}
+
+.completion-label {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.completion-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .completion-item.active {
   background: var(--accent);
+  color: var(--bg);
+}
+
+.completion-item.active .completion-kind,
+.completion-item.active .completion-detail {
   color: var(--bg);
 }
 

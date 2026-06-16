@@ -613,7 +613,45 @@ fn to_entry(item: &Value) -> Option<CompletionEntry> {
         .or_else(|| item.pointer("/textEdit/newText").and_then(Value::as_str))
         .unwrap_or(&label)
         .to_string();
-    Some(CompletionEntry { label, insert })
+    let detail = item
+        .get("detail")
+        .and_then(Value::as_str)
+        .or_else(|| item.pointer("/labelDetails/detail").and_then(Value::as_str))
+        .unwrap_or_default()
+        .to_string();
+    let kind = completion_kind(item.get("kind").and_then(Value::as_u64)).to_string();
+    Some(CompletionEntry {
+        label,
+        insert,
+        detail,
+        kind,
+    })
+}
+
+fn completion_kind(kind: Option<u64>) -> &'static str {
+    match kind {
+        Some(2) => "method",
+        Some(3) => "fn",
+        Some(4) => "ctor",
+        Some(5) => "field",
+        Some(6) => "var",
+        Some(7) => "class",
+        Some(8) => "trait",
+        Some(9) => "mod",
+        Some(10) => "prop",
+        Some(11) => "unit",
+        Some(12) => "value",
+        Some(13) => "enum",
+        Some(14) => "kw",
+        Some(15) => "snip",
+        Some(20) => "variant",
+        Some(21) => "const",
+        Some(22) => "struct",
+        Some(23) => "event",
+        Some(24) => "op",
+        Some(25) => "type",
+        _ => "",
+    }
 }
 
 fn apply_locations(state: EditorState, value: &Value) {

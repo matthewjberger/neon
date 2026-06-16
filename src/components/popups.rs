@@ -36,7 +36,9 @@ pub fn CompletionPopup(state: EditorState) -> impl IntoView {
                                         crate::lsp::accept_completion(state, index);
                                     }
                                 >
-                                    {entry.label}
+                                    <span class="completion-kind">{entry.kind}</span>
+                                    <span class="completion-label">{entry.label}</span>
+                                    <span class="completion-detail">{entry.detail}</span>
                                 </div>
                             }
                         })
