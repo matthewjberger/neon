@@ -16,7 +16,7 @@ fn on_key() {
         }
         return;
     }
-    if key == "f" {
+    if key == "f" && !ctrl && !alt {
         ops.push("Consume");
         state.find_pending = true;
         ops.push(#{ SetStatus: "f-" });

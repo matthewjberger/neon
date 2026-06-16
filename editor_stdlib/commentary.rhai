@@ -22,7 +22,7 @@ fn on_key() {
         }
         return;
     }
-    if key == "g" {
+    if key == "g" && !ctrl && !alt {
         ops.push("Consume");
         state.comment = "g";
     }

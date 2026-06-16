@@ -82,6 +82,10 @@ fn on_key() {
         return;
     }
 
+    if ctrl || alt {
+        return;
+    }
+
     let pending = if "pending" in state { state.pending } else { "" };
 
     if pending == "SPC" {

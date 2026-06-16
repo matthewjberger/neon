@@ -17,7 +17,7 @@ fn on_key() {
         }
         return;
     }
-    if key == "j" {
+    if key == "j" && !ctrl && !alt {
         ops.push("Consume");
         ops.push(#{ Insert: "j" });
         state.escape_pending = true;

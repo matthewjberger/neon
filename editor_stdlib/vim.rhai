@@ -12,6 +12,11 @@ fn on_key() {
         return;
     }
 
+    // Let Ctrl and Alt chords through to other layers and the global shortcuts.
+    if ctrl || alt {
+        return;
+    }
+
     // Normal mode consumes every key so it never types into the buffer.
     ops.push("Consume");
 

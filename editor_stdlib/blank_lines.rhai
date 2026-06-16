@@ -25,10 +25,10 @@ fn on_key() {
         }
         return;
     }
-    if key == "]" {
+    if key == "]" && !ctrl && !alt {
         ops.push("Consume");
         state.bracket = "]";
-    } else if key == "[" {
+    } else if key == "[" && !ctrl && !alt {
         ops.push("Consume");
         state.bracket = "[";
     }

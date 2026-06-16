@@ -428,7 +428,9 @@ fn apply(
     }
 
     let value: String = text.iter().collect();
-    textarea.set_value(&value);
+    if changed {
+        textarea.set_value(&value);
+    }
     let caret = caret.min(text.len()) as u32;
     let _ = textarea.set_selection_range(caret, caret);
 
