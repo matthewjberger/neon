@@ -25,6 +25,7 @@ pub enum EditorCommand {
     ShowFiles,
     OpenFolder,
     SaveFile,
+    Find,
     ToggleLspLog,
     NewPlugin,
     RunPause,
@@ -52,6 +53,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "show-files" => EditorCommand::ShowFiles,
         "open-folder" => EditorCommand::OpenFolder,
         "save-file" => EditorCommand::SaveFile,
+        "find" => EditorCommand::Find,
         "toggle-lsp-log" => EditorCommand::ToggleLspLog,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
@@ -98,6 +100,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("View: files".to_string(), EditorCommand::ShowFiles),
         ("Open folder".to_string(), EditorCommand::OpenFolder),
         ("Save file".to_string(), EditorCommand::SaveFile),
+        ("Find and replace".to_string(), EditorCommand::Find),
         (
             "Toggle rust-analyzer log".to_string(),
             EditorCommand::ToggleLspLog,
@@ -171,6 +174,7 @@ pub fn run(
                 crate::fs::write_file(&path, text);
             }
         }
+        EditorCommand::Find => state.find_open.set(true),
         EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");

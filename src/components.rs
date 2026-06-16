@@ -4,6 +4,7 @@ pub mod console;
 pub mod editor_pane;
 pub mod extensions;
 pub mod file_tree;
+pub mod find;
 pub mod help;
 pub mod loader;
 pub mod lsp_panel;

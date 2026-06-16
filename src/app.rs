@@ -15,6 +15,7 @@ use crate::components::console::Console;
 use crate::components::editor_pane::EditorPane;
 use crate::components::extensions::Extensions;
 use crate::components::file_tree::FileTree;
+use crate::components::find::FindBar;
 use crate::components::help::Help;
 use crate::components::loader::Loader;
 use crate::components::lsp_panel::{LspConsent, LspLog};
@@ -104,6 +105,13 @@ pub fn App() -> impl IntoView {
             if let Some(command) = commands::command_from_id("save-file") {
                 commands::run(command, state, bridge);
             }
+            return;
+        }
+        if event.ctrl_key()
+            && (event.key().eq_ignore_ascii_case("f") || event.key().eq_ignore_ascii_case("h"))
+        {
+            event.prevent_default();
+            state.find_open.set(true);
             return;
         }
         if event.key() == "Escape" && state.help_open.get_untracked() {
@@ -231,6 +239,7 @@ pub fn App() -> impl IntoView {
                 </div>
             </div>
             <StatusBar state />
+            <FindBar state />
             <Reference state />
             <WhichKey state />
             <LspConsent state />

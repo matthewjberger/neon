@@ -148,6 +148,8 @@ pub struct EditorState {
     pub theme: RwSignal<String>,
     /// Whether the command palette is open.
     pub palette_open: RwSignal<bool>,
+    /// Whether the find and replace bar is open.
+    pub find_open: RwSignal<bool>,
     /// Whether the help and keybindings overlay is open.
     pub help_open: RwSignal<bool>,
     /// The leader menu an editor plugin published for the pending prefix, shown
@@ -206,6 +208,7 @@ impl EditorState {
             grabbing: RwSignal::new(false),
             theme: RwSignal::new(crate::theme::stored_theme()),
             palette_open: RwSignal::new(false),
+            find_open: RwSignal::new(false),
             help_open: RwSignal::new(false),
             leader: RwSignal::new(None),
             split_vertical: RwSignal::new(true),

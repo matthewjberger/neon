@@ -77,7 +77,12 @@ pub fn EditorPane(
         }
     });
 
-    let on_focus = move |_| state.focused_key.set(pane_key);
+    let on_focus = move |_| {
+        state.focused_key.set(pane_key);
+        if let Some(element) = textarea.get() {
+            crate::components::find::set_active(element);
+        }
+    };
 
     let on_input = move |event: web_sys::Event| {
         let (id, kind) = current();
