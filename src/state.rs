@@ -38,6 +38,16 @@ pub struct LeaderMenu {
     pub items: Vec<LeaderItem>,
 }
 
+/// One editor pane: a stable key, the buffer it shows, and its flex-grow weight
+/// in the split. Plain data, held in a `Vec`, so any number of panes can stack.
+#[derive(Clone, PartialEq)]
+pub struct Pane {
+    pub key: usize,
+    pub active: Option<String>,
+    pub kind: PluginKind,
+    pub flex: f32,
+}
+
 #[derive(Clone, Copy)]
 pub struct EditorState {
     pub ready: RwSignal<bool>,
@@ -54,10 +64,11 @@ pub struct EditorState {
     pub stdlib: RwSignal<Vec<StdModule>>,
     /// The authored plugins. The page owns this set and syncs it to the worker.
     pub plugins: RwSignal<Vec<PluginSource>>,
-    /// The id of the plugin open in the editor, if any.
-    pub active: RwSignal<Option<String>>,
-    /// Which set the open buffer belongs to.
-    pub active_kind: RwSignal<PluginKind>,
+    /// The open editor panes, in layout order. Always at least one. Splitting
+    /// appends a pane next to the focused one, closing removes the focused one.
+    pub panes: RwSignal<Vec<Pane>>,
+    /// The key of the focused pane.
+    pub focused_key: RwSignal<usize>,
     /// Editor plugins: rhai that handles keystrokes through the Editor API. Run
     /// on the page, never sent to the worker.
     pub editor_plugins: RwSignal<Vec<PluginSource>>,
@@ -89,16 +100,9 @@ pub struct EditorState {
     /// The leader menu an editor plugin published for the pending prefix, shown
     /// as the which-key panel. `None` when no leader sequence is active.
     pub leader: RwSignal<Option<LeaderMenu>>,
-    /// Whether the editor is split into two panes.
-    pub split: RwSignal<bool>,
     /// Split orientation: true lays the panes side by side (split right), false
     /// stacks them (split below).
     pub split_vertical: RwSignal<bool>,
-    /// The secondary pane's open buffer when split.
-    pub secondary: RwSignal<Option<String>>,
-    pub secondary_kind: RwSignal<PluginKind>,
-    /// Which pane is focused: false primary, true secondary.
-    pub focus_secondary: RwSignal<bool>,
     /// A command id an editor plugin asked the editor to run, applied by the
     /// shell. This is how plugins dictate editor actions.
     pub command_request: RwSignal<Option<String>>,
@@ -118,8 +122,13 @@ impl EditorState {
             commands: RwSignal::new(Vec::new()),
             stdlib: RwSignal::new(Vec::new()),
             plugins: RwSignal::new(plugins),
-            active: RwSignal::new(active),
-            active_kind: RwSignal::new(PluginKind::Scene),
+            panes: RwSignal::new(vec![Pane {
+                key: 0,
+                active,
+                kind: PluginKind::Scene,
+                flex: 1.0,
+            }]),
+            focused_key: RwSignal::new(0),
             editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
             editor_mode: RwSignal::new("normal".to_string()),
             status: RwSignal::new(String::new()),
@@ -136,11 +145,7 @@ impl EditorState {
             palette_open: RwSignal::new(false),
             help_open: RwSignal::new(false),
             leader: RwSignal::new(None),
-            split: RwSignal::new(false),
             split_vertical: RwSignal::new(true),
-            secondary: RwSignal::new(None),
-            secondary_kind: RwSignal::new(PluginKind::Scene),
-            focus_secondary: RwSignal::new(false),
             command_request: RwSignal::new(None),
         }
     }
@@ -190,9 +195,140 @@ impl EditorState {
         }
     }
 
-    /// The primary pane's source, used by the agent relay.
+    /// The focused pane, falling back to the first if the key is stale.
+    pub fn focused(&self) -> Pane {
+        self.panes.with(|panes| {
+            let key = self.focused_key.get();
+            panes
+                .iter()
+                .find(|pane| pane.key == key)
+                .or_else(|| panes.first())
+                .cloned()
+                .unwrap_or(Pane {
+                    key: 0,
+                    active: None,
+                    kind: PluginKind::Scene,
+                    flex: 1.0,
+                })
+        })
+    }
+
+    /// The focused pane's open buffer id.
+    pub fn active_id(&self) -> Option<String> {
+        self.focused().active
+    }
+
+    /// The focused pane's buffer kind.
+    pub fn active_kind(&self) -> PluginKind {
+        self.focused().kind
+    }
+
+    /// The focused pane's source, used by the agent relay.
     pub fn active_source(&self) -> String {
-        self.buffer_source(self.active_kind.get(), &self.active.get())
+        let pane = self.focused();
+        self.buffer_source(pane.kind, &pane.active)
+    }
+
+    /// The number of open panes.
+    pub fn pane_count(&self) -> usize {
+        self.panes.with(|panes| panes.len())
+    }
+
+    /// Open a buffer in the focused pane.
+    pub fn open_in_focused(&self, kind: PluginKind, id: Option<String>) {
+        let key = self.focused_key.get_untracked();
+        self.panes.update(|panes| {
+            let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
+            if let Some(pane) = panes.get_mut(index) {
+                pane.kind = kind;
+                pane.active = id;
+            }
+        });
+    }
+
+    /// Append a pane next to the focused one, cloning its buffer, and focus it.
+    pub fn split(&self, vertical: bool) {
+        self.split_vertical.set(vertical);
+        let source = self.focused();
+        let key = self
+            .panes
+            .with_untracked(|panes| panes.iter().map(|pane| pane.key).max().unwrap_or(0) + 1);
+        self.panes.update(|panes| {
+            let index = panes
+                .iter()
+                .position(|pane| pane.key == source.key)
+                .map(|index| index + 1)
+                .unwrap_or(panes.len());
+            panes.insert(
+                index,
+                Pane {
+                    key,
+                    active: source.active.clone(),
+                    kind: source.kind,
+                    flex: 1.0,
+                },
+            );
+        });
+        self.focused_key.set(key);
+    }
+
+    /// Close the focused pane unless it is the only one, focusing a neighbor.
+    pub fn close_focused(&self) {
+        let key = self.focused_key.get_untracked();
+        let neighbor = self.panes.with_untracked(|panes| {
+            if panes.len() <= 1 {
+                return None;
+            }
+            let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
+            let neighbor = if index == 0 {
+                panes.get(1)
+            } else {
+                panes.get(index - 1)
+            };
+            neighbor.map(|pane| pane.key)
+        });
+        if let Some(next_key) = neighbor {
+            self.panes
+                .update(|panes| panes.retain(|pane| pane.key != key));
+            self.focused_key.set(next_key);
+        }
+    }
+
+    /// Move focus to the next pane, wrapping around.
+    pub fn focus_next(&self) {
+        let key = self.focused_key.get_untracked();
+        let next = self.panes.with_untracked(|panes| {
+            if panes.is_empty() {
+                return None;
+            }
+            let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
+            panes.get((index + 1) % panes.len()).map(|pane| pane.key)
+        });
+        if let Some(next_key) = next {
+            self.focused_key.set(next_key);
+        }
+    }
+
+    /// Drag the divider before `right_key`, transferring flex weight from the
+    /// pane on one side to the other. `delta_fraction` is the pointer move as a
+    /// fraction of the editor area along the split axis.
+    pub fn drag_divider(&self, right_key: usize, delta_fraction: f32) {
+        self.panes.update(|panes| {
+            let Some(right) = panes.iter().position(|pane| pane.key == right_key) else {
+                return;
+            };
+            if right == 0 {
+                return;
+            }
+            let left = right - 1;
+            let total: f32 = panes.iter().map(|pane| pane.flex).sum();
+            let delta = delta_fraction * total;
+            let minimum = 0.1;
+            if panes[left].flex + delta >= minimum && panes[right].flex - delta >= minimum {
+                panes[left].flex += delta;
+                panes[right].flex -= delta;
+            }
+        });
     }
 }
 

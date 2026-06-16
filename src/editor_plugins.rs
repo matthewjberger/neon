@@ -72,8 +72,8 @@ pub struct KeyOutcome {
 /// the ops to the textarea, returning what happened.
 pub fn handle_key(
     state: EditorState,
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
+    id: Option<String>,
+    kind: PluginKind,
     textarea: &HtmlTextAreaElement,
     event: &KeyEvent,
 ) -> KeyOutcome {
@@ -86,7 +86,7 @@ pub fn handle_key(
         };
     }
     let consumed = ops.iter().any(|op| matches!(op, EditorOp::Consume));
-    let changed = apply(state, active, active_kind, textarea, ops);
+    let changed = apply(state, id, kind, textarea, ops);
     KeyOutcome { consumed, changed }
 }
 
@@ -193,8 +193,8 @@ fn parse_menu(payload: Dynamic) -> Option<LeaderMenu> {
 /// whether the text changed.
 fn apply(
     state: EditorState,
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
+    id: Option<String>,
+    kind: PluginKind,
     textarea: &HtmlTextAreaElement,
     ops: Vec<EditorOp>,
 ) -> bool {
@@ -266,9 +266,7 @@ fn apply(
     }
 
     if changed {
-        let signal = state.editable_set(active_kind.get_untracked());
-        let id = active.get_untracked();
-        signal.update(|plugins| {
+        state.editable_set(kind).update(|plugins| {
             if let Some(plugin) = plugins
                 .iter_mut()
                 .find(|plugin| Some(&plugin.id) == id.as_ref())
@@ -370,8 +368,8 @@ fn hash_source(source: &str) -> u64 {
 /// own Tab-to-indent, independent of any plugin.
 pub fn insert_text(
     state: EditorState,
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
+    id: Option<String>,
+    kind: PluginKind,
     textarea: &HtmlTextAreaElement,
     text: &str,
 ) {
@@ -385,9 +383,7 @@ pub fn insert_text(
     textarea.set_value(&value);
     let caret = (caret + count) as u32;
     let _ = textarea.set_selection_range(caret, caret);
-    let signal = state.editable_set(active_kind.get_untracked());
-    let id = active.get_untracked();
-    signal.update(|plugins| {
+    state.editable_set(kind).update(|plugins| {
         if let Some(plugin) = plugins
             .iter_mut()
             .find(|plugin| Some(&plugin.id) == id.as_ref())
@@ -408,6 +404,5 @@ pub fn any_enabled(state: EditorState) -> bool {
 
 /// Resets the editor mode to normal when entering or leaving editor plugins.
 pub fn reset_mode(state: EditorState) {
-    let _ = PluginKind::Scene;
     state.editor_mode.set("normal".to_string());
 }

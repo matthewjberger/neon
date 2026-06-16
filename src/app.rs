@@ -53,7 +53,7 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        state.active.get();
+        state.active_id();
         state.diagnostics.set(Vec::new());
     });
 
@@ -131,6 +131,39 @@ pub fn App() -> impl IntoView {
         }
     });
 
+    let area_ref = NodeRef::<leptos::html::Div>::new();
+    let dragging = StoredValue::new(None::<usize>);
+
+    let _ = window_event_listener(leptos::ev::pointermove, move |event| {
+        let Some(right_key) = dragging.get_value() else {
+            return;
+        };
+        let Some(area) = area_ref.get() else {
+            return;
+        };
+        let vertical = state.split_vertical.get_untracked();
+        let size = if vertical {
+            area.client_width()
+        } else {
+            area.client_height()
+        } as f32;
+        if size <= 0.0 {
+            return;
+        }
+        let movement = if vertical {
+            event.movement_x()
+        } else {
+            event.movement_y()
+        } as f32;
+        state.drag_divider(right_key, movement / size);
+    });
+
+    let _ = window_event_listener(leptos::ev::pointerup, move |_| {
+        dragging.set_value(None);
+    });
+
+    let split_below = move || state.pane_count() > 1 && !state.split_vertical.get();
+
     view! {
         <div class="app-shell">
             <Toolbar bridge state />
@@ -142,26 +175,35 @@ pub fn App() -> impl IntoView {
                 }}
                 <div
                     class="editor-area"
-                    class:split-below=move || state.split.get() && !state.split_vertical.get()
+                    class:split-below=split_below
+                    node_ref=area_ref
                 >
-                    <EditorPane
-                        bridge
-                        lang
-                        state
-                        active=state.active
-                        active_kind=state.active_kind
-                        secondary=false
+                    <For
+                        each=move || state.panes.get()
+                        key=|pane| pane.key
+                        children=move |pane| {
+                            let key = pane.key;
+                            view! {
+                                <Show
+                                    when=move || {
+                                        state
+                                            .panes
+                                            .with(|panes| panes.first().map(|first| first.key) != Some(key))
+                                    }
+                                    fallback=|| ()
+                                >
+                                    <div
+                                        class="editor-splitter"
+                                        on:pointerdown=move |event: web_sys::PointerEvent| {
+                                            event.prevent_default();
+                                            dragging.set_value(Some(key));
+                                        }
+                                    ></div>
+                                </Show>
+                                <EditorPane bridge lang state pane_key=key />
+                            }
+                        }
                     />
-                    <Show when=move || state.split.get() fallback=|| ()>
-                        <EditorPane
-                            bridge
-                            lang
-                            state
-                            active=state.secondary
-                            active_kind=state.secondary_kind
-                            secondary=true
-                        />
-                    </Show>
                 </div>
                 <div
                     class="right-column"

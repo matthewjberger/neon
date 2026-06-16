@@ -16,7 +16,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
 use crate::bridge::{self, Bridge, send};
-use crate::state::EditorState;
+use crate::state::{EditorState, PluginKind};
 
 const RELAY_URL: &str = "ws://127.0.0.1:8789";
 const RECONNECT_MS: i32 = 1000;
@@ -140,7 +140,7 @@ fn editor_state_json(state: EditorState) -> serde_json::Value {
         .map(|detail| json!({ "id": detail.id, "name": detail.name }));
     json!({
         "plugins": plugins,
-        "active": state.active.get_untracked(),
+        "active": state.active_id(),
         "selected": selected,
         "running": state.running.get_untracked(),
         "entity_count": state.entity_count.get_untracked(),
@@ -179,7 +179,7 @@ fn edit_plugin(state: EditorState, bridge: &Bridge, plugin: protocol::PluginSour
             plugins.push(plugin.clone());
         }
     });
-    state.active.set(Some(plugin.id));
+    state.open_in_focused(PluginKind::Scene, Some(plugin.id.clone()));
     crate::plugins::save(&state.plugins.get_untracked());
     bridge::sync_plugins(bridge, state);
 }

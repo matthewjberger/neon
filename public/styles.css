@@ -301,6 +301,7 @@ body {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
+  border-right: 1px solid var(--panel-border);
 }
 
 .editor-area.split-below {
@@ -311,9 +312,22 @@ body {
   flex: 1 1 0;
 }
 
-.editor-area.split-below > .editor-pane {
+.editor-area .editor-pane {
   border-right: none;
-  border-bottom: 1px solid var(--panel-border);
+}
+
+.editor-splitter {
+  flex: 0 0 4px;
+  background: var(--panel-border);
+  cursor: col-resize;
+}
+
+.editor-splitter:hover {
+  background: var(--accent);
+}
+
+.editor-area.split-below .editor-splitter {
+  cursor: row-resize;
 }
 
 .editor-pane.focused .editor-header {

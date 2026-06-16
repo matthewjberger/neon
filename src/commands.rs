@@ -136,21 +136,9 @@ pub fn run(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
 ) {
     match command {
-        EditorCommand::SplitEditor { vertical } => {
-            state.secondary.set(state.active.get_untracked());
-            state.secondary_kind.set(state.active_kind.get_untracked());
-            state.split_vertical.set(vertical);
-            state.split.set(true);
-        }
-        EditorCommand::CloseSplit => {
-            state.split.set(false);
-            state.focus_secondary.set(false);
-        }
-        EditorCommand::FocusOther => {
-            if state.split.get_untracked() {
-                state.focus_secondary.update(|focus| *focus = !*focus);
-            }
-        }
+        EditorCommand::SplitEditor { vertical } => state.split(vertical),
+        EditorCommand::CloseSplit => state.close_focused(),
+        EditorCommand::FocusOther => state.focus_next(),
         EditorCommand::TogglePreview => state.viewport_open.update(|open| *open = !*open),
         EditorCommand::ToggleConsole => state.console_open.update(|open| *open = !*open),
         EditorCommand::ToggleReference => state.reference_open.update(|open| *open = !*open),
@@ -161,8 +149,7 @@ pub fn run(
             let plugin = plugins::new_plugin("Untitled");
             let id = plugin.id.clone();
             state.plugins.update(|plugins| plugins.push(plugin));
-            state.active_kind.set(PluginKind::Scene);
-            state.active.set(Some(id));
+            state.open_in_focused(PluginKind::Scene, Some(id));
             if let Some(bridge) = bridge.get_value() {
                 bridge::sync_plugins(&bridge, state);
             }
@@ -191,9 +178,6 @@ pub fn run(
         EditorCommand::OpenPalette => state.palette_open.set(true),
         EditorCommand::OpenHelp => state.help_open.set(true),
         EditorCommand::SetTheme(id) => state.theme.set(id),
-        EditorCommand::OpenBuffer { kind, id } => {
-            state.active_kind.set(kind);
-            state.active.set(Some(id));
-        }
+        EditorCommand::OpenBuffer { kind, id } => state.open_in_focused(kind, Some(id)),
     }
 }

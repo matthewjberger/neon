@@ -1,7 +1,7 @@
 //! The code editor for one pane: a native textarea, a highlight `<pre>` layer
-//! behind it, a line-number gutter, and a diagnostics strip. The pane edits the
-//! buffer named by its `active`/`active_kind` signals, so primary and secondary
-//! (split) panes edit independently. Built-ins are read-only.
+//! behind it, a line-number gutter, and a diagnostics strip. The pane renders the
+//! buffer named by its entry in `state.panes`, keyed by `pane_key`, so every
+//! split pane edits independently. Built-ins are read-only.
 
 use std::collections::HashSet;
 
@@ -23,11 +23,8 @@ pub fn EditorPane(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
-    /// The buffer this pane shows.
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
-    /// Whether this is the secondary (split) pane, for focus routing.
-    secondary: bool,
+    /// The stable key of the pane this component renders.
+    pane_key: usize,
 ) -> impl IntoView {
     let layer = NodeRef::<html::Pre>::new();
     let gutter = NodeRef::<html::Div>::new();
@@ -44,62 +41,65 @@ pub fn EditorPane(
             .collect::<HashSet<String>>()
     });
 
-    let source = move || state.buffer_source(active_kind.get(), &active.get());
-    let readonly = move || kind_readonly(active_kind.get());
+    let pane = move || {
+        state
+            .panes
+            .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
+    };
+    let active_id = move || pane().and_then(|pane| pane.active);
+    let active_kind = move || pane().map(|pane| pane.kind).unwrap_or(PluginKind::Scene);
+    let source = move || state.buffer_source(active_kind(), &active_id());
+    let readonly = move || kind_readonly(active_kind());
+    let flex = move || pane().map(|pane| pane.flex as f64).unwrap_or(1.0);
+    let focused = move || state.pane_count() > 1 && state.focused_key.get() == pane_key;
+
+    let current = move || {
+        state.panes.with_untracked(|panes| {
+            panes
+                .iter()
+                .find(|pane| pane.key == pane_key)
+                .map(|pane| (pane.active.clone(), pane.kind))
+                .unwrap_or((None, PluginKind::Scene))
+        })
+    };
 
     Effect::new(move |_| {
-        if state.focus_secondary.get() == secondary
+        if state.focused_key.get() == pane_key
             && let Some(element) = textarea.get()
         {
             let _ = element.focus();
         }
     });
 
-    let on_focus = move |_| state.focus_secondary.set(secondary);
+    let on_focus = move |_| state.focused_key.set(pane_key);
 
     let on_input = move |event: web_sys::Event| {
-        if kind_readonly(active_kind.get_untracked()) {
+        let (id, kind) = current();
+        if kind_readonly(kind) {
             return;
         }
         let value = event_target_value(&event);
-        let Some(id) = active.get_untracked() else {
+        let Some(id) = id else {
             return;
         };
-        state
-            .editable_set(active_kind.get_untracked())
-            .update(|plugins| {
-                if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
-                    plugin.source = value.clone();
-                }
-            });
-        commit(
-            bridge,
-            lang,
-            state,
-            active,
-            active_kind,
-            debounce,
-            request_id,
-        );
+        state.editable_set(kind).update(|plugins| {
+            if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
+                plugin.source = value.clone();
+            }
+        });
+        commit(bridge, lang, state, pane_key, debounce, request_id);
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
-        if kind_readonly(active_kind.get_untracked()) {
+        let (id, kind) = current();
+        if kind_readonly(kind) {
             return;
         }
         if event.key() == "Tab" {
             event.prevent_default();
             if let Some(element) = textarea.get() {
-                editor_plugins::insert_text(state, active, active_kind, &element, "    ");
-                commit(
-                    bridge,
-                    lang,
-                    state,
-                    active,
-                    active_kind,
-                    debounce,
-                    request_id,
-                );
+                editor_plugins::insert_text(state, id, kind, &element, "    ");
+                commit(bridge, lang, state, pane_key, debounce, request_id);
             }
             return;
         }
@@ -111,8 +111,8 @@ pub fn EditorPane(
         };
         let outcome = editor_plugins::handle_key(
             state,
-            active,
-            active_kind,
+            id,
+            kind,
             &element,
             &editor_plugins::KeyEvent {
                 key: event.key(),
@@ -125,30 +125,23 @@ pub fn EditorPane(
             event.prevent_default();
         }
         if outcome.changed {
-            commit(
-                bridge,
-                lang,
-                state,
-                active,
-                active_kind,
-                debounce,
-                request_id,
-            );
+            commit(bridge, lang, state, pane_key, debounce, request_id);
         }
     };
 
     view! {
         <div
             class="editor-pane"
-            class:focused=move || state.split.get() && state.focus_secondary.get() == secondary
+            class:focused=focused
+            style:flex-grow=move || flex().to_string()
         >
             <Show
-                when=move || active.get().is_some()
+                when=move || active_id().is_some()
                 fallback=|| view! { <div class="editor-empty">"Open a plugin to edit"</div> }
             >
                 <div class="editor-header">
                     <span class="editor-filename">
-                        {move || state.buffer_name(active_kind.get(), &active.get())}
+                        {move || state.buffer_name(active_kind(), &active_id())}
                     </span>
                     <Show when=readonly fallback=|| ()>
                         <span class="editor-lock">"read-only built-in"</span>
@@ -195,7 +188,7 @@ pub fn EditorPane(
                         }
                     />
                 </div>
-                <Show when=move || !secondary fallback=|| ()>
+                <Show when=focused fallback=|| ()>
                     <div class="diagnostics">
                         <For
                             each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
@@ -224,21 +217,21 @@ fn commit(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
+    pane_key: usize,
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
-    if active_kind.get_untracked() == PluginKind::Scene {
-        schedule_apply(
-            bridge,
-            lang,
-            state,
-            active,
-            active_kind,
-            debounce,
-            request_id,
-        );
+    let kind = state
+        .panes
+        .with_untracked(|panes| {
+            panes
+                .iter()
+                .find(|pane| pane.key == pane_key)
+                .map(|pane| pane.kind)
+        })
+        .unwrap_or(PluginKind::Scene);
+    if kind == PluginKind::Scene {
+        schedule_apply(bridge, lang, state, pane_key, debounce, request_id);
     }
 }
 
@@ -246,8 +239,7 @@ fn schedule_apply(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
-    active: RwSignal<Option<String>>,
-    active_kind: RwSignal<PluginKind>,
+    pane_key: usize,
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
@@ -264,11 +256,14 @@ fn schedule_apply(
         let id = request_id.get_value().wrapping_add(1);
         request_id.set_value(id);
         if let Some(lang) = lang.get_value() {
-            lang::check(
-                &lang,
-                id,
-                state.buffer_source(active_kind.get_untracked(), &active.get_untracked()),
-            );
+            let (active, kind) = state.panes.with_untracked(|panes| {
+                panes
+                    .iter()
+                    .find(|pane| pane.key == pane_key)
+                    .map(|pane| (pane.active.clone(), pane.kind))
+                    .unwrap_or((None, PluginKind::Scene))
+            });
+            lang::check(&lang, id, state.buffer_source(kind, &active));
         }
     });
     let handle = window

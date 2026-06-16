@@ -24,7 +24,7 @@ pub fn PluginPanel(
         let plugin = crate::plugins::new_plugin("Untitled");
         let id = plugin.id.clone();
         state.plugins.update(|plugins| plugins.push(plugin));
-        state.active.set(Some(id));
+        state.open_in_focused(PluginKind::Scene, Some(id));
         apply();
     };
 
@@ -49,7 +49,7 @@ pub fn PluginPanel(
                             <div
                                 class="plugin-row"
                                 class:active=move || {
-                                    state.active.get().as_deref() == Some(active_id.as_str())
+                                    state.active_id().as_deref() == Some(active_id.as_str())
                                 }
                             >
                                 <input
@@ -71,8 +71,7 @@ pub fn PluginPanel(
                                 <span
                                     class="plugin-name"
                                     on:click=move |_| {
-                                        state.active_kind.set(PluginKind::Scene);
-                                        state.active.set(Some(select_id.clone()));
+                                        state.open_in_focused(PluginKind::Scene, Some(select_id.clone()));
                                     }
                                 >
                                     {plugin.name.clone()}
@@ -84,10 +83,10 @@ pub fn PluginPanel(
                                         state.plugins.update(|plugins| {
                                             plugins.retain(|plugin| plugin.id != delete_id)
                                         });
-                                        if state.active.get_untracked().as_deref()
+                                        if state.active_id().as_deref()
                                             == Some(delete_id.as_str())
                                         {
-                                            state.active.set(None);
+                                            state.open_in_focused(PluginKind::Scene, None);
                                         }
                                         apply();
                                     }
@@ -114,7 +113,7 @@ pub fn PluginPanel(
                             <div
                                 class="plugin-row"
                                 class:active=move || {
-                                    state.active.get().as_deref() == Some(active_id.as_str())
+                                    state.active_id().as_deref() == Some(active_id.as_str())
                                 }
                             >
                                 <input
@@ -136,8 +135,7 @@ pub fn PluginPanel(
                                 <span
                                     class="plugin-name"
                                     on:click=move |_| {
-                                        state.active_kind.set(PluginKind::Editor);
-                                        state.active.set(Some(select_id.clone()));
+                                        state.open_in_focused(PluginKind::Editor, Some(select_id.clone()));
                                     }
                                 >
                                     {plugin.name.clone()}
@@ -161,15 +159,14 @@ pub fn PluginPanel(
                             <div
                                 class="plugin-row"
                                 class:active=move || {
-                                    state.active_kind.get() == PluginKind::Builtin
-                                        && state.active.get().as_deref() == Some(active_name.as_str())
+                                    state.active_kind() == PluginKind::Builtin
+                                        && state.active_id().as_deref() == Some(active_name.as_str())
                                 }
                             >
                                 <span
                                     class="plugin-name builtin-name"
                                     on:click=move |_| {
-                                        state.active_kind.set(PluginKind::Builtin);
-                                        state.active.set(Some(open_name.clone()));
+                                        state.open_in_focused(PluginKind::Builtin, Some(open_name.clone()));
                                     }
                                 >
                                     {module.name.clone()}

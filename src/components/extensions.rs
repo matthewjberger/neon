@@ -77,13 +77,12 @@ fn toggle_install(
     let present = signal.with_untracked(|plugins| plugins.iter().any(|plugin| plugin.id == id));
     if present {
         signal.update(|plugins| plugins.retain(|plugin| plugin.id != id));
-        if state.active.get_untracked().as_deref() == Some(id) {
-            state.active.set(None);
+        if state.active_id().as_deref() == Some(id) {
+            state.open_in_focused(kind, None);
         }
     } else if let Some(entry) = catalog().iter().find(|entry| entry.id == id) {
         signal.update(|plugins| plugins.push(entry_to_plugin(entry)));
-        state.active_kind.set(kind);
-        state.active.set(Some(id.to_string()));
+        state.open_in_focused(kind, Some(id.to_string()));
     }
     if kind == PluginKind::Scene
         && let Some(bridge) = bridge.get_value()
