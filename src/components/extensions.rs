@@ -5,7 +5,7 @@
 use leptos::prelude::*;
 
 use crate::bridge::{self, Bridge};
-use crate::plugins::{catalog, entry_to_plugin};
+use crate::plugins::{CATEGORIES, catalog, category, entry_to_plugin};
 use crate::state::{EditorState, PluginKind};
 
 #[component]
@@ -14,32 +14,60 @@ pub fn Extensions(
     state: EditorState,
 ) -> impl IntoView {
     view! {
-        <div class="extensions">
+        <div
+            class="extensions"
+            on:contextmenu=move |event: web_sys::MouseEvent| {
+                event.prevent_default();
+                event.stop_propagation();
+                crate::components::context_menu::open(
+                    state,
+                    event.client_x() as f64,
+                    event.client_y() as f64,
+                    crate::components::context_menu::plugin_menu(),
+                );
+            }
+        >
             <div class="panel-title">"Plugins"</div>
             <div class="extensions-list">
-                {catalog()
-                    .into_iter()
-                    .map(|entry| {
-                        let id = entry.id;
-                        let kind = entry.kind;
-                        let name = entry.name;
-                        let description = entry.description;
-                        view! {
-                            <div class="extension">
-                                <div class="extension-head">
-                                    <span class="extension-name">{name}</span>
-                                    <span class="extension-kind">{kind_label(kind)}</span>
-                                </div>
-                                <div class="extension-desc">{description}</div>
-                                <button
-                                    class="tool-button extension-action"
-                                    class:installed=move || installed(state, id, kind)
-                                    on:click=move |_| toggle_install(bridge, state, id, kind)
-                                >
-                                    {move || if installed(state, id, kind) { "Uninstall" } else { "Install" }}
-                                </button>
-                            </div>
+                {CATEGORIES
+                    .iter()
+                    .filter_map(|group| {
+                        let entries = catalog()
+                            .into_iter()
+                            .filter(|entry| category(entry) == *group)
+                            .collect::<Vec<_>>();
+                        if entries.is_empty() {
+                            return None;
                         }
+                        let rows = entries
+                            .into_iter()
+                            .map(|entry| {
+                                let id = entry.id;
+                                let kind = entry.kind;
+                                let name = entry.name;
+                                let description = entry.description;
+                                view! {
+                                    <div class="extension">
+                                        <div class="extension-head">
+                                            <span class="extension-name">{name}</span>
+                                            <span class="extension-kind">{kind_label(kind)}</span>
+                                        </div>
+                                        <div class="extension-desc">{description}</div>
+                                        <button
+                                            class="tool-button extension-action"
+                                            class:installed=move || installed(state, id, kind)
+                                            on:click=move |_| toggle_install(bridge, state, id, kind)
+                                        >
+                                            {move || if installed(state, id, kind) { "Uninstall" } else { "Install" }}
+                                        </button>
+                                    </div>
+                                }
+                            })
+                            .collect_view();
+                        Some(view! {
+                            <div class="extension-group-title">{*group}</div>
+                            {rows}
+                        })
                     })
                     .collect_view()}
             </div>

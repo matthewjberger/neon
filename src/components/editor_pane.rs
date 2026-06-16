@@ -280,6 +280,17 @@ pub fn EditorPane(
                                         dragging.set_value(None);
                                     }
                                     on:dragend=move |_| dragging.set_value(None)
+                                    on:contextmenu=move |event: web_sys::MouseEvent| {
+                                        event.prevent_default();
+                                        event.stop_propagation();
+                                        state.focus_tab(pane_key, index);
+                                        crate::components::context_menu::open(
+                                            state,
+                                            event.client_x() as f64,
+                                            event.client_y() as f64,
+                                            crate::components::context_menu::tab_menu(),
+                                        );
+                                    }
                                 >
                                     <span class="tab-name">{name}</span>
                                     <Show when=move || dirty fallback=|| ()>
@@ -339,6 +350,16 @@ pub fn EditorPane(
                         on:keydown=on_keydown
                         on:mousemove=on_mousemove
                         on:mouseleave=on_mouseleave
+                        on:contextmenu=move |event: web_sys::MouseEvent| {
+                            event.prevent_default();
+                            event.stop_propagation();
+                            crate::components::context_menu::open(
+                                state,
+                                event.client_x() as f64,
+                                event.client_y() as f64,
+                                crate::components::context_menu::editor_menu(),
+                            );
+                        }
                         on:scroll=move |event| {
                             if let Some(target) = event.target()
                                 && let Ok(element) = target.dyn_into::<web_sys::HtmlElement>()

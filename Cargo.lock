@@ -3731,7 +3731,7 @@ checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
 
 [[package]]
 name = "nightshade"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -3789,7 +3789,7 @@ dependencies = [
 
 [[package]]
 name = "nightshade-api"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "bincode",
  "enum2schema",

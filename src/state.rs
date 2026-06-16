@@ -224,6 +224,16 @@ pub struct EditorState {
     /// Whether the control panel is open: the master surface for dispatching any
     /// command and watching the api log.
     pub control_panel_open: RwSignal<bool>,
+    /// The custom right-click menu, when open, with its anchor and items.
+    pub context_menu: RwSignal<Option<ContextMenu>>,
+}
+
+/// A custom right-click menu: where it sits and the commands it offers.
+#[derive(Clone)]
+pub struct ContextMenu {
+    pub x: f64,
+    pub y: f64,
+    pub items: Vec<(String, crate::commands::EditorCommand)>,
 }
 
 impl EditorState {
@@ -283,6 +293,7 @@ impl EditorState {
             split_vertical: RwSignal::new(true),
             command_request: RwSignal::new(None),
             control_panel_open: RwSignal::new(false),
+            context_menu: RwSignal::new(None),
         }
     }
 

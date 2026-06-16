@@ -12,6 +12,7 @@ use crate::commands;
 use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::console::Console;
+use crate::components::context_menu::ContextMenuView;
 use crate::components::control_panel::ControlPanel;
 use crate::components::editor_pane::EditorPane;
 use crate::components::extensions::Extensions;
@@ -216,7 +217,18 @@ pub fn App() -> impl IntoView {
     let split_below = move || state.pane_count() > 1 && !state.split_vertical.get();
 
     view! {
-        <div class="app-shell">
+        <div
+            class="app-shell"
+            on:contextmenu=move |event: web_sys::MouseEvent| {
+                event.prevent_default();
+                crate::components::context_menu::open(
+                    state,
+                    event.client_x() as f64,
+                    event.client_y() as f64,
+                    crate::components::context_menu::general_menu(),
+                );
+            }
+        >
             <Toolbar bridge state />
             <div class="workspace">
                 <ActivityBar state />
@@ -278,6 +290,7 @@ pub fn App() -> impl IntoView {
             <LspConsent state />
             <LspLog state />
             <ControlPanel bridge state />
+            <ContextMenuView bridge state />
             <Palette bridge state />
             <Help state />
             <ChatPane state />

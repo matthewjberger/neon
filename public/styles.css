@@ -217,6 +217,36 @@ body {
   color: var(--text);
 }
 
+.context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+}
+
+.context-item {
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.context-item:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .toolbar-spacer {
   flex: 1;
 }
@@ -366,6 +396,17 @@ body {
 .extensions-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.extension-group-title {
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .extension {

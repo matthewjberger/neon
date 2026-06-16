@@ -239,6 +239,37 @@ pub fn catalog() -> Vec<CatalogEntry> {
     ]
 }
 
+/// The display categories the plugin manager groups by, in order.
+pub const CATEGORIES: &[&str] = &[
+    "Keybinding layers",
+    "Editing",
+    "Motions",
+    "Comments",
+    "Starters",
+    "Visuals",
+];
+
+/// The group a catalog entry belongs to in the plugin manager.
+pub fn category(entry: &CatalogEntry) -> &'static str {
+    match entry.kind {
+        PluginKind::Scene => {
+            if entry.id == "template" {
+                "Starters"
+            } else {
+                "Visuals"
+            }
+        }
+        PluginKind::Editor => match entry.id {
+            "spacemacs" | "vim" | "emacs" => "Keybinding layers",
+            "template-editor" => "Starters",
+            "comment-toggle" | "commentary" => "Comments",
+            "jump-to-char" | "smart-home" | "blank-lines" => "Motions",
+            _ => "Editing",
+        },
+        _ => "Editing",
+    }
+}
+
 /// Whether an editor plugin is a modal keybinding layer. Only one should be
 /// enabled at a time, since they each claim the whole keyboard in normal mode.
 pub fn is_modal(id: &str) -> bool {

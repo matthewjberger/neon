@@ -29,7 +29,19 @@ pub fn PluginPanel(
     };
 
     view! {
-        <div class="plugin-panel">
+        <div
+            class="plugin-panel"
+            on:contextmenu=move |event: web_sys::MouseEvent| {
+                event.prevent_default();
+                event.stop_propagation();
+                crate::components::context_menu::open(
+                    state,
+                    event.client_x() as f64,
+                    event.client_y() as f64,
+                    crate::components::context_menu::plugin_menu(),
+                );
+            }
+        >
             <div class="panel-title">
                 <span>"Installed"</span>
                 <button class="icon-button" title="New plugin" on:click=new_plugin>"+"</button>

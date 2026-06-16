@@ -64,6 +64,16 @@ fn render_node(state: EditorState, node: TreeNode, depth: usize) -> AnyView {
                     fs::read_file(&path);
                 }
             }
+            on:contextmenu=move |event: web_sys::MouseEvent| {
+                event.prevent_default();
+                event.stop_propagation();
+                crate::components::context_menu::open(
+                    state,
+                    event.client_x() as f64,
+                    event.client_y() as f64,
+                    crate::components::context_menu::file_menu(),
+                );
+            }
         >
             <span class="tree-icon">{icon}</span>
             <span class="tree-name">{node.name.clone()}</span>
