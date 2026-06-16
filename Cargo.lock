@@ -3623,6 +3623,7 @@ dependencies = [
  "js-sys",
  "leptos",
  "protocol",
+ "rhai",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

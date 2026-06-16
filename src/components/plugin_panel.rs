@@ -5,7 +5,8 @@
 use leptos::prelude::*;
 
 use crate::bridge::{self, Bridge};
-use crate::state::EditorState;
+use crate::editor_plugins;
+use crate::state::{EditorState, PluginKind};
 
 #[component]
 pub fn PluginPanel(
@@ -69,7 +70,10 @@ pub fn PluginPanel(
                                 />
                                 <span
                                     class="plugin-name"
-                                    on:click=move |_| state.active.set(Some(select_id.clone()))
+                                    on:click=move |_| {
+                                        state.active_kind.set(PluginKind::Scene);
+                                        state.active.set(Some(select_id.clone()));
+                                    }
                                 >
                                     {plugin.name.clone()}
                                 </span>
@@ -90,6 +94,54 @@ pub fn PluginPanel(
                                 >
                                     "x"
                                 </button>
+                            </div>
+                        }
+                    }
+                </For>
+            </div>
+            <div class="panel-title">"Editor plugins"</div>
+            <div class="plugin-list">
+                <For
+                    each=move || state.editor_plugins.get()
+                    key=|plugin| (plugin.id.clone(), plugin.enabled, plugin.name.clone())
+                    let:plugin
+                >
+                    {
+                        let select_id = plugin.id.clone();
+                        let toggle_id = plugin.id.clone();
+                        let active_id = plugin.id.clone();
+                        view! {
+                            <div
+                                class="plugin-row"
+                                class:active=move || {
+                                    state.active.get().as_deref() == Some(active_id.as_str())
+                                }
+                            >
+                                <input
+                                    type="checkbox"
+                                    prop:checked=plugin.enabled
+                                    on:change=move |event| {
+                                        let enabled = event_target_checked(&event);
+                                        state.editor_plugins.update(|plugins| {
+                                            if let Some(plugin) = plugins
+                                                .iter_mut()
+                                                .find(|plugin| plugin.id == toggle_id)
+                                            {
+                                                plugin.enabled = enabled;
+                                            }
+                                        });
+                                        editor_plugins::reset_mode(state);
+                                    }
+                                />
+                                <span
+                                    class="plugin-name"
+                                    on:click=move |_| {
+                                        state.active_kind.set(PluginKind::Editor);
+                                        state.active.set(Some(select_id.clone()));
+                                    }
+                                >
+                                    {plugin.name.clone()}
+                                </span>
                             </div>
                         }
                     }

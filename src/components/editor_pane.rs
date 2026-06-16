@@ -11,9 +11,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::bridge::{self, Bridge};
+use crate::editor_plugins;
 use crate::highlight::highlight;
 use crate::lang::{self, Lang};
-use crate::state::EditorState;
+use crate::state::{EditorState, PluginKind};
 
 const APPLY_DELAY_MS: i32 = 350;
 
@@ -24,6 +25,7 @@ pub fn EditorPane(
     state: EditorState,
 ) -> impl IntoView {
     let layer = NodeRef::<html::Pre>::new();
+    let textarea = NodeRef::<html::Textarea>::new();
     let debounce = StoredValue::new(None::<i32>);
     let request_id = StoredValue::new(0_u32);
 
@@ -41,12 +43,35 @@ pub fn EditorPane(
         let Some(id) = state.active.get_untracked() else {
             return;
         };
-        state.plugins.update(|plugins| {
+        state.active_signal().update(|plugins| {
             if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
                 plugin.source = value.clone();
             }
         });
-        schedule_apply(bridge, lang, state, debounce, request_id);
+        commit(bridge, lang, state, debounce, request_id);
+    };
+
+    let on_keydown = move |event: web_sys::KeyboardEvent| {
+        if !editor_plugins::any_enabled(state) {
+            return;
+        }
+        let Some(textarea) = textarea.get() else {
+            return;
+        };
+        let outcome = editor_plugins::handle_key(
+            state,
+            &textarea,
+            &event.key(),
+            event.ctrl_key(),
+            event.shift_key(),
+            event.alt_key(),
+        );
+        if outcome.consumed {
+            event.prevent_default();
+        }
+        if outcome.changed {
+            commit(bridge, lang, state, debounce, request_id);
+        }
     };
 
     view! {
@@ -69,8 +94,10 @@ pub fn EditorPane(
                     <textarea
                         class="editor-textarea"
                         spellcheck="false"
+                        node_ref=textarea
                         prop:value=move || state.active_source()
                         on:input=on_input
+                        on:keydown=on_keydown
                         on:scroll=move |event| {
                             if let Some(layer) = layer.get()
                                 && let Some(target) = event.target()
@@ -100,6 +127,21 @@ pub fn EditorPane(
                 </div>
             </Show>
         </div>
+    }
+}
+
+/// Persists the active buffer and, for a scene plugin, schedules the worker sync
+/// and compile-check. Editor plugins persist through the app effect and run live,
+/// so they need no sync.
+fn commit(
+    bridge: StoredValue<Option<Bridge>, LocalStorage>,
+    lang: StoredValue<Option<Lang>, LocalStorage>,
+    state: EditorState,
+    debounce: StoredValue<Option<i32>>,
+    request_id: StoredValue<u32>,
+) {
+    if state.active_kind.get_untracked() == PluginKind::Scene {
+        schedule_apply(bridge, lang, state, debounce, request_id);
     }
 }
 

@@ -48,6 +48,12 @@ pub fn Toolbar(
                 "Reference"
             </button>
             <span class="toolbar-spacer"></span>
+            <Show when=move || state.editor_plugins.get().iter().any(|plugin| plugin.enabled) fallback=|| ()>
+                <span class="stat mode-chip">{move || state.editor_mode.get()}</span>
+            </Show>
+            <Show when=move || !state.status.get().is_empty() fallback=|| ()>
+                <span class="stat">{move || state.status.get()}</span>
+            </Show>
             <span class="stat">{move || format!("{:.0} fps", state.fps.get())}</span>
             <span class="stat">{move || format!("{} entities", state.entity_count.get())}</span>
             <select class="theme-select" prop:value=move || state.theme.get() on:change=on_theme>

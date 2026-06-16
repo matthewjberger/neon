@@ -42,6 +42,11 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
+        let editor_plugins = state.editor_plugins.get();
+        crate::plugins::save_editor_plugins(&editor_plugins);
+    });
+
+    Effect::new(move |_| {
         state.active.get();
         state.diagnostics.set(Vec::new());
     });
