@@ -131,13 +131,26 @@ plugins, answered by the page) and the scene domain (entities, screenshot,
 answered by the worker). The desktop-hosted MCP server that exposes these as
 tools and pipes the `claude` subprocess is the remaining piece of this milestone.
 
-## The editor-manipulation API and vim (milestone 3)
+## The editor-manipulation API and vim
 
-A second plugin kind runs in a page-side rhai engine with an Editor API neon
-registers: buffers, windows, panels, tiles, terminals, and keymaps. The vim
-keybindings layer is an editor plugin built on it. nightshade's `Command`/`Event`
-bus is closed, so this is a neon layer on top, sharing the rhai authoring
-experience.
+A second plugin kind, editor plugins, runs in a page-side rhai engine
+(`src/editor_plugins.rs`). An editor plugin's `on_key()` reads `key`, `mode`,
+`ctrl`/`shift`/`alt`, and a persistent `state` map, and pushes ops the host
+applies to the code buffer: `Consume`, `SetMode`, `Insert`, `Move`, `MoveLine`,
+`LineStart`/`LineEnd`, `NextWord`/`PrevWord`, `DeleteForward`/`DeleteBackward`,
+`DeleteLine`, `SetStatus`. The dispatch mirrors the scene-plugin model, on the
+editor instead of the scene, and runs synchronously in the keydown handler so
+modal editing has no latency.
+
+The vim keybindings layer ships as an editor plugin built on this, alongside an
+editor-plugin template. Both are editable and toggleable in the plugin panel, so
+the bindings are tuned by editing rhai, live. nightshade's `Command`/`Event` bus
+is closed, so this is a neon layer on top, sharing the rhai authoring experience.
+
+The buffer and cursor surface is implemented. Multi-window, panel, tile, and
+terminal manipulation extend the same op vocabulary once that UI infrastructure
+(a tiling layout, multiple buffers, integrated terminals) exists, which is the
+next build.
 
 ## Build
 
