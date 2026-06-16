@@ -12,6 +12,7 @@ use crate::commands;
 use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::console::Console;
+use crate::components::control_panel::ControlPanel;
 use crate::components::editor_pane::EditorPane;
 use crate::components::extensions::Extensions;
 use crate::components::file_tree::FileTree;
@@ -276,6 +277,7 @@ pub fn App() -> impl IntoView {
             <WhichKey state />
             <LspConsent state />
             <LspLog state />
+            <ControlPanel bridge state />
             <Palette bridge state />
             <Help state />
             <ChatPane state />

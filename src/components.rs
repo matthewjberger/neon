@@ -1,6 +1,7 @@
 pub mod activity_bar;
 pub mod chat;
 pub mod console;
+pub mod control_panel;
 pub mod editor_pane;
 pub mod extensions;
 pub mod file_tree;

@@ -63,6 +63,14 @@ pub fn Toolbar(
             >
                 "Reference"
             </button>
+            <button
+                class="tool-button"
+                class:active=move || state.control_panel_open.get()
+                title="Dispatch any command and watch the api log"
+                on:click=move |_| state.control_panel_open.update(|open| *open = !*open)
+            >
+                "Control Panel"
+            </button>
             <span class="toolbar-spacer"></span>
             <Show when=move || state.editor_plugins.get().iter().any(|plugin| plugin.enabled) fallback=|| ()>
                 <span class="stat mode-chip">{move || state.editor_mode.get()}</span>

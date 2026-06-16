@@ -412,6 +412,11 @@ fn schedule_reconnect(state: EditorState) {
 fn handle(state: EditorState, message: LspServerMessage) {
     match message {
         LspServerMessage::Started => {
+            client(|client| {
+                client.ready = false;
+                client.versions.clear();
+                client.pending.clear();
+            });
             send_request(
                 "initialize",
                 json!({

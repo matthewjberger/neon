@@ -45,6 +45,8 @@ web-sys = { version = "0.3", features = [
     "InputEvent",
     "PointerEvent",
     "MouseEvent",
+    "DragEvent",
+    "DataTransfer",
     "WheelEvent",
     "KeyboardEvent",
     "ResizeObserver",

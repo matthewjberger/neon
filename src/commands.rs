@@ -178,12 +178,26 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
     items
 }
 
+/// A short human label for an editor command, for the api log.
+fn command_label(command: &EditorCommand) -> String {
+    match command {
+        EditorCommand::SetTheme(id) => format!("SetTheme({id})"),
+        EditorCommand::OpenBuffer { kind, id } => format!("OpenBuffer({kind:?}, {id:?})"),
+        other => format!("{other:?}"),
+    }
+}
+
 /// Performs an editor command.
 pub fn run(
     command: EditorCommand,
     state: EditorState,
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
 ) {
+    state.log_api(
+        protocol::LogKind::Command,
+        "editor",
+        command_label(&command),
+    );
     match command {
         EditorCommand::SplitEditor { vertical } => state.split(vertical),
         EditorCommand::CloseSplit => state.close_focused(),

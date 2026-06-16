@@ -33,6 +33,7 @@ pub fn EditorPane(
     let request_id = StoredValue::new(0_u32);
     let hover_timer = StoredValue::new(None::<i32>);
     let completion_timer = StoredValue::new(None::<i32>);
+    let dragging = StoredValue::new(None::<usize>);
 
     let command_set = Memo::new(move |_| {
         state
@@ -263,7 +264,22 @@ pub fn EditorPane(
                                 <div
                                     class="tab"
                                     class:active=index == active
+                                    draggable="true"
                                     on:click=move |_| state.focus_tab(pane_key, index)
+                                    on:dragstart=move |_| dragging.set_value(Some(index))
+                                    on:dragover=move |event: web_sys::DragEvent| {
+                                        if dragging.get_value().is_some() {
+                                            event.prevent_default();
+                                        }
+                                    }
+                                    on:drop=move |event: web_sys::DragEvent| {
+                                        event.prevent_default();
+                                        if let Some(from) = dragging.get_value() {
+                                            state.move_tab(pane_key, from, index);
+                                        }
+                                        dragging.set_value(None);
+                                    }
+                                    on:dragend=move |_| dragging.set_value(None)
                                 >
                                     <span class="tab-name">{name}</span>
                                     <Show when=move || dirty fallback=|| ()>

@@ -4,7 +4,7 @@
 
 use leptos::prelude::*;
 use protocol::{
-    CommandInfo, Diagnostic, LogEntry, PluginSource, SearchHit, SelectedEntity, StdModule,
+    CommandInfo, Diagnostic, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity, StdModule,
 };
 
 /// Which set the open buffer belongs to: scene plugins run in the engine worker,
@@ -221,6 +221,9 @@ pub struct EditorState {
     /// A command id an editor plugin asked the editor to run, applied by the
     /// shell. This is how plugins dictate editor actions.
     pub command_request: RwSignal<Option<String>>,
+    /// Whether the control panel is open: the master surface for dispatching any
+    /// command and watching the api log.
+    pub control_panel_open: RwSignal<bool>,
 }
 
 impl EditorState {
@@ -279,7 +282,24 @@ impl EditorState {
             leader: RwSignal::new(None),
             split_vertical: RwSignal::new(true),
             command_request: RwSignal::new(None),
+            control_panel_open: RwSignal::new(false),
         }
+    }
+
+    /// Records one api call or event into the unified log the console and the
+    /// control panel both read.
+    pub fn log_api(&self, kind: LogKind, label: impl Into<String>, detail: impl Into<String>) {
+        self.log.update(|log| {
+            log.push(LogEntry {
+                kind,
+                label: label.into(),
+                detail: detail.into(),
+            });
+            let overflow = log.len().saturating_sub(500);
+            if overflow > 0 {
+                log.drain(0..overflow);
+            }
+        });
     }
 
     /// A buffer's source by kind and id, from the scene set, the editor set, the
@@ -474,6 +494,27 @@ impl EditorState {
                 }
             }
         });
+    }
+
+    /// Reorder a tab within a pane, keeping the active buffer selected.
+    pub fn move_tab(&self, pane_key: usize, from: usize, to: usize) {
+        self.panes.update(|panes| {
+            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == pane_key)
+                && from < pane.tabs.len()
+                && to < pane.tabs.len()
+                && from != to
+            {
+                let active = pane.tabs.get(pane.active).cloned();
+                let tab = pane.tabs.remove(from);
+                pane.tabs.insert(to, tab);
+                if let Some(active) = active
+                    && let Some(index) = pane.tabs.iter().position(|tab| *tab == active)
+                {
+                    pane.active = index;
+                }
+            }
+        });
+        self.focused_key.set(pane_key);
     }
 
     /// Append a pane next to the focused one, cloning its buffer, and focus it.
