@@ -37,6 +37,7 @@ struct Client {
     versions: HashMap<String, i64>,
     diagnostics: HashMap<String, Vec<Diagnostic>>,
     pending: HashMap<i64, Pending>,
+    suppress_completion: bool,
 }
 
 impl Client {
@@ -48,6 +49,7 @@ impl Client {
             versions: HashMap::new(),
             diagnostics: HashMap::new(),
             pending: HashMap::new(),
+            suppress_completion: false,
         }
     }
 }
@@ -136,6 +138,9 @@ pub fn refresh_diagnostics(state: EditorState) {
 /// Requests completion at the caret of the focused Rust file.
 pub fn request_completion(state: EditorState) {
     if !ready() {
+        return;
+    }
+    if client(|client| std::mem::take(&mut client.suppress_completion)) {
         return;
     }
     let buffer = state.focused_buffer();
@@ -238,6 +243,7 @@ pub fn accept_completion(state: EditorState, index: usize) {
     let new_caret = start + entry.insert.encode_utf16().count() as u32;
     let _ = element.set_selection_range(new_caret, new_caret);
     let _ = element.focus();
+    client(|client| client.suppress_completion = true);
     if let Ok(event) = web_sys::Event::new("input") {
         let _ = element.dispatch_event(&event);
     }
@@ -357,7 +363,38 @@ fn metrics(element: &HtmlTextAreaElement) -> (f64, f64, f64, f64) {
     let line_height = parse_px(style.as_ref(), "line-height").unwrap_or(font_size * 1.5);
     let pad_left = parse_px(style.as_ref(), "padding-left").unwrap_or(0.0);
     let pad_top = parse_px(style.as_ref(), "padding-top").unwrap_or(0.0);
-    (pad_left, pad_top, font_size * 0.6, line_height)
+    let family = style
+        .as_ref()
+        .and_then(|style| style.get_property_value("font-family").ok())
+        .filter(|family| !family.is_empty())
+        .unwrap_or_else(|| "monospace".to_string());
+    let font = format!("{font_size}px {family}");
+    let advance = char_width(&font).unwrap_or(font_size * 0.6);
+    (pad_left, pad_top, advance, line_height)
+}
+
+/// The advance of a monospace character for a font, measured once with a 2d
+/// canvas and cached per font.
+fn char_width(font: &str) -> Option<f64> {
+    thread_local! {
+        static CACHE: RefCell<HashMap<String, f64>> = RefCell::new(HashMap::new());
+    }
+    if let Some(width) = CACHE.with(|cache| cache.borrow().get(font).copied()) {
+        return Some(width);
+    }
+    let document = web_sys::window()?.document()?;
+    let canvas: web_sys::HtmlCanvasElement =
+        document.create_element("canvas").ok()?.dyn_into().ok()?;
+    let context: web_sys::CanvasRenderingContext2d =
+        canvas.get_context("2d").ok()??.dyn_into().ok()?;
+    context.set_font(font);
+    let sample = "MMMMMMMMMMMMMMMMMMMM";
+    let width = context.measure_text(sample).ok()?.width() / sample.len() as f64;
+    if width <= 0.0 {
+        return None;
+    }
+    CACHE.with(|cache| cache.borrow_mut().insert(font.to_string(), width));
+    Some(width)
 }
 
 fn parse_px(style: Option<&web_sys::CssStyleDeclaration>, property: &str) -> Option<f64> {

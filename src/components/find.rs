@@ -159,22 +159,29 @@ pub fn FindBar(state: EditorState) -> impl IntoView {
     }
 }
 
-/// Match ranges as UTF-16 offsets, the units a textarea selection uses.
+/// Match ranges as UTF-16 offsets, the units a textarea selection uses. Matching
+/// is ASCII case-insensitive and works on the original bytes, so it never shifts
+/// offsets or slices off a char boundary.
 fn matches(value: &str, needle: &str) -> Vec<(u32, u32)> {
     if needle.is_empty() {
         return Vec::new();
     }
-    let hay = value.to_lowercase();
-    let needle = needle.to_lowercase();
+    let hay = value.as_bytes();
+    let needle = needle.as_bytes();
     let mut out = Vec::new();
-    let mut from = 0;
-    while let Some(offset) = hay[from..].find(&needle) {
-        let byte_start = from + offset;
-        let byte_end = byte_start + needle.len();
-        let start = hay[..byte_start].encode_utf16().count() as u32;
-        let end = hay[..byte_end].encode_utf16().count() as u32;
-        out.push((start, end));
-        from = byte_end;
+    let mut index = 0;
+    while index + needle.len() <= hay.len() {
+        if hay[index..index + needle.len()].eq_ignore_ascii_case(needle)
+            && value.is_char_boundary(index)
+            && value.is_char_boundary(index + needle.len())
+        {
+            let start = value[..index].encode_utf16().count() as u32;
+            let end = value[..index + needle.len()].encode_utf16().count() as u32;
+            out.push((start, end));
+            index += needle.len();
+        } else {
+            index += 1;
+        }
     }
     out
 }
@@ -187,17 +194,28 @@ fn splice_utf16(value: &str, start: u32, end: u32, replacement: &str) -> String 
 }
 
 fn replace_all_text(value: &str, needle: &str, replacement: &str) -> String {
-    let hay = value.to_lowercase();
-    let lower = needle.to_lowercase();
-    let mut out = String::with_capacity(value.len());
-    let mut from = 0;
-    while let Some(offset) = hay[from..].find(&lower) {
-        let byte_start = from + offset;
-        out.push_str(&value[from..byte_start]);
-        out.push_str(replacement);
-        from = byte_start + lower.len();
+    if needle.is_empty() {
+        return value.to_string();
     }
-    out.push_str(&value[from..]);
+    let hay = value.as_bytes();
+    let needle = needle.as_bytes();
+    let mut out = String::with_capacity(value.len());
+    let mut index = 0;
+    let mut last = 0;
+    while index + needle.len() <= hay.len() {
+        if hay[index..index + needle.len()].eq_ignore_ascii_case(needle)
+            && value.is_char_boundary(index)
+            && value.is_char_boundary(index + needle.len())
+        {
+            out.push_str(&value[last..index]);
+            out.push_str(replacement);
+            index += needle.len();
+            last = index;
+        } else {
+            index += 1;
+        }
+    }
+    out.push_str(&value[last..]);
     out
 }
 

@@ -31,5 +31,6 @@ mod relay;
 mod session;
 mod state;
 mod theme;
+mod undo;
 
 pub use app::App;

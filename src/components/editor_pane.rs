@@ -32,6 +32,7 @@ pub fn EditorPane(
     let debounce = StoredValue::new(None::<i32>);
     let request_id = StoredValue::new(0_u32);
     let hover_timer = StoredValue::new(None::<i32>);
+    let completion_timer = StoredValue::new(None::<i32>);
 
     let command_set = Memo::new(move |_| {
         state
@@ -148,6 +149,21 @@ pub fn EditorPane(
         }
         state.set_buffer_text(kind, &id, value);
         commit(bridge, lang, state, pane_key, debounce, request_id);
+        if kind == PluginKind::File
+            && let Some(window) = web_sys::window()
+        {
+            if let Some(handle) = completion_timer.get_value() {
+                window.clear_timeout_with_handle(handle);
+            }
+            let callback = Closure::once_into_js(move || crate::lsp::request_completion(state));
+            let handle = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    callback.unchecked_ref(),
+                    150,
+                )
+                .unwrap_or(0);
+            completion_timer.set_value(Some(handle));
+        }
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
@@ -368,7 +384,6 @@ fn commit(
         PluginKind::File => {
             if let Some(path) = buffer.id {
                 crate::lsp::did_change(state, &path);
-                crate::lsp::request_completion(state);
             }
         }
         _ => {}

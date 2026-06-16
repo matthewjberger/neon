@@ -308,19 +308,24 @@ impl EditorState {
     /// Writes a buffer's text into the right store. Files mark dirty; plugins
     /// update their source. Built-ins are read-only and ignored.
     pub fn set_buffer_text(&self, kind: PluginKind, id: &Option<String>, text: String) {
-        let Some(id) = id else {
+        let Some(key) = id.as_ref() else {
             return;
         };
+        let old = self.buffer_source(kind, id);
+        if old == text {
+            return;
+        }
+        crate::undo::record(kind, id, &old);
         match kind {
             PluginKind::Builtin => {}
             PluginKind::File => self.files.update(|files| {
-                if let Some(file) = files.iter_mut().find(|file| &file.path == id) {
+                if let Some(file) = files.iter_mut().find(|file| &file.path == key) {
                     file.text = text;
                     file.dirty = true;
                 }
             }),
             _ => self.editable_set(kind).update(|plugins| {
-                if let Some(plugin) = plugins.iter_mut().find(|plugin| &plugin.id == id) {
+                if let Some(plugin) = plugins.iter_mut().find(|plugin| &plugin.id == key) {
                     plugin.source = text;
                 }
             }),

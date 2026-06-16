@@ -123,6 +123,19 @@ pub fn App() -> impl IntoView {
             state.find_open.set(true);
             return;
         }
+        if event.ctrl_key() && !event.shift_key() && event.key().eq_ignore_ascii_case("z") {
+            event.prevent_default();
+            crate::undo::undo(state);
+            return;
+        }
+        if event.ctrl_key()
+            && (event.key().eq_ignore_ascii_case("y")
+                || (event.shift_key() && event.key().eq_ignore_ascii_case("z")))
+        {
+            event.prevent_default();
+            crate::undo::redo(state);
+            return;
+        }
         if event.key() == "Escape" && state.help_open.get_untracked() {
             state.help_open.set(false);
             return;
