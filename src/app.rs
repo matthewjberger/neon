@@ -8,16 +8,18 @@ use protocol::ClientMessage;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::bridge::{self, Bridge};
+use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::console::Console;
 use crate::components::editor_pane::EditorPane;
+use crate::components::extensions::Extensions;
 use crate::components::loader::Loader;
 use crate::components::plugin_panel::PluginPanel;
 use crate::components::reference::Reference;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
 use crate::lang;
-use crate::state::EditorState;
+use crate::state::{EditorState, SidebarView};
 use crate::theme;
 
 #[component]
@@ -103,7 +105,11 @@ pub fn App() -> impl IntoView {
         <div class="app-shell">
             <Toolbar bridge state />
             <div class="workspace">
-                <PluginPanel bridge state />
+                <ActivityBar state />
+                {move || match state.sidebar_view.get() {
+                    SidebarView::Installed => view! { <PluginPanel bridge state /> }.into_any(),
+                    SidebarView::Extensions => view! { <Extensions bridge state /> }.into_any(),
+                }}
                 <EditorPane bridge lang state />
                 <div
                     class="right-column"

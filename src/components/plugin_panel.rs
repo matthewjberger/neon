@@ -31,7 +31,7 @@ pub fn PluginPanel(
     view! {
         <div class="plugin-panel">
             <div class="panel-title">
-                <span>"Plugins"</span>
+                <span>"Installed"</span>
                 <button class="icon-button" title="New plugin" on:click=new_plugin>"+"</button>
             </div>
             <div class="plugin-list">

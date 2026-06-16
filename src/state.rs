@@ -15,6 +15,13 @@ pub enum PluginKind {
     Builtin,
 }
 
+/// Which view the sidebar shows, switched from the activity bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SidebarView {
+    Installed,
+    Extensions,
+}
+
 #[derive(Clone, Copy)]
 pub struct EditorState {
     pub ready: RwSignal<bool>,
@@ -46,6 +53,8 @@ pub struct EditorState {
     pub viewport_open: RwSignal<bool>,
     /// Whether the console pane is shown.
     pub console_open: RwSignal<bool>,
+    /// Which view the sidebar shows.
+    pub sidebar_view: RwSignal<SidebarView>,
     pub log: RwSignal<Vec<LogEntry>>,
     /// Diagnostics for the active plugin, from the language worker.
     pub diagnostics: RwSignal<Vec<Diagnostic>>,
@@ -77,6 +86,7 @@ impl EditorState {
             status: RwSignal::new(String::new()),
             viewport_open: RwSignal::new(true),
             console_open: RwSignal::new(true),
+            sidebar_view: RwSignal::new(SidebarView::Installed),
             log: RwSignal::new(Vec::new()),
             diagnostics: RwSignal::new(Vec::new()),
             running: RwSignal::new(true),

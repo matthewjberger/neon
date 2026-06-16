@@ -1,6 +1,8 @@
+pub mod activity_bar;
 pub mod chat;
 pub mod console;
 pub mod editor_pane;
+pub mod extensions;
 pub mod loader;
 pub mod plugin_panel;
 pub mod reference;
