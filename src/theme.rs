@@ -3,6 +3,7 @@
 //! `public/styles.css`. Ported from the nightshade editor's theme handling.
 
 pub const THEMES: &[(&str, &str)] = &[
+    ("vscode", "VS Code Dark"),
     ("midnight", "Midnight"),
     ("ember", "Ember"),
     ("forest", "Forest"),

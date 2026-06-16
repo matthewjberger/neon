@@ -526,17 +526,64 @@ impl EditorState {
 
     /// Move focus to the next pane, wrapping around.
     pub fn focus_next(&self) {
+        self.focus_step(1);
+    }
+
+    /// Move focus to the previous pane, wrapping around.
+    pub fn focus_prev(&self) {
+        self.focus_step(-1);
+    }
+
+    fn focus_step(&self, delta: i64) {
         let key = self.focused_key.get_untracked();
         let next = self.panes.with_untracked(|panes| {
             if panes.is_empty() {
                 return None;
             }
-            let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
-            panes.get((index + 1) % panes.len()).map(|pane| pane.key)
+            let count = panes.len() as i64;
+            let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0) as i64;
+            let next = (index + delta).rem_euclid(count) as usize;
+            panes.get(next).map(|pane| pane.key)
         });
         if let Some(next_key) = next {
             self.focused_key.set(next_key);
         }
+    }
+
+    /// Switches the focused pane's active tab by a delta, wrapping around.
+    pub fn cycle_tab(&self, delta: i64) {
+        let key = self.focused_key.get_untracked();
+        self.panes.update(|panes| {
+            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == key)
+                && !pane.tabs.is_empty()
+            {
+                let count = pane.tabs.len() as i64;
+                pane.active = (pane.active as i64 + delta).rem_euclid(count) as usize;
+            }
+        });
+    }
+
+    /// Closes the focused pane's active tab.
+    pub fn close_focused_tab(&self) {
+        let key = self.focused_key.get_untracked();
+        let index = self.panes.with_untracked(|panes| {
+            panes
+                .iter()
+                .find(|pane| pane.key == key)
+                .map(|pane| pane.active)
+        });
+        if let Some(index) = index {
+            self.close_tab(key, index);
+        }
+    }
+
+    /// Resets every pane to an equal share of the split.
+    pub fn balance_splits(&self) {
+        self.panes.update(|panes| {
+            for pane in panes.iter_mut() {
+                pane.flex = 1.0;
+            }
+        });
     }
 
     /// Drag the divider before `right_key`, transferring flex weight from the

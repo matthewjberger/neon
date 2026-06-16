@@ -113,9 +113,10 @@ hover. The LSP log panel shows the server output.
 ## Theming
 
 `data-theme` on the document root selects a theme. CSS variables under
-`[data-theme="..."]` in `public/styles.css` define each. Four ship (midnight,
-ember, forest, paper). The choice persists in local storage. The toolbar picker
-sets `state.theme`, an effect applies and saves it.
+`[data-theme="..."]` in `public/styles.css` define each. Five ship: VS Code Dark
+(the default, for familiarity), midnight, ember, forest, and paper. The choice
+persists in local storage. The toolbar picker sets `state.theme`, an effect
+applies and saves it.
 
 ## Claude / MCP integration
 

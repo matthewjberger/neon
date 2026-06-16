@@ -1,19 +1,19 @@
-// Spacemacs-style keybindings: vim modal editing plus an SPC leader that runs
-// editor commands. Pressing SPC opens the which-key menu (the bottom panel that
-// lists the next keys and what they do), and each submenu narrows it. The leader
-// menus are where window management lives.
+// Spacemacs-style keybindings: vim modal editing plus an SPC leader, modeled on
+// the VSpaceCode menu tree. Pressing SPC opens the which-key menu and each prefix
+// narrows it.
 //
 //   SPC SPC        command palette
-//   SPC w v / s    split the editor right / below
-//   SPC w d        close the split
-//   SPC w w        focus the other pane
-//   SPC t p/c/r/a  toggle preview / console / reference / Claude
-//   SPC b b        open a buffer
+//   SPC /          search the project
+//   SPC ;          toggle comment on the line
+//   SPC f f/s/S/t  open folder / save / save all / file tree
+//   SPC b b/d/n/p  buffer / close tab / next / previous
+//   SPC w v/s/d/w  split right / below / close / focus other
+//   SPC w h/l/=    focus previous / next / balance splits
+//   SPC s s/p      find in buffer / search project
+//   SPC j j/w/l    jump to char / word / line
+//   SPC t p/c/r/a/l  toggle preview / console / reference / Claude / LSP log
 //   SPC p n/m/i    new plugin / manager / installed
-//   SPC r          run or pause
-//   SPC T          next theme
-//   SPC ?          help
-//   :              command palette
+//   SPC r          run or pause     SPC T  next theme     SPC ?  help
 //
 // Normal mode: hjkl move, i/a/A/o insert, x delete, dd delete line, 0/$ ends,
 // w/b words, Escape leaves insert. Edit this live to change anything.
@@ -21,14 +21,36 @@
 fn leader_menu() {
     #{ title: "Leader", items: [
         #{ key: "SPC", label: "Commands" },
-        #{ key: "w", label: "+Windows" },
-        #{ key: "t", label: "+Toggles" },
+        #{ key: "/", label: "Search project" },
+        #{ key: ";", label: "Toggle comment" },
+        #{ key: "f", label: "+Files" },
         #{ key: "b", label: "+Buffers" },
-        #{ key: "p", label: "+Plugins" },
+        #{ key: "w", label: "+Windows" },
+        #{ key: "s", label: "+Search" },
         #{ key: "j", label: "+Jump" },
+        #{ key: "t", label: "+Toggles" },
+        #{ key: "p", label: "+Plugins" },
         #{ key: "r", label: "Run or pause" },
         #{ key: "T", label: "Next theme" },
         #{ key: "?", label: "Help" },
+    ] };
+}
+
+fn file_menu() {
+    #{ title: "+Files", items: [
+        #{ key: "f", label: "Open folder" },
+        #{ key: "s", label: "Save" },
+        #{ key: "S", label: "Save all" },
+        #{ key: "t", label: "File tree" },
+    ] };
+}
+
+fn buffer_menu() {
+    #{ title: "+Buffers", items: [
+        #{ key: "b", label: "Open buffer" },
+        #{ key: "d", label: "Close tab" },
+        #{ key: "n", label: "Next tab" },
+        #{ key: "p", label: "Previous tab" },
     ] };
 }
 
@@ -37,7 +59,25 @@ fn window_menu() {
         #{ key: "v", label: "Split right" },
         #{ key: "s", label: "Split below" },
         #{ key: "d", label: "Close split" },
-        #{ key: "w", label: "Focus other pane" },
+        #{ key: "w", label: "Focus other" },
+        #{ key: "h", label: "Focus previous" },
+        #{ key: "l", label: "Focus next" },
+        #{ key: "=", label: "Balance splits" },
+    ] };
+}
+
+fn search_menu() {
+    #{ title: "+Search", items: [
+        #{ key: "s", label: "Find in buffer" },
+        #{ key: "p", label: "Search project" },
+    ] };
+}
+
+fn jump_menu() {
+    #{ title: "+Jump", items: [
+        #{ key: "j", label: "Jump to char" },
+        #{ key: "w", label: "Jump to word" },
+        #{ key: "l", label: "Jump to line" },
     ] };
 }
 
@@ -47,12 +87,8 @@ fn toggle_menu() {
         #{ key: "c", label: "Console" },
         #{ key: "r", label: "Reference" },
         #{ key: "a", label: "Claude" },
-    ] };
-}
-
-fn buffer_menu() {
-    #{ title: "+Buffers", items: [
-        #{ key: "b", label: "Open buffer" },
+        #{ key: "l", label: "LSP log" },
+        #{ key: "t", label: "Next theme" },
     ] };
 }
 
@@ -61,14 +97,6 @@ fn plugin_menu() {
         #{ key: "n", label: "New plugin" },
         #{ key: "m", label: "Plugin manager" },
         #{ key: "i", label: "Installed" },
-    ] };
-}
-
-fn jump_menu() {
-    #{ title: "+Jump", items: [
-        #{ key: "j", label: "Jump to char" },
-        #{ key: "w", label: "Jump to word" },
-        #{ key: "l", label: "Jump to line" },
     ] };
 }
 
@@ -92,15 +120,60 @@ fn on_key() {
         ops.push("Consume");
         state.pending = "";
         if key == " " { ops.push(#{ RunCommand: "open-palette" }); ops.push("HideMenu"); }
+        else if key == "/" { ops.push(#{ RunCommand: "show-search" }); ops.push("HideMenu"); }
+        else if key == ";" { ops.push(#{ ToggleComment: "//" }); ops.push("HideMenu"); }
         else if key == "?" { ops.push(#{ RunCommand: "open-help" }); ops.push("HideMenu"); }
         else if key == "r" { ops.push(#{ RunCommand: "run-pause" }); ops.push("HideMenu"); }
         else if key == "T" { ops.push(#{ RunCommand: "next-theme" }); ops.push("HideMenu"); }
-        else if key == "w" { state.pending = "SPC w"; ops.push(#{ ShowMenu: window_menu() }); }
-        else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
+        else if key == "f" { state.pending = "SPC f"; ops.push(#{ ShowMenu: file_menu() }); }
         else if key == "b" { state.pending = "SPC b"; ops.push(#{ ShowMenu: buffer_menu() }); }
-        else if key == "p" { state.pending = "SPC p"; ops.push(#{ ShowMenu: plugin_menu() }); }
+        else if key == "w" { state.pending = "SPC w"; ops.push(#{ ShowMenu: window_menu() }); }
+        else if key == "s" { state.pending = "SPC s"; ops.push(#{ ShowMenu: search_menu() }); }
         else if key == "j" { state.pending = "SPC j"; ops.push(#{ ShowMenu: jump_menu() }); }
+        else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
+        else if key == "p" { state.pending = "SPC p"; ops.push(#{ ShowMenu: plugin_menu() }); }
         else { ops.push("HideMenu"); }
+        return;
+    }
+    if pending == "SPC f" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "f" { ops.push(#{ RunCommand: "open-folder" }); }
+        else if key == "s" { ops.push(#{ RunCommand: "save-file" }); }
+        else if key == "S" { ops.push(#{ RunCommand: "save-all" }); }
+        else if key == "t" { ops.push(#{ RunCommand: "show-files" }); }
+        return;
+    }
+    if pending == "SPC b" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "b" { ops.push(#{ RunCommand: "open-palette" }); }
+        else if key == "d" { ops.push(#{ RunCommand: "close-tab" }); }
+        else if key == "n" { ops.push(#{ RunCommand: "next-tab" }); }
+        else if key == "p" { ops.push(#{ RunCommand: "prev-tab" }); }
+        return;
+    }
+    if pending == "SPC w" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "v" { ops.push(#{ RunCommand: "split-right" }); }
+        else if key == "s" { ops.push(#{ RunCommand: "split-below" }); }
+        else if key == "d" { ops.push(#{ RunCommand: "close-split" }); }
+        else if key == "w" { ops.push(#{ RunCommand: "focus-other" }); }
+        else if key == "h" { ops.push(#{ RunCommand: "focus-prev" }); }
+        else if key == "l" { ops.push(#{ RunCommand: "focus-next" }); }
+        else if key == "=" { ops.push(#{ RunCommand: "balance-splits" }); }
+        return;
+    }
+    if pending == "SPC s" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "s" { ops.push(#{ RunCommand: "find" }); }
+        else if key == "p" { ops.push(#{ RunCommand: "show-search" }); }
         return;
     }
     if pending == "SPC j" {
@@ -112,16 +185,6 @@ fn on_key() {
         else if key == "l" { ops.push(#{ RunCommand: "jump-line" }); }
         return;
     }
-    if pending == "SPC w" {
-        ops.push("Consume");
-        ops.push("HideMenu");
-        state.pending = "";
-        if key == "v" { ops.push(#{ RunCommand: "split-right" }); }
-        else if key == "s" { ops.push(#{ RunCommand: "split-below" }); }
-        else if key == "d" { ops.push(#{ RunCommand: "close-split" }); }
-        else if key == "w" { ops.push(#{ RunCommand: "focus-other" }); }
-        return;
-    }
     if pending == "SPC t" {
         ops.push("Consume");
         ops.push("HideMenu");
@@ -130,13 +193,8 @@ fn on_key() {
         else if key == "c" { ops.push(#{ RunCommand: "toggle-console" }); }
         else if key == "r" { ops.push(#{ RunCommand: "toggle-reference" }); }
         else if key == "a" { ops.push(#{ RunCommand: "toggle-chat" }); }
-        return;
-    }
-    if pending == "SPC b" {
-        ops.push("Consume");
-        ops.push("HideMenu");
-        state.pending = "";
-        if key == "b" { ops.push(#{ RunCommand: "open-palette" }); }
+        else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
+        else if key == "t" { ops.push(#{ RunCommand: "next-theme" }); }
         return;
     }
     if pending == "SPC p" {

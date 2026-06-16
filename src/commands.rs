@@ -23,8 +23,16 @@ pub enum EditorCommand {
     ShowInstalled,
     ShowManager,
     ShowFiles,
+    ShowSearch,
     OpenFolder,
     SaveFile,
+    SaveAll,
+    CloseTab,
+    NextTab,
+    PrevTab,
+    FocusNext,
+    FocusPrev,
+    BalanceSplits,
     Find,
     JumpWord,
     JumpLine,
@@ -54,8 +62,16 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "show-installed" => EditorCommand::ShowInstalled,
         "show-manager" => EditorCommand::ShowManager,
         "show-files" => EditorCommand::ShowFiles,
+        "show-search" => EditorCommand::ShowSearch,
         "open-folder" => EditorCommand::OpenFolder,
         "save-file" => EditorCommand::SaveFile,
+        "save-all" => EditorCommand::SaveAll,
+        "close-tab" => EditorCommand::CloseTab,
+        "next-tab" => EditorCommand::NextTab,
+        "prev-tab" => EditorCommand::PrevTab,
+        "focus-next" => EditorCommand::FocusNext,
+        "focus-prev" => EditorCommand::FocusPrev,
+        "balance-splits" => EditorCommand::BalanceSplits,
         "find" => EditorCommand::Find,
         "jump-word" => EditorCommand::JumpWord,
         "jump-line" => EditorCommand::JumpLine,
@@ -104,8 +120,14 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
             EditorCommand::ShowManager,
         ),
         ("View: files".to_string(), EditorCommand::ShowFiles),
+        ("View: search".to_string(), EditorCommand::ShowSearch),
         ("Open folder".to_string(), EditorCommand::OpenFolder),
         ("Save file".to_string(), EditorCommand::SaveFile),
+        ("Save all".to_string(), EditorCommand::SaveAll),
+        ("Close tab".to_string(), EditorCommand::CloseTab),
+        ("Next tab".to_string(), EditorCommand::NextTab),
+        ("Previous tab".to_string(), EditorCommand::PrevTab),
+        ("Balance splits".to_string(), EditorCommand::BalanceSplits),
         ("Find and replace".to_string(), EditorCommand::Find),
         ("Jump to word".to_string(), EditorCommand::JumpWord),
         ("Jump to line".to_string(), EditorCommand::JumpLine),
@@ -173,6 +195,7 @@ pub fn run(
         EditorCommand::ShowInstalled => state.sidebar_view.set(SidebarView::Installed),
         EditorCommand::ShowManager => state.sidebar_view.set(SidebarView::Extensions),
         EditorCommand::ShowFiles => state.sidebar_view.set(SidebarView::Files),
+        EditorCommand::ShowSearch => state.sidebar_view.set(SidebarView::Search),
         EditorCommand::OpenFolder => crate::fs::open_folder(),
         EditorCommand::SaveFile => {
             let buffer = state.focused_buffer();
@@ -183,6 +206,22 @@ pub fn run(
                 crate::fs::write_file(&path, text);
             }
         }
+        EditorCommand::SaveAll => {
+            for (path, text) in state
+                .files
+                .get_untracked()
+                .into_iter()
+                .filter_map(|file| file.dirty.then_some((file.path, file.text)))
+            {
+                crate::fs::write_file(&path, text);
+            }
+        }
+        EditorCommand::CloseTab => state.close_focused_tab(),
+        EditorCommand::NextTab => state.cycle_tab(1),
+        EditorCommand::PrevTab => state.cycle_tab(-1),
+        EditorCommand::FocusNext => state.focus_next(),
+        EditorCommand::FocusPrev => state.focus_prev(),
+        EditorCommand::BalanceSplits => state.balance_splits(),
         EditorCommand::Find => state.find_open.set(true),
         EditorCommand::JumpWord => crate::jump::start(state, crate::jump::JumpKind::Word),
         EditorCommand::JumpLine => crate::jump::start(state, crate::jump::JumpKind::Line),

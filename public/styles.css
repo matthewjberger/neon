@@ -18,6 +18,25 @@
   --warn: #ffcb6b;
 }
 
+[data-theme="vscode"] {
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --panel-2: #333333;
+  --panel-border: #2b2b2b;
+  --text: #d4d4d4;
+  --text-dim: #858585;
+  --accent: #0a84ff;
+  --input-bg: #3c3c3c;
+  --tok-keyword: #569cd6;
+  --tok-string: #ce9178;
+  --tok-number: #b5cea8;
+  --tok-comment: #6a9955;
+  --tok-command: #dcdcaa;
+  --tok-plain: #d4d4d4;
+  --error: #f14c4c;
+  --warn: #cca700;
+}
+
 [data-theme="ember"] {
   --bg: #140d0b;
   --panel: #1f1512;
@@ -233,7 +252,8 @@ body {
 }
 
 .activity-icon.active {
-  color: var(--accent);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .plugin-panel,

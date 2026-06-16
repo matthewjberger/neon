@@ -176,12 +176,16 @@ toggle, line tools, word delete, join lines, smart home, jump to char, blank
 lines, the comment object, and move lines, alongside the Vim and Spacemacs
 layers.
 
-Editor commands live in one registry (`src/commands.rs`): split and focus panes,
-toggle the panels, switch the sidebar view, run or pause, reset, cycle themes,
-open buffers, and open the palette or help. The command palette and the leader
-menus both drive this one set, and an editor plugin invokes any of it through
+Editor commands live in one registry (`src/commands.rs`): split, focus, and
+balance panes, tabs (close, next, previous), files (open folder, save, save all,
+tree, search), the sidebar views, find, the jumps, run or pause, reset, themes,
+open buffers, and the palette or help. The command palette and the leader menus
+both drive this one set, and an editor plugin invokes any of it through
 `RunCommand`, so plugins dictate what the editor does, not just what the buffer
-holds.
+holds. The Spacemacs leader mirrors the VSpaceCode menu tree (`SPC f` files,
+`SPC b` buffers, `SPC w` windows, `SPC s` search, `SPC j` jump, `SPC t` toggles,
+`SPC ;` comment), and editing actions like comment toggle are pushed as ops
+directly.
 
 The default editor plugin is a Spacemacs layer: vim modal editing plus an `SPC`
 leader. Pressing `SPC` publishes a which-key menu through `ShowMenu`, and each
