@@ -25,6 +25,7 @@ fn leader_menu() {
         #{ key: "t", label: "+Toggles" },
         #{ key: "b", label: "+Buffers" },
         #{ key: "p", label: "+Plugins" },
+        #{ key: "j", label: "+Jump" },
         #{ key: "r", label: "Run or pause" },
         #{ key: "T", label: "Next theme" },
         #{ key: "?", label: "Help" },
@@ -63,6 +64,13 @@ fn plugin_menu() {
     ] };
 }
 
+fn jump_menu() {
+    #{ title: "+Jump", items: [
+        #{ key: "w", label: "Jump to word" },
+        #{ key: "l", label: "Jump to line" },
+    ] };
+}
+
 fn on_key() {
     if mode == "insert" {
         if key == "Escape" {
@@ -86,7 +94,16 @@ fn on_key() {
         else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
         else if key == "b" { state.pending = "SPC b"; ops.push(#{ ShowMenu: buffer_menu() }); }
         else if key == "p" { state.pending = "SPC p"; ops.push(#{ ShowMenu: plugin_menu() }); }
+        else if key == "j" { state.pending = "SPC j"; ops.push(#{ ShowMenu: jump_menu() }); }
         else { ops.push("HideMenu"); }
+        return;
+    }
+    if pending == "SPC j" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "w" { ops.push(#{ RunCommand: "jump-word" }); }
+        else if key == "l" { ops.push(#{ RunCommand: "jump-line" }); }
         return;
     }
     if pending == "SPC w" {

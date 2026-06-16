@@ -97,6 +97,23 @@ pub struct HoverCard {
     pub y: f64,
 }
 
+/// One jump target: the label to type, its pixel anchor, and the UTF-16 caret
+/// offset to jump to.
+#[derive(Clone, PartialEq)]
+pub struct JumpTarget {
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    pub offset: u32,
+}
+
+/// Active jump mode: the labeled targets and the label prefix typed so far.
+#[derive(Clone, PartialEq)]
+pub struct JumpState {
+    pub targets: Vec<JumpTarget>,
+    pub pending: String,
+}
+
 /// One editor pane: a stable key, its open buffers as tabs with an active index,
 /// and its flex-grow weight in the split. Plain data, held in a `Vec`, so any
 /// number of panes can stack and each can hold any number of tabs.
@@ -188,6 +205,8 @@ pub struct EditorState {
     pub completion_index: RwSignal<usize>,
     /// The LSP hover card, when shown.
     pub hover: RwSignal<Option<HoverCard>>,
+    /// Active jump mode (avy-style labeled motion), when on.
+    pub jump: RwSignal<Option<JumpState>>,
     /// Whether the help and keybindings overlay is open.
     pub help_open: RwSignal<bool>,
     /// The leader menu an editor plugin published for the pending prefix, shown
@@ -252,6 +271,7 @@ impl EditorState {
             completion: RwSignal::new(None),
             completion_index: RwSignal::new(0),
             hover: RwSignal::new(None),
+            jump: RwSignal::new(None),
             help_open: RwSignal::new(false),
             leader: RwSignal::new(None),
             split_vertical: RwSignal::new(true),

@@ -160,7 +160,9 @@ and a persistent `state` map and pushes ops the host applies:
   together in the plugin.
 
 The default plugin is a Spacemacs layer: vim modal editing plus an `SPC` leader
-whose which-key menu carries window management. The catalog ships many more as
+whose which-key menu carries window management and avy-style jumps (`SPC j w`
+labels every word over a dimmed buffer, `SPC j l` every line, and the caret jumps
+to the label you type). The catalog ships many more as
 opt-in: a Vim and an Emacs layer, auto pairs, better escape, comment toggle and
 the gcc comment object, line tools, word delete, join lines, smart home, jump to
 char, blank lines, and move lines, plus a stack of scene-plugin examples. The nightshade `Command`/`Event` bus is closed (engine-defined, no

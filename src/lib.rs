@@ -17,6 +17,7 @@
 
 mod app;
 mod bridge;
+mod caret;
 mod check;
 mod commands;
 mod components;
@@ -24,6 +25,7 @@ mod editor_plugins;
 mod fs;
 mod highlight;
 mod ipc;
+mod jump;
 mod lang;
 mod lsp;
 mod plugins;

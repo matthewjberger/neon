@@ -26,6 +26,8 @@ pub enum EditorCommand {
     OpenFolder,
     SaveFile,
     Find,
+    JumpWord,
+    JumpLine,
     ToggleLspLog,
     NewPlugin,
     RunPause,
@@ -54,6 +56,8 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "open-folder" => EditorCommand::OpenFolder,
         "save-file" => EditorCommand::SaveFile,
         "find" => EditorCommand::Find,
+        "jump-word" => EditorCommand::JumpWord,
+        "jump-line" => EditorCommand::JumpLine,
         "toggle-lsp-log" => EditorCommand::ToggleLspLog,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
@@ -101,6 +105,8 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Open folder".to_string(), EditorCommand::OpenFolder),
         ("Save file".to_string(), EditorCommand::SaveFile),
         ("Find and replace".to_string(), EditorCommand::Find),
+        ("Jump to word".to_string(), EditorCommand::JumpWord),
+        ("Jump to line".to_string(), EditorCommand::JumpLine),
         (
             "Toggle rust-analyzer log".to_string(),
             EditorCommand::ToggleLspLog,
@@ -175,6 +181,8 @@ pub fn run(
             }
         }
         EditorCommand::Find => state.find_open.set(true),
+        EditorCommand::JumpWord => crate::jump::start(state, crate::jump::JumpKind::Word),
+        EditorCommand::JumpLine => crate::jump::start(state, crate::jump::JumpKind::Line),
         EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");

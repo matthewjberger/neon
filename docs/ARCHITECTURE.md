@@ -127,7 +127,10 @@ a per-buffer undo stack (`undo.rs`) before writing, so `Ctrl+Z`/`Ctrl+Y` undo
 every edit path (typing, plugin ops, find, completion) even though native
 textarea undo is bypassed by programmatic edits. Find and replace (`find.rs`,
 `Ctrl+F`) act on the focused textarea. Project-wide search runs on the desktop
-and jumps to a line.
+and jumps to a line. Avy-style jump (`jump.rs`, Spacemacs' `SPC j w`/`SPC j l`)
+labels every word or line start over a dimmed buffer and moves the caret to the
+one whose label you type. The on-screen geometry for the jump labels and the LSP
+popups is shared in `caret.rs`, which measures the font's advance with a canvas.
 
 The rhai language service is reflective. The worker derives the command
 vocabulary from `command_manifest` and `command_schema`, and the highlighter, the

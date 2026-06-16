@@ -167,6 +167,9 @@ pub fn EditorPane(
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
+        if state.jump.get_untracked().is_some() {
+            return;
+        }
         if state.completion.get_untracked().is_some() {
             let len = state
                 .completion

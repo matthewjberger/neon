@@ -995,6 +995,35 @@ body {
   white-space: pre-wrap;
 }
 
+.jump-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 68;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.jump-label {
+  position: fixed;
+  display: flex;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+}
+
+.jump-typed {
+  color: var(--text-dim);
+}
+
+.jump-key {
+  color: var(--accent);
+}
+
 .find-bar {
   position: fixed;
   top: 44px;

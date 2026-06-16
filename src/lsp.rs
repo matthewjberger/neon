@@ -195,14 +195,7 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     let Some(element) = crate::components::find::active() else {
         return;
     };
-    let rect = element.get_bounding_client_rect();
-    let (pad_left, pad_top, char_width, line_height) = metrics(&element);
-    let column = (((client_x - rect.left() - pad_left + element.scroll_left() as f64) / char_width)
-        .floor())
-    .max(0.0) as u32;
-    let line = (((client_y - rect.top() - pad_top + element.scroll_top() as f64) / line_height)
-        .floor())
-    .max(0.0) as u32;
+    let (line, column) = crate::caret::locate(&element, client_x, client_y);
     let id = next_id();
     client(|client| {
         client.pending.insert(
@@ -349,57 +342,8 @@ fn word_prefix(value: &str, caret: u32) -> String {
 }
 
 fn caret_pixel(element: &HtmlTextAreaElement, line: u32, column: u32) -> (f64, f64) {
-    let rect = element.get_bounding_client_rect();
-    let (pad_left, pad_top, char_width, line_height) = metrics(element);
-    let x = rect.left() + pad_left + column as f64 * char_width - element.scroll_left() as f64;
-    let y = rect.top() + pad_top + (line as f64 + 1.0) * line_height - element.scroll_top() as f64;
-    (x, y)
-}
-
-fn metrics(element: &HtmlTextAreaElement) -> (f64, f64, f64, f64) {
-    let style =
-        web_sys::window().and_then(|window| window.get_computed_style(element).ok().flatten());
-    let font_size = parse_px(style.as_ref(), "font-size").unwrap_or(13.0);
-    let line_height = parse_px(style.as_ref(), "line-height").unwrap_or(font_size * 1.5);
-    let pad_left = parse_px(style.as_ref(), "padding-left").unwrap_or(0.0);
-    let pad_top = parse_px(style.as_ref(), "padding-top").unwrap_or(0.0);
-    let family = style
-        .as_ref()
-        .and_then(|style| style.get_property_value("font-family").ok())
-        .filter(|family| !family.is_empty())
-        .unwrap_or_else(|| "monospace".to_string());
-    let font = format!("{font_size}px {family}");
-    let advance = char_width(&font).unwrap_or(font_size * 0.6);
-    (pad_left, pad_top, advance, line_height)
-}
-
-/// The advance of a monospace character for a font, measured once with a 2d
-/// canvas and cached per font.
-fn char_width(font: &str) -> Option<f64> {
-    thread_local! {
-        static CACHE: RefCell<HashMap<String, f64>> = RefCell::new(HashMap::new());
-    }
-    if let Some(width) = CACHE.with(|cache| cache.borrow().get(font).copied()) {
-        return Some(width);
-    }
-    let document = web_sys::window()?.document()?;
-    let canvas: web_sys::HtmlCanvasElement =
-        document.create_element("canvas").ok()?.dyn_into().ok()?;
-    let context: web_sys::CanvasRenderingContext2d =
-        canvas.get_context("2d").ok()??.dyn_into().ok()?;
-    context.set_font(font);
-    let sample = "MMMMMMMMMMMMMMMMMMMM";
-    let width = context.measure_text(sample).ok()?.width() / sample.len() as f64;
-    if width <= 0.0 {
-        return None;
-    }
-    CACHE.with(|cache| cache.borrow_mut().insert(font.to_string(), width));
-    Some(width)
-}
-
-fn parse_px(style: Option<&web_sys::CssStyleDeclaration>, property: &str) -> Option<f64> {
-    let raw = style?.get_property_value(property).ok()?;
-    raw.trim_end_matches("px").trim().parse().ok()
+    let (x, top) = crate::caret::cell(element, line, column);
+    (x, top + crate::caret::line_height(element))
 }
 
 fn splice_utf16(value: &str, start: u32, end: u32, replacement: &str) -> String {

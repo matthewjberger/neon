@@ -17,6 +17,7 @@ use crate::components::extensions::Extensions;
 use crate::components::file_tree::FileTree;
 use crate::components::find::FindBar;
 use crate::components::help::Help;
+use crate::components::jump_overlay::JumpOverlay;
 use crate::components::loader::Loader;
 use crate::components::lsp_panel::{LspConsent, LspLog};
 use crate::components::palette::Palette;
@@ -99,6 +100,11 @@ pub fn App() -> impl IntoView {
     });
 
     let _ = window_event_listener(leptos::ev::keydown, move |event| {
+        if state.jump.get_untracked().is_some() {
+            event.prevent_default();
+            crate::jump::key(state, &event.key());
+            return;
+        }
         if event.ctrl_key() && event.shift_key() && event.key().eq_ignore_ascii_case("p") {
             event.prevent_default();
             state.palette_open.set(true);
@@ -265,6 +271,7 @@ pub fn App() -> impl IntoView {
             <FindBar state />
             <CompletionPopup state />
             <HoverCardView state />
+            <JumpOverlay state />
             <Reference state />
             <WhichKey state />
             <LspConsent state />

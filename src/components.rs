@@ -6,6 +6,7 @@ pub mod extensions;
 pub mod file_tree;
 pub mod find;
 pub mod help;
+pub mod jump_overlay;
 pub mod loader;
 pub mod lsp_panel;
 pub mod palette;
