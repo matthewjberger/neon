@@ -1,7 +1,7 @@
-//! The code editor for the active plugin: a native textarea for editing, a
-//! highlight `<pre>` layer behind it sharing the same box, and a diagnostics
-//! strip below. Edits update the plugin source, persist, and after a short pause
-//! sync the scene and ask the language worker to compile-check.
+//! The code editor for one pane: a native textarea, a highlight `<pre>` layer
+//! behind it, a line-number gutter, and a diagnostics strip. The pane edits the
+//! buffer named by its `active`/`active_kind` signals, so primary and secondary
+//! (split) panes edit independently. Built-ins are read-only.
 
 use std::collections::HashSet;
 
@@ -14,7 +14,7 @@ use crate::bridge::{self, Bridge};
 use crate::editor_plugins;
 use crate::highlight::highlight;
 use crate::lang::{self, Lang};
-use crate::state::{EditorState, PluginKind};
+use crate::state::{EditorState, PluginKind, kind_readonly};
 
 const APPLY_DELAY_MS: i32 = 350;
 
@@ -23,6 +23,11 @@ pub fn EditorPane(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
+    /// The buffer this pane shows.
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
+    /// Whether this is the secondary (split) pane, for focus routing.
+    secondary: bool,
 ) -> impl IntoView {
     let layer = NodeRef::<html::Pre>::new();
     let gutter = NodeRef::<html::Div>::new();
@@ -39,43 +44,60 @@ pub fn EditorPane(
             .collect::<HashSet<String>>()
     });
 
+    let source = move || state.buffer_source(active_kind.get(), &active.get());
+    let readonly = move || kind_readonly(active_kind.get());
+
+    Effect::new(move |_| {
+        if state.focus_secondary.get() == secondary
+            && let Some(element) = textarea.get()
+        {
+            let _ = element.focus();
+        }
+    });
+
+    let on_focus = move |_| state.focus_secondary.set(secondary);
+
     let on_input = move |event: web_sys::Event| {
-        if state.active_readonly() {
+        if kind_readonly(active_kind.get_untracked()) {
             return;
         }
         let value = event_target_value(&event);
-        let Some(id) = state.active.get_untracked() else {
+        let Some(id) = active.get_untracked() else {
             return;
         };
-        state.active_signal().update(|plugins| {
-            if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
-                plugin.source = value.clone();
-            }
-        });
-        commit(bridge, lang, state, debounce, request_id);
+        state
+            .editable_set(active_kind.get_untracked())
+            .update(|plugins| {
+                if let Some(plugin) = plugins.iter_mut().find(|plugin| plugin.id == id) {
+                    plugin.source = value.clone();
+                }
+            });
+        commit(bridge, lang, state, active, active_kind, debounce, request_id);
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
-        if state.active_readonly() {
+        if kind_readonly(active_kind.get_untracked()) {
             return;
         }
         if event.key() == "Tab" {
             event.prevent_default();
             if let Some(element) = textarea.get() {
-                editor_plugins::insert_text(state, &element, "    ");
-                commit(bridge, lang, state, debounce, request_id);
+                editor_plugins::insert_text(state, active, active_kind, &element, "    ");
+                commit(bridge, lang, state, active, active_kind, debounce, request_id);
             }
             return;
         }
         if !editor_plugins::any_enabled(state) {
             return;
         }
-        let Some(textarea) = textarea.get() else {
+        let Some(element) = textarea.get() else {
             return;
         };
         let outcome = editor_plugins::handle_key(
             state,
-            &textarea,
+            active,
+            active_kind,
+            &element,
             &event.key(),
             event.ctrl_key(),
             event.shift_key(),
@@ -85,36 +107,36 @@ pub fn EditorPane(
             event.prevent_default();
         }
         if outcome.changed {
-            commit(bridge, lang, state, debounce, request_id);
+            commit(bridge, lang, state, active, active_kind, debounce, request_id);
         }
     };
 
     view! {
         <div class="editor-pane">
             <Show
-                when=move || state.active.get().is_some()
-                fallback=|| view! { <div class="editor-empty">"Select or create a plugin to edit"</div> }
+                when=move || active.get().is_some()
+                fallback=|| view! { <div class="editor-empty">"Open a plugin to edit"</div> }
             >
                 <div class="editor-header">
-                    <span class="editor-filename">{move || state.active_name()}</span>
-                    <Show when=move || state.active_readonly() fallback=|| ()>
+                    <span class="editor-filename">
+                        {move || state.buffer_name(active_kind.get(), &active.get())}
+                    </span>
+                    <Show when=readonly fallback=|| ()>
                         <span class="editor-lock">"read-only built-in"</span>
                     </Show>
                 </div>
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
                         {move || {
-                            let count = state.active_source().split('\n').count().max(1);
-                            (1..=count)
-                                .map(|number| view! { <div>{number}</div> })
-                                .collect_view()
+                            let count = source().split('\n').count().max(1);
+                            (1..=count).map(|number| view! { <div>{number}</div> }).collect_view()
                         }}
                     </div>
                     <pre class="editor-highlight" node_ref=layer aria-hidden="true">
                         {move || {
-                            let source = state.active_source();
+                            let text = source();
                             let set = command_set.get();
-                            highlight(&source, &set)
+                            highlight(&text, &set)
                                 .into_iter()
                                 .map(|(class, run)| view! { <span class=class>{run}</span> })
                                 .collect_view()
@@ -124,8 +146,9 @@ pub fn EditorPane(
                         class="editor-textarea"
                         spellcheck="false"
                         node_ref=textarea
-                        prop:readonly=move || state.active_readonly()
-                        prop:value=move || state.active_source()
+                        prop:readonly=readonly
+                        prop:value=source
+                        on:focus=on_focus
                         on:input=on_input
                         on:keydown=on_keydown
                         on:scroll=move |event| {
@@ -143,39 +166,42 @@ pub fn EditorPane(
                         }
                     />
                 </div>
-                <div class="diagnostics">
-                    <For
-                        each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
-                        key=|(index, _)| *index
-                        children=move |(_, diag)| {
-                            view! {
-                                <div class="diagnostic">
-                                    <span class="diag-pos">
-                                        {format!("{}:{}", diag.line, diag.column)}
-                                    </span>
-                                    {diag.message}
-                                </div>
+                <Show when=move || !secondary fallback=|| ()>
+                    <div class="diagnostics">
+                        <For
+                            each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
+                            key=|(index, _)| *index
+                            children=move |(_, diag)| {
+                                view! {
+                                    <div class="diagnostic">
+                                        <span class="diag-pos">
+                                            {format!("{}:{}", diag.line, diag.column)}
+                                        </span>
+                                        {diag.message}
+                                    </div>
+                                }
                             }
-                        }
-                    />
-                </div>
+                        />
+                    </div>
+                </Show>
             </Show>
         </div>
     }
 }
 
-/// Persists the active buffer and, for a scene plugin, schedules the worker sync
-/// and compile-check. Editor plugins persist through the app effect and run live,
-/// so they need no sync.
+/// Persists the buffer and, for a scene plugin, schedules the worker sync and
+/// compile-check.
 fn commit(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
-    if state.active_kind.get_untracked() == PluginKind::Scene {
-        schedule_apply(bridge, lang, state, debounce, request_id);
+    if active_kind.get_untracked() == PluginKind::Scene {
+        schedule_apply(bridge, lang, state, active, active_kind, debounce, request_id);
     }
 }
 
@@ -183,6 +209,8 @@ fn schedule_apply(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,
     state: EditorState,
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
@@ -199,14 +227,15 @@ fn schedule_apply(
         let id = request_id.get_value().wrapping_add(1);
         request_id.set_value(id);
         if let Some(lang) = lang.get_value() {
-            lang::check(&lang, id, state.active_source());
+            lang::check(
+                &lang,
+                id,
+                state.buffer_source(active_kind.get_untracked(), &active.get_untracked()),
+            );
         }
     });
     let handle = window
-        .set_timeout_with_callback_and_timeout_and_arguments_0(
-            callback.unchecked_ref(),
-            APPLY_DELAY_MS,
-        )
+        .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), APPLY_DELAY_MS)
         .unwrap_or(0);
     debounce.set_value(Some(handle));
 }

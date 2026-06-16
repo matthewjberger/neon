@@ -64,6 +64,20 @@ pub struct EditorState {
     pub grabbing: RwSignal<bool>,
     /// The active theme id, applied to the document root as `data-theme`.
     pub theme: RwSignal<String>,
+    /// Whether the command palette is open.
+    pub palette_open: RwSignal<bool>,
+    /// Whether the help and keybindings overlay is open.
+    pub help_open: RwSignal<bool>,
+    /// Whether the editor is split into two panes.
+    pub split: RwSignal<bool>,
+    /// The secondary pane's open buffer when split.
+    pub secondary: RwSignal<Option<String>>,
+    pub secondary_kind: RwSignal<PluginKind>,
+    /// Which pane is focused: false primary, true secondary.
+    pub focus_secondary: RwSignal<bool>,
+    /// A command id an editor plugin asked the editor to run, applied by the
+    /// shell. This is how plugins dictate editor actions.
+    pub command_request: RwSignal<Option<String>>,
 }
 
 impl EditorState {
@@ -94,61 +108,70 @@ impl EditorState {
             reference_open: RwSignal::new(false),
             grabbing: RwSignal::new(false),
             theme: RwSignal::new(crate::theme::stored_theme()),
+            palette_open: RwSignal::new(false),
+            help_open: RwSignal::new(false),
+            split: RwSignal::new(false),
+            secondary: RwSignal::new(None),
+            secondary_kind: RwSignal::new(PluginKind::Scene),
+            focus_secondary: RwSignal::new(false),
+            command_request: RwSignal::new(None),
         }
     }
 
-    /// The active buffer's source, or empty when none is open. Reads from the
-    /// scene set, the editor set, or the read-only standard library.
-    pub fn active_source(&self) -> String {
-        let active = self.active.get();
-        if self.active_kind.get() == PluginKind::Builtin {
+    /// A buffer's source by kind and id, from the scene set, the editor set, or
+    /// the read-only standard library.
+    pub fn buffer_source(&self, kind: PluginKind, id: &Option<String>) -> String {
+        if kind == PluginKind::Builtin {
             return self.stdlib.with(|modules| {
                 modules
                     .iter()
-                    .find(|module| Some(&module.name) == active.as_ref())
+                    .find(|module| Some(&module.name) == id.as_ref())
                     .map(|module| module.source.clone())
                     .unwrap_or_default()
             });
         }
-        let signal = self.active_signal();
-        signal.with(|plugins| {
+        self.editable_set(kind).with(|plugins| {
             plugins
                 .iter()
-                .find(|plugin| Some(&plugin.id) == active.as_ref())
+                .find(|plugin| Some(&plugin.id) == id.as_ref())
                 .map(|plugin| plugin.source.clone())
                 .unwrap_or_default()
         })
     }
 
-    /// The active buffer's display name.
-    pub fn active_name(&self) -> String {
-        let active = self.active.get();
-        if self.active_kind.get() == PluginKind::Builtin {
-            return active.unwrap_or_default();
+    /// A buffer's display name by kind and id.
+    pub fn buffer_name(&self, kind: PluginKind, id: &Option<String>) -> String {
+        if kind == PluginKind::Builtin {
+            return id.clone().unwrap_or_default();
         }
-        let signal = self.active_signal();
-        signal.with(|plugins| {
+        self.editable_set(kind).with(|plugins| {
             plugins
                 .iter()
-                .find(|plugin| Some(&plugin.id) == active.as_ref())
+                .find(|plugin| Some(&plugin.id) == id.as_ref())
                 .map(|plugin| plugin.name.clone())
                 .unwrap_or_default()
         })
     }
 
-    /// The signal backing the active editable set. Built-ins are read-only, so
-    /// this falls back to the scene set for them and is never written.
-    pub fn active_signal(&self) -> RwSignal<Vec<PluginSource>> {
-        match self.active_kind.get() {
-            PluginKind::Editor => self.editor_plugins,
-            _ => self.plugins,
+    /// The editable set for a kind. Built-ins fall back to the scene set and are
+    /// never written.
+    pub fn editable_set(&self, kind: PluginKind) -> RwSignal<Vec<PluginSource>> {
+        if kind == PluginKind::Editor {
+            self.editor_plugins
+        } else {
+            self.plugins
         }
     }
 
-    /// Whether the active buffer is a locked built-in.
-    pub fn active_readonly(&self) -> bool {
-        self.active_kind.get() == PluginKind::Builtin
+    /// The primary pane's source, used by the agent relay.
+    pub fn active_source(&self) -> String {
+        self.buffer_source(self.active_kind.get(), &self.active.get())
     }
+}
+
+/// Whether a buffer kind is read-only.
+pub fn kind_readonly(kind: PluginKind) -> bool {
+    kind == PluginKind::Builtin
 }
 
 impl Default for EditorState {

@@ -46,6 +46,8 @@ enum EditorOp {
     DeleteForward(i64),
     DeleteBackward(i64),
     DeleteLine,
+    RunCommand(String),
+    OpenPalette,
 }
 
 /// The result of dispatching a key to the editor plugins.
@@ -60,6 +62,8 @@ pub struct KeyOutcome {
 /// the ops to the textarea, returning what happened.
 pub fn handle_key(
     state: EditorState,
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
     textarea: &HtmlTextAreaElement,
     key: &str,
     ctrl: bool,
@@ -75,7 +79,7 @@ pub fn handle_key(
         };
     }
     let consumed = ops.iter().any(|op| matches!(op, EditorOp::Consume));
-    let changed = apply(state, textarea, ops);
+    let changed = apply(state, active, active_kind, textarea, ops);
     KeyOutcome { consumed, changed }
 }
 
@@ -140,6 +144,7 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "NextWord" => Some(EditorOp::NextWord),
             "PrevWord" => Some(EditorOp::PrevWord),
             "DeleteLine" => Some(EditorOp::DeleteLine),
+            "OpenPalette" => Some(EditorOp::OpenPalette),
             _ => None,
         };
     }
@@ -153,13 +158,20 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "MoveLine" => Some(EditorOp::MoveLine(payload.as_int().ok()?)),
         "DeleteForward" => Some(EditorOp::DeleteForward(payload.as_int().ok()?)),
         "DeleteBackward" => Some(EditorOp::DeleteBackward(payload.as_int().ok()?)),
+        "RunCommand" => Some(EditorOp::RunCommand(payload.into_string().ok()?)),
         _ => None,
     }
 }
 
 /// Applies the ops to the textarea and the active buffer signal, returning
 /// whether the text changed.
-fn apply(state: EditorState, textarea: &HtmlTextAreaElement, ops: Vec<EditorOp>) -> bool {
+fn apply(
+    state: EditorState,
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
+    textarea: &HtmlTextAreaElement,
+    ops: Vec<EditorOp>,
+) -> bool {
     let mut text: Vec<char> = textarea.value().chars().collect();
     let mut caret = textarea
         .selection_start()
@@ -215,6 +227,8 @@ fn apply(state: EditorState, textarea: &HtmlTextAreaElement, ops: Vec<EditorOp>)
                     changed = true;
                 }
             }
+            EditorOp::RunCommand(id) => state.command_request.set(Some(id)),
+            EditorOp::OpenPalette => state.palette_open.set(true),
         }
     }
 
@@ -228,12 +242,12 @@ fn apply(state: EditorState, textarea: &HtmlTextAreaElement, ops: Vec<EditorOp>)
     }
 
     if changed {
-        let signal = state.active_signal();
-        let active = state.active.get_untracked();
+        let signal = state.editable_set(active_kind.get_untracked());
+        let id = active.get_untracked();
         signal.update(|plugins| {
             if let Some(plugin) = plugins
                 .iter_mut()
-                .find(|plugin| Some(&plugin.id) == active.as_ref())
+                .find(|plugin| Some(&plugin.id) == id.as_ref())
             {
                 plugin.source = value.clone();
             }
@@ -330,7 +344,13 @@ fn hash_source(source: &str) -> u64 {
 
 /// Inserts text at the caret and updates the active buffer. Used for the editor's
 /// own Tab-to-indent, independent of any plugin.
-pub fn insert_text(state: EditorState, textarea: &HtmlTextAreaElement, text: &str) {
+pub fn insert_text(
+    state: EditorState,
+    active: RwSignal<Option<String>>,
+    active_kind: RwSignal<PluginKind>,
+    textarea: &HtmlTextAreaElement,
+    text: &str,
+) {
     let mut chars: Vec<char> = textarea.value().chars().collect();
     let mut caret = textarea.selection_start().ok().flatten().unwrap_or(0) as usize;
     caret = caret.min(chars.len());
@@ -341,12 +361,12 @@ pub fn insert_text(state: EditorState, textarea: &HtmlTextAreaElement, text: &st
     textarea.set_value(&value);
     let caret = (caret + count) as u32;
     let _ = textarea.set_selection_range(caret, caret);
-    let signal = state.active_signal();
-    let active = state.active.get_untracked();
+    let signal = state.editable_set(active_kind.get_untracked());
+    let id = active.get_untracked();
     signal.update(|plugins| {
         if let Some(plugin) = plugins
             .iter_mut()
-            .find(|plugin| Some(&plugin.id) == active.as_ref())
+            .find(|plugin| Some(&plugin.id) == id.as_ref())
         {
             plugin.source = value.clone();
         }

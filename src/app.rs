@@ -13,11 +13,14 @@ use crate::components::chat::ChatPane;
 use crate::components::console::Console;
 use crate::components::editor_pane::EditorPane;
 use crate::components::extensions::Extensions;
+use crate::components::help::Help;
 use crate::components::loader::Loader;
+use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
 use crate::components::reference::Reference;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
+use crate::commands;
 use crate::lang;
 use crate::state::{EditorState, SidebarView};
 use crate::theme;
@@ -53,6 +56,15 @@ pub fn App() -> impl IntoView {
         state.diagnostics.set(Vec::new());
     });
 
+    Effect::new(move |_| {
+        if let Some(id) = state.command_request.get() {
+            state.command_request.set(None);
+            if let Some(command) = commands::command_from_id(&id) {
+                commands::run(command, state, bridge);
+            }
+        }
+    });
+
     let seeded = StoredValue::new(false);
     Effect::new(move |_| {
         let commands = state.commands.get();
@@ -69,6 +81,20 @@ pub fn App() -> impl IntoView {
     });
 
     let _ = window_event_listener(leptos::ev::keydown, move |event| {
+        if event.ctrl_key() && event.shift_key() && event.key().eq_ignore_ascii_case("p") {
+            event.prevent_default();
+            state.palette_open.set(true);
+            return;
+        }
+        if event.key() == "F1" {
+            event.prevent_default();
+            state.help_open.set(true);
+            return;
+        }
+        if event.key() == "Escape" && state.help_open.get_untracked() {
+            state.help_open.set(false);
+            return;
+        }
         if typing_in_field(&event) {
             return;
         }
@@ -110,7 +136,26 @@ pub fn App() -> impl IntoView {
                     SidebarView::Installed => view! { <PluginPanel bridge state /> }.into_any(),
                     SidebarView::Extensions => view! { <Extensions bridge state /> }.into_any(),
                 }}
-                <EditorPane bridge lang state />
+                <div class="editor-area">
+                    <EditorPane
+                        bridge
+                        lang
+                        state
+                        active=state.active
+                        active_kind=state.active_kind
+                        secondary=false
+                    />
+                    <Show when=move || state.split.get() fallback=|| ()>
+                        <EditorPane
+                            bridge
+                            lang
+                            state
+                            active=state.secondary
+                            active_kind=state.secondary_kind
+                            secondary=true
+                        />
+                    </Show>
+                </div>
                 <div
                     class="right-column"
                     style:display=move || if state.viewport_open.get() { "flex" } else { "none" }
@@ -122,6 +167,8 @@ pub fn App() -> impl IntoView {
                 </div>
             </div>
             <Reference state />
+            <Palette bridge state />
+            <Help state />
             <ChatPane state />
             <Loader state />
         </div>

@@ -189,6 +189,70 @@ mod tests {
 
     const VIM: &str = include_str!("../../editor_stdlib/vim.rhai");
     const EDITOR_TEMPLATE: &str = include_str!("../../editor_stdlib/editor_template.rhai");
+    const SPACEMACS: &str = include_str!("../../editor_stdlib/spacemacs.rhai");
+
+    fn run_key(
+        engine: &Engine,
+        ast: &rhai::AST,
+        state_map: &mut rhai::Map,
+        key: &str,
+    ) -> rhai::Array {
+        let mut scope = rhai::Scope::new();
+        scope.push("key", key.to_string());
+        scope.push("mode", "normal".to_string());
+        scope.push("ctrl", false);
+        scope.push("shift", false);
+        scope.push("alt", false);
+        scope.push("ops", rhai::Array::new());
+        scope.push("state", state_map.clone());
+        engine
+            .call_fn::<()>(&mut scope, ast, "on_key", ())
+            .expect("on_key failed");
+        if let Some(updated) = scope.get_value::<rhai::Map>("state") {
+            *state_map = updated;
+        }
+        scope.get_value::<rhai::Array>("ops").unwrap_or_default()
+    }
+
+    fn runs_command(ops: &rhai::Array, id: &str) -> bool {
+        ops.iter().any(|op| {
+            op.clone()
+                .try_cast::<rhai::Map>()
+                .and_then(|map| map.get("RunCommand").cloned())
+                .and_then(|value| value.into_string().ok())
+                .map(|command| command == id)
+                .unwrap_or(false)
+        })
+    }
+
+    #[test]
+    fn spacemacs_compiles() {
+        let engine = super::make_engine();
+        if let Err(error) = engine.compile(SPACEMACS) {
+            panic!("spacemacs does not compile: {error}");
+        }
+    }
+
+    #[test]
+    fn spacemacs_leader_splits_window() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, " ");
+        run_key(&engine, &ast, &mut state_map, "w");
+        let ops = run_key(&engine, &ast, &mut state_map, "v");
+        assert!(runs_command(&ops, "split-editor"), "SPC w v did not split");
+    }
+
+    #[test]
+    fn spacemacs_leader_opens_palette() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, " ");
+        let ops = run_key(&engine, &ast, &mut state_map, " ");
+        assert!(runs_command(&ops, "open-palette"), "SPC SPC did not open the palette");
+    }
 
     #[test]
     fn editor_plugins_compile() {

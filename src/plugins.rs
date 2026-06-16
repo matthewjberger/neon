@@ -62,6 +62,13 @@ pub fn catalog() -> Vec<CatalogEntry> {
             source: PULSE_RING,
         },
         CatalogEntry {
+            id: "spacemacs",
+            name: "Spacemacs",
+            kind: PluginKind::Editor,
+            description: "Modal editing with an SPC leader for windows, toggles, and the palette.",
+            source: SPACEMACS,
+        },
+        CatalogEntry {
             id: "vim",
             name: "Vim",
             kind: PluginKind::Editor,
@@ -153,11 +160,17 @@ pub fn save_editor_plugins(plugins: &[PluginSource]) {
     }
 }
 
-/// Editor plugins start uninstalled; vim and the template are in the manager.
+/// First run installs Spacemacs as the default keybindings; vim and the template
+/// are in the manager.
 pub fn default_editor_plugins() -> Vec<PluginSource> {
-    Vec::new()
+    catalog()
+        .iter()
+        .filter(|entry| entry.id == "spacemacs")
+        .map(entry_to_plugin)
+        .collect()
 }
 
+const SPACEMACS: &str = include_str!("../editor_stdlib/spacemacs.rhai");
 const VIM_SOURCE: &str = include_str!("../editor_stdlib/vim.rhai");
 const EDITOR_TEMPLATE: &str = include_str!("../editor_stdlib/editor_template.rhai");
 
