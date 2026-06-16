@@ -1,8 +1,14 @@
 [package]
 name = "lang"
-version = "0.1.0"
-license = "MIT OR Apache-2.0"
-edition = "2024"
+description = "Neon's language worker: rhai compile-checking off the render thread"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
 
 [lib]
 crate-type = ["cdylib"]

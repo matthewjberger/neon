@@ -2,11 +2,27 @@
 members = ["desktop", "protocol", "worker", "lang"]
 resolver = "2"
 
-[package]
-name = "neon"
+[workspace.package]
 version = "0.1.0"
+authors = ["Matthew Berger <matthewjordanberger@gmail.com>"]
+homepage = "https://github.com/matthewjberger/neon"
+repository = "https://github.com/matthewjberger/neon"
 license = "MIT OR Apache-2.0"
 edition = "2024"
+rust-version = "1.85"
+
+[package]
+name = "neon"
+description = "A code editor in Rust with rhai plugins, rust-analyzer, and a live nightshade 3D view"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
 
 [dependencies]
 leptos = { version = "0.7", features = ["csr"] }

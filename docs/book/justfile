@@ -1,0 +1,27 @@
+set windows-shell := ["powershell.exe"]
+
+# Displays the list of available commands
+@just:
+    just --list
+
+# Build the book
+build:
+    mdbook build
+
+# Serve the book and open it in the browser
+serve:
+    mdbook serve --open
+
+# Watch for changes and rebuild
+watch:
+    mdbook watch --open
+
+# Remove the build output (Windows)
+[windows]
+clean:
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue book
+
+# Remove the build output (Unix)
+[unix]
+clean:
+    rm -rf book

@@ -1,8 +1,15 @@
 [package]
 name = "protocol"
-version = "0.1.0"
-license = "MIT OR Apache-2.0"
-edition = "2024"
+description = "The serde wire format shared across Neon's contexts"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+keywords = ["neon", "editor", "protocol"]
+categories = ["data-structures"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

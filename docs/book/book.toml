@@ -1,0 +1,19 @@
+[book]
+authors = ["Matthew J. Berger"]
+language = "en"
+src = "src"
+title = "Neon"
+
+[rust]
+edition = "2024"
+
+[output.html]
+default-theme = "dark"
+preferred-dark-theme = "ayu"
+mathjax-support = false
+site-url = "/neon/"
+git-repository-url = "https://github.com/matthewjberger/neon"
+
+[output.html.fold]
+enable = true
+level = 1
