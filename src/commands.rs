@@ -60,6 +60,7 @@ pub enum EditorCommand {
     NextTheme,
     OpenPalette,
     OpenHelp,
+    Tour,
     SetTheme(String),
     OpenBuffer { kind: PluginKind, id: String },
 }
@@ -115,6 +116,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "next-theme" => EditorCommand::NextTheme,
         "open-palette" => EditorCommand::OpenPalette,
         "open-help" => EditorCommand::OpenHelp,
+        "tour" => EditorCommand::Tour,
         _ => return None,
     })
 }
@@ -204,6 +206,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Reset scene".to_string(), EditorCommand::ResetScene),
         ("Next theme".to_string(), EditorCommand::NextTheme),
         ("Help: keybindings".to_string(), EditorCommand::OpenHelp),
+        ("Tour: learn the keys".to_string(), EditorCommand::Tour),
     ];
     for (id, label) in THEMES {
         items.push((
@@ -358,6 +361,7 @@ pub fn run(
         }
         EditorCommand::OpenPalette => state.palette_open.set(true),
         EditorCommand::OpenHelp => state.help_open.set(true),
+        EditorCommand::Tour => crate::tour::start(state),
         EditorCommand::SetTheme(id) => state.theme.set(id),
         EditorCommand::OpenBuffer { kind, id } => state.open_in_focused(kind, Some(id)),
     }

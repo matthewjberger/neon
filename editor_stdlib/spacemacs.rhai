@@ -16,7 +16,7 @@
 //   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
 //   SPC g  g/t/i/r/R/s/S  goto: definition (also "gd") / type / impl /
 //                         references / rename / symbol / workspace symbols
-//   SPC h  h/s/k     help: hover (also "K") / signature help / keybindings
+//   SPC h  h/s/k/t   help: hover (also "K") / signature / keybindings / tour
 //   SPC a            code action (also SPC x .)
 //   SPC e  n/p/l     errors: next / previous / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
@@ -164,6 +164,7 @@ fn help_menu() {
         #{ key: "h", label: "Describe symbol (hover)" },
         #{ key: "s", label: "Signature help" },
         #{ key: "k", label: "Keybindings" },
+        #{ key: "t", label: "Interactive tour" },
     ] };
 }
 
@@ -314,6 +315,7 @@ fn on_key() {
         if key == "h" { ops.push(#{ RunCommand: "hover" }); }
         else if key == "s" { ops.push(#{ RunCommand: "signature-help" }); }
         else if key == "k" { ops.push(#{ RunCommand: "open-help" }); }
+        else if key == "t" { ops.push(#{ RunCommand: "tour" }); }
         return;
     }
     if pending == "SPC x" {

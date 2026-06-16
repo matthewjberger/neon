@@ -217,6 +217,51 @@ body {
   color: var(--text);
 }
 
+.tour-card {
+  position: fixed;
+  right: 24px;
+  bottom: 48px;
+  z-index: 120;
+  width: min(360px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.tour-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tour-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tour-progress {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tour-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .context-backdrop {
   position: fixed;
   inset: 0;

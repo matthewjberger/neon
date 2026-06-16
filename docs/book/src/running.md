@@ -36,3 +36,6 @@ On first launch neon opens with a scene plugin loaded and the Spacemacs editor
 plugin enabled. Open a folder to start editing files (see
 [Files and the Workspace](files.md)), or edit the scene plugin and watch the 3D
 view update live.
+
+New to the keys? Press `SPC h t` for the interactive tour, which walks you
+through the core motions and the leader by having you do each one.

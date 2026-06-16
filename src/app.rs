@@ -30,6 +30,7 @@ use crate::components::reference::Reference;
 use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
 use crate::components::toolbar::Toolbar;
+use crate::components::tour::TourView;
 use crate::components::viewport::Viewport;
 use crate::components::which_key::WhichKey;
 use crate::lang;
@@ -84,6 +85,7 @@ pub fn App() -> impl IntoView {
             if let Some(command) = commands::command_from_id(&id) {
                 commands::run(command, state, bridge);
             }
+            crate::tour::observe(state, &id);
         }
     });
 
@@ -300,6 +302,7 @@ pub fn App() -> impl IntoView {
             <SymbolPicker state />
             <ControlPanel bridge state />
             <ContextMenuView bridge state />
+            <TourView state />
             <Palette bridge state />
             <Help state />
             <ChatPane state />
