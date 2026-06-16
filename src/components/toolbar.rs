@@ -1,78 +1,160 @@
-//! The top bar: run/pause, reset, the renderer stats, the theme picker, and the
-//! Claude toggle. All actions are sends to the worker or signal writes; no state
-//! lives here.
+//! The top bar, styled like an editor menu bar: a brand, the File/Edit/View/Go/
+//! Run/Help menus that dispatch editor commands, a centered command center that
+//! opens the palette, and a compact right side with the renderer stats, the
+//! theme picker, and the Claude toggle.
 
 use leptos::prelude::*;
-use protocol::ClientMessage;
 
-use crate::bridge::{Bridge, send};
-use crate::state::EditorState;
+use crate::bridge::Bridge;
+use crate::commands::{self, EditorCommand};
+use crate::state::{EditorState, basename};
 use crate::theme::{self, THEMES};
+
+type MenuItem = (&'static str, EditorCommand);
+
+fn menus() -> Vec<(&'static str, Vec<MenuItem>)> {
+    vec![
+        (
+            "File",
+            vec![
+                ("New plugin", EditorCommand::NewPlugin),
+                ("Open folder", EditorCommand::OpenFolder),
+                ("Save", EditorCommand::SaveFile),
+                ("Save all", EditorCommand::SaveAll),
+                ("Close tab", EditorCommand::CloseTab),
+            ],
+        ),
+        (
+            "Edit",
+            vec![
+                ("Find and replace", EditorCommand::Find),
+                ("Command palette", EditorCommand::OpenPalette),
+            ],
+        ),
+        (
+            "View",
+            vec![
+                ("Files", EditorCommand::ShowFiles),
+                ("Search", EditorCommand::ShowSearch),
+                ("Installed plugins", EditorCommand::ShowInstalled),
+                ("Plugin manager", EditorCommand::ShowManager),
+                ("Toggle 3D preview", EditorCommand::TogglePreview),
+                ("Toggle console", EditorCommand::ToggleConsole),
+                ("Toggle reference", EditorCommand::ToggleReference),
+                ("Toggle control panel", EditorCommand::ToggleControlPanel),
+            ],
+        ),
+        (
+            "Go",
+            vec![
+                ("Jump to word", EditorCommand::JumpWord),
+                ("Jump to line", EditorCommand::JumpLine),
+                ("Jump to char", EditorCommand::JumpChar),
+                ("Next tab", EditorCommand::NextTab),
+                ("Previous tab", EditorCommand::PrevTab),
+            ],
+        ),
+        (
+            "Run",
+            vec![
+                ("Run or pause", EditorCommand::RunPause),
+                ("Reset scene", EditorCommand::ResetScene),
+            ],
+        ),
+        (
+            "Help",
+            vec![
+                ("Keybindings", EditorCommand::OpenHelp),
+                ("Reference", EditorCommand::ToggleReference),
+            ],
+        ),
+    ]
+}
 
 #[component]
 pub fn Toolbar(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     state: EditorState,
 ) -> impl IntoView {
-    let toggle_running = move |_| {
-        let running = !state.running.get_untracked();
-        state.running.set(running);
-        if let Some(bridge) = bridge.get_value() {
-            send(&bridge, &ClientMessage::SetRunning { running });
-        }
-    };
-
-    let reset = move |_| {
-        if let Some(bridge) = bridge.get_value() {
-            send(&bridge, &ClientMessage::ResetScene);
-        }
-    };
-
-    let toggle_reference = move |_| state.reference_open.update(|open| *open = !*open);
-    let toggle_chat = move |_| state.chat_open.update(|open| *open = !*open);
-
+    let open_menu = RwSignal::new(None::<&'static str>);
     let theme_open = RwSignal::new(false);
 
     view! {
-        <div class="toolbar">
+        <div class="toolbar" on:mouseleave=move |_| open_menu.set(None)>
             <span class="brand">"Neon"</span>
-            <button class="tool-button" on:click=toggle_running>
-                {move || if state.running.get() { "Pause" } else { "Run" }}
-            </button>
-            <button class="tool-button" on:click=reset>"Reset"</button>
+            <div class="menu-bar">
+                {menus()
+                    .into_iter()
+                    .map(|(title, items)| {
+                        view! {
+                            <div class="menu">
+                                <button
+                                    class="menu-title"
+                                    class:active=move || open_menu.get() == Some(title)
+                                    on:click=move |_| {
+                                        open_menu
+                                            .update(|current| {
+                                                *current = if *current == Some(title) {
+                                                    None
+                                                } else {
+                                                    Some(title)
+                                                };
+                                            });
+                                    }
+                                    on:mouseenter=move |_| {
+                                        if open_menu.get().is_some() {
+                                            open_menu.set(Some(title));
+                                        }
+                                    }
+                                >
+                                    {title}
+                                </button>
+                                <div
+                                    class="menu-dropdown"
+                                    class:open=move || open_menu.get() == Some(title)
+                                >
+                                    {items
+                                        .into_iter()
+                                        .map(|(label, command)| {
+                                            view! {
+                                                <div
+                                                    class="menu-item"
+                                                    on:click=move |_| {
+                                                        open_menu.set(None);
+                                                        commands::run(command.clone(), state, bridge);
+                                                    }
+                                                >
+                                                    {label}
+                                                </div>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </div>
+                            </div>
+                        }
+                    })
+                    .collect_view()}
+            </div>
             <button
-                class="tool-button"
-                class:active=move || state.viewport_open.get()
-                title="Show or hide the 3D preview"
-                on:click=move |_| state.viewport_open.update(|open| *open = !*open)
+                class="command-center"
+                title="Search and run a command"
+                on:click=move |_| state.palette_open.set(true)
             >
-                "Preview"
+                <span class="command-center-icon">"\u{1f50d}"</span>
+                <span class="command-center-label">
+                    {move || {
+                        state
+                            .workspace_root
+                            .get()
+                            .map(|root| basename(&root).to_string())
+                            .unwrap_or_else(|| "neon".to_string())
+                    }}
+                </span>
             </button>
-            <button
-                class="tool-button"
-                class:active=move || state.console_open.get()
-                title="Show or hide the console"
-                on:click=move |_| state.console_open.update(|open| *open = !*open)
+            <Show
+                when=move || state.editor_plugins.get().iter().any(|plugin| plugin.enabled)
+                fallback=|| ()
             >
-                "Console"
-            </button>
-            <button
-                class="tool-button"
-                class:active=move || state.reference_open.get()
-                on:click=toggle_reference
-            >
-                "Reference"
-            </button>
-            <button
-                class="tool-button"
-                class:active=move || state.control_panel_open.get()
-                title="Dispatch any command and watch the api log"
-                on:click=move |_| state.control_panel_open.update(|open| *open = !*open)
-            >
-                "Control Panel"
-            </button>
-            <span class="toolbar-spacer"></span>
-            <Show when=move || state.editor_plugins.get().iter().any(|plugin| plugin.enabled) fallback=|| ()>
                 <span class="stat mode-chip">{move || state.editor_mode.get()}</span>
             </Show>
             <Show when=move || !state.status.get().is_empty() fallback=|| ()>
@@ -82,7 +164,7 @@ pub fn Toolbar(
             <span class="stat">{move || format!("{} entities", state.entity_count.get())}</span>
             <div class="theme-picker">
                 <button
-                    class="tool-button theme-button"
+                    class="menu-title"
                     on:click=move |_| theme_open.update(|open| *open = !*open)
                 >
                     {move || theme::theme_label(&state.theme.get())}
@@ -116,12 +198,12 @@ pub fn Toolbar(
                 </Show>
             </div>
             <button
-                class="tool-button claude-toggle"
+                class="menu-title claude-toggle"
                 class:active=move || state.chat_open.get()
                 title="Ask Claude to drive the editor"
-                on:click=toggle_chat
+                on:click=move |_| state.chat_open.update(|open| *open = !*open)
             >
-                "✦ Claude"
+                "\u{2726} Claude"
             </button>
         </div>
     }

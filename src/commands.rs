@@ -19,6 +19,7 @@ pub enum EditorCommand {
     TogglePreview,
     ToggleConsole,
     ToggleReference,
+    ToggleControlPanel,
     ToggleChat,
     ShowInstalled,
     ShowManager,
@@ -58,6 +59,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "toggle-preview" => EditorCommand::TogglePreview,
         "toggle-console" => EditorCommand::ToggleConsole,
         "toggle-reference" => EditorCommand::ToggleReference,
+        "toggle-control-panel" => EditorCommand::ToggleControlPanel,
         "toggle-chat" => EditorCommand::ToggleChat,
         "show-installed" => EditorCommand::ShowInstalled,
         "show-manager" => EditorCommand::ShowManager,
@@ -109,6 +111,10 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         (
             "Toggle reference".to_string(),
             EditorCommand::ToggleReference,
+        ),
+        (
+            "Toggle control panel".to_string(),
+            EditorCommand::ToggleControlPanel,
         ),
         ("Toggle Claude".to_string(), EditorCommand::ToggleChat),
         (
@@ -205,6 +211,7 @@ pub fn run(
         EditorCommand::TogglePreview => state.viewport_open.update(|open| *open = !*open),
         EditorCommand::ToggleConsole => state.console_open.update(|open| *open = !*open),
         EditorCommand::ToggleReference => state.reference_open.update(|open| *open = !*open),
+        EditorCommand::ToggleControlPanel => state.control_panel_open.update(|open| *open = !*open),
         EditorCommand::ToggleChat => state.chat_open.update(|open| *open = !*open),
         EditorCommand::ShowInstalled => state.sidebar_view.set(SidebarView::Installed),
         EditorCommand::ShowManager => state.sidebar_view.set(SidebarView::Extensions),
