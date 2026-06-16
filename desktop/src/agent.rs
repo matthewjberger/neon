@@ -141,6 +141,9 @@ fn response_correlation(response: &AgentResponse) -> CorrelationId {
         AgentResponse::EditorState { correlation_id, .. }
         | AgentResponse::Buffer { correlation_id, .. }
         | AgentResponse::Plugins { correlation_id, .. }
+        | AgentResponse::Reference { correlation_id, .. }
+        | AgentResponse::Console { correlation_id, .. }
+        | AgentResponse::Diagnostics { correlation_id, .. }
         | AgentResponse::Ok { correlation_id }
         | AgentResponse::Scene { correlation_id, .. }
         | AgentResponse::Screenshot { correlation_id, .. }
@@ -186,6 +189,8 @@ fn request_correlation(request: &AgentRequest) -> CorrelationId {
         | AgentRequest::GetBuffer { correlation_id, .. }
         | AgentRequest::SetBuffer { correlation_id, .. }
         | AgentRequest::ListPlugins { correlation_id }
+        | AgentRequest::GetApiReference { correlation_id }
+        | AgentRequest::GetConsole { correlation_id }
         | AgentRequest::EditPlugin { correlation_id, .. }
         | AgentRequest::RunCommand { correlation_id, .. }
         | AgentRequest::QueryScene { correlation_id, .. }
@@ -367,7 +372,27 @@ async fn run_tool(shared: &Arc<Shared>, name: &str, arguments: Value) -> Result<
                 },
             )
             .await?;
-            ok_result(response)
+            diagnostics_result(response)
+        }
+        "get_api_reference" => {
+            let correlation_id = shared.correlation();
+            let response =
+                send_request(shared, AgentRequest::GetApiReference { correlation_id }).await?;
+            match response {
+                AgentResponse::Reference { reference, .. } => Ok(reference.to_string()),
+                other => format_other(other),
+            }
+        }
+        "get_console" => {
+            let correlation_id = shared.correlation();
+            let response =
+                send_request(shared, AgentRequest::GetConsole { correlation_id }).await?;
+            match response {
+                AgentResponse::Console { entries, .. } => {
+                    Ok(serde_json::to_string(&entries).unwrap_or_default())
+                }
+                other => format_other(other),
+            }
         }
         "list_plugins" => {
             let correlation_id = shared.correlation();
@@ -414,7 +439,7 @@ async fn run_tool(shared: &Arc<Shared>, name: &str, arguments: Value) -> Result<
                 },
             )
             .await?;
-            ok_result(response)
+            diagnostics_result(response)
         }
         "run_command" => {
             let command = arguments
@@ -493,9 +518,25 @@ async fn screenshot_tool(shared: &Arc<Shared>, arguments: Value) -> Result<Value
     }
 }
 
-fn ok_result(response: AgentResponse) -> Result<String, String> {
+fn diagnostics_result(response: AgentResponse) -> Result<String, String> {
     match response {
-        AgentResponse::Ok { .. } => Ok(json!({ "ok": true }).to_string()),
+        AgentResponse::Diagnostics { diagnostics, .. } => {
+            let issues: Vec<Value> = diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    json!({
+                        "severity": match diagnostic.severity {
+                            protocol::Severity::Error => "error",
+                            protocol::Severity::Warning => "warning",
+                        },
+                        "line": diagnostic.line,
+                        "column": diagnostic.column,
+                        "message": diagnostic.message,
+                    })
+                })
+                .collect();
+            Ok(json!({ "ok": issues.is_empty(), "diagnostics": issues }).to_string())
+        }
         AgentResponse::Error { message, .. } => Err(message),
         other => format_other(other),
     }
@@ -526,8 +567,18 @@ fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool(
+            "get_api_reference",
+            "The scripting API: every command (method name, fields, reply type) and every standard-library helper (name, signature, receiver). Call this first to learn what you can write in a plugin. You cannot read the source files; this is the API.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool(
+            "get_console",
+            "The recent console traffic: the commands a plugin ran, the events it received, and any runtime errors. Call this after editing to see whether a plugin errored at run time.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool(
             "set_buffer",
-            "Replace a plugin's rhai source. The scene re-runs the plugins with the new source.",
+            "Replace a plugin's rhai source. The scene re-runs the plugins with the new source. Returns diagnostics: ok is true when it compiled clean, otherwise the syntax errors and unknown-command warnings.",
             json!({
                 "type": "object",
                 "properties": {
@@ -544,7 +595,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "edit_plugin",
-            "Create or update a plugin. Pass an existing id to update it, or a new id to create one. The scene re-runs the plugins.",
+            "Create or update a plugin. Pass an existing id to update it, or a new id to create one. The scene re-runs the plugins. Returns diagnostics for the new source: ok is true when it compiled clean, otherwise the syntax errors and unknown-command warnings.",
             json!({
                 "type": "object",
                 "properties": {

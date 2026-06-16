@@ -16,7 +16,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 const WS_ADDR: &str = "127.0.0.1:8791";
 const MCP_URL: &str = "http://127.0.0.1:8790/mcp";
-const SYSTEM_PROMPT: &str = "You are embedded in the Neon editor's chat panel. Use the neon MCP tools to inspect and edit the live 3D scene and the rhai plugins when the user asks. You can read and write plugin buffers, run api commands, query the scene, and screenshot the viewport.";
+const SYSTEM_PROMPT: &str = "You are embedded in the Neon editor's chat panel. You drive the editor only through the neon MCP tools. You have no filesystem, shell, or web access, so do not try to read the source: call get_api_reference to learn the scripting API (every command and standard-library helper). A plugin is a rhai script with on_start and/or on_tick that pushes Commands to `commands` and reads this frame's Events from `events`. Author and edit plugins with edit_plugin and set_buffer; both return diagnostics, so check that ok is true and fix any errors or unknown-command warnings before moving on. After editing, call get_console to see runtime errors and the commands a plugin ran, and query_scene to confirm entities exist. Use get_editor_state for the open plugins and selection, and screenshot to see the viewport.";
 
 struct Shared {
     page_tx: Mutex<Option<mpsc::UnboundedSender<String>>>,

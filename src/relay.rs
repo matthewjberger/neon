@@ -108,19 +108,35 @@ fn handle_request(
             buffer,
             text,
         } => {
+            let diagnostics = crate::check::check(state, &text);
             set_buffer(state, bridge, &buffer, text);
-            AgentResponse::Ok { correlation_id }
+            AgentResponse::Diagnostics {
+                correlation_id,
+                diagnostics,
+            }
         }
         AgentRequest::ListPlugins { correlation_id } => AgentResponse::Plugins {
             correlation_id,
             plugins: state.plugins.get_untracked(),
         },
+        AgentRequest::GetApiReference { correlation_id } => AgentResponse::Reference {
+            correlation_id,
+            reference: api_reference(state),
+        },
+        AgentRequest::GetConsole { correlation_id } => AgentResponse::Console {
+            correlation_id,
+            entries: state.log.get_untracked(),
+        },
         AgentRequest::EditPlugin {
             correlation_id,
             plugin,
         } => {
+            let diagnostics = crate::check::check(state, &plugin.source);
             edit_plugin(state, bridge, plugin);
-            AgentResponse::Ok { correlation_id }
+            AgentResponse::Diagnostics {
+                correlation_id,
+                diagnostics,
+            }
         }
         _ => return,
     };
@@ -146,6 +162,51 @@ fn editor_state_json(state: EditorState) -> serde_json::Value {
         "entity_count": state.entity_count.get_untracked(),
         "theme": state.theme.get_untracked(),
     })
+}
+
+fn api_reference(state: EditorState) -> serde_json::Value {
+    let commands: Vec<serde_json::Value> = state
+        .commands
+        .get_untracked()
+        .into_iter()
+        .map(|command| {
+            let fields: Vec<serde_json::Value> = command
+                .fields
+                .iter()
+                .map(|field| {
+                    json!({ "name": field.name, "type": field.type_name, "role": field.role })
+                })
+                .collect();
+            json!({
+                "method": command.method,
+                "variant": command.variant,
+                "description": command.description,
+                "fields": fields,
+                "reply": command.reply,
+            })
+        })
+        .collect();
+    let stdlib: Vec<serde_json::Value> = state
+        .stdlib
+        .get_untracked()
+        .into_iter()
+        .map(|module| {
+            let helpers: Vec<serde_json::Value> = module
+                .helpers
+                .iter()
+                .map(|helper| {
+                    json!({
+                        "name": helper.name,
+                        "signature": helper.signature,
+                        "description": helper.description,
+                        "receiver": helper.receiver,
+                    })
+                })
+                .collect();
+            json!({ "module": module.name, "helpers": helpers })
+        })
+        .collect();
+    json!({ "commands": commands, "stdlib": stdlib })
 }
 
 fn buffer_text(state: EditorState, buffer: Option<String>) -> String {

@@ -17,6 +17,7 @@
 
 mod app;
 mod bridge;
+mod check;
 mod commands;
 mod components;
 mod editor_plugins;

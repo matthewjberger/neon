@@ -241,6 +241,8 @@ fn correlation_of(request: &AgentRequest) -> protocol::CorrelationId {
         | AgentRequest::GetBuffer { correlation_id, .. }
         | AgentRequest::SetBuffer { correlation_id, .. }
         | AgentRequest::ListPlugins { correlation_id }
+        | AgentRequest::GetApiReference { correlation_id }
+        | AgentRequest::GetConsole { correlation_id }
         | AgentRequest::EditPlugin { correlation_id, .. }
         | AgentRequest::RunCommand { correlation_id, .. }
         | AgentRequest::QueryScene { correlation_id, .. }

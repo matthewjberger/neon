@@ -260,6 +260,13 @@ pub enum AgentRequest {
     },
     /// List the plugins with their enabled state and ids. The page answers.
     ListPlugins { correlation_id: CorrelationId },
+    /// The scripting API: every command (method, fields, reply) and every
+    /// standard-library helper (name, signature, receiver). The page answers, so
+    /// the agent can learn the API without reading source.
+    GetApiReference { correlation_id: CorrelationId },
+    /// The recent console traffic: the commands, events, and errors from the last
+    /// ticks. The page answers, so the agent can see runtime errors and output.
+    GetConsole { correlation_id: CorrelationId },
     /// Create, update, or toggle a plugin. The page answers and re-syncs.
     EditPlugin {
         correlation_id: CorrelationId,
@@ -297,6 +304,21 @@ pub enum AgentResponse {
     Plugins {
         correlation_id: CorrelationId,
         plugins: Vec<PluginSource>,
+    },
+    /// The scripting API reference: commands and standard-library helpers.
+    Reference {
+        correlation_id: CorrelationId,
+        reference: Value,
+    },
+    /// The recent console traffic.
+    Console {
+        correlation_id: CorrelationId,
+        entries: Vec<LogEntry>,
+    },
+    /// The diagnostics for a buffer after an edit: empty means it compiled clean.
+    Diagnostics {
+        correlation_id: CorrelationId,
+        diagnostics: Vec<Diagnostic>,
     },
     Ok {
         correlation_id: CorrelationId,
