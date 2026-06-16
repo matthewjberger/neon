@@ -202,8 +202,9 @@ pub fn request_completion(state: EditorState) {
     );
 }
 
-/// Requests the definition of the symbol at the caret and jumps to it.
-pub fn request_definition(state: EditorState) {
+/// Requests definitions, type definitions, or implementations of the symbol at
+/// the caret by method, jumping to the one result or listing many in the picker.
+pub fn request_locations(state: EditorState, method: &str) {
     let Some((path, line, character)) = caret_position(state) else {
         return;
     };
@@ -213,7 +214,7 @@ pub fn request_definition(state: EditorState) {
     });
     send_request_id(
         id,
-        "textDocument/definition",
+        method,
         json!({
             "textDocument": { "uri": file_uri(&path) },
             "position": { "line": line, "character": character },
@@ -306,6 +307,30 @@ pub fn request_references(state: EditorState) {
             "context": { "includeDeclaration": true },
         }),
     );
+}
+
+/// Searches workspace symbols matching the word at the caret into the picker.
+pub fn request_workspace_symbols() {
+    if !ready() {
+        return;
+    }
+    let query = crate::components::find::active()
+        .map(|element| {
+            let value = element.value();
+            let caret = element.selection_start().ok().flatten().unwrap_or(0);
+            word_at(&value, caret)
+        })
+        .unwrap_or_default();
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(
+            id,
+            Pending::Symbols {
+                path: String::new(),
+            },
+        );
+    });
+    send_request_id(id, "workspace/symbol", json!({ "query": query }));
 }
 
 /// Requests the document symbols of the focused file into the search panel.
@@ -591,28 +616,44 @@ fn to_entry(item: &Value) -> Option<CompletionEntry> {
     Some(CompletionEntry { label, insert })
 }
 
-fn apply_definition(state: EditorState, value: &Value) {
+fn apply_locations(state: EditorState, value: &Value) {
     let result = value.get("result");
-    let location = match result {
-        Some(Value::Array(items)) => items.first(),
-        Some(object) if object.is_object() => Some(object),
-        _ => None,
+    let raw = match result {
+        Some(Value::Array(items)) => items.iter().collect::<Vec<_>>(),
+        Some(object) if object.is_object() => vec![object],
+        _ => Vec::new(),
     };
-    let Some(location) = location else {
-        return;
-    };
-    let uri = location
-        .get("uri")
-        .or_else(|| location.get("targetUri"))
-        .and_then(Value::as_str);
-    let line = location
-        .pointer("/range/start/line")
-        .or_else(|| location.pointer("/targetSelectionRange/start/line"))
-        .and_then(Value::as_u64);
-    if let (Some(uri), Some(line)) = (uri, line) {
-        let path = path_from_uri(uri);
-        crate::fs::read_file(&path);
-        state.goto.set(Some((path, line as u32 + 1)));
+    let locations: Vec<(String, u32)> = raw
+        .iter()
+        .filter_map(|location| {
+            let uri = location
+                .get("uri")
+                .or_else(|| location.get("targetUri"))
+                .and_then(Value::as_str)?;
+            let line = location
+                .pointer("/range/start/line")
+                .or_else(|| location.pointer("/targetSelectionRange/start/line"))
+                .and_then(Value::as_u64)?;
+            Some((path_from_uri(uri), line as u32 + 1))
+        })
+        .collect();
+    match locations.as_slice() {
+        [] => {}
+        [(path, line)] => {
+            crate::fs::read_file(path);
+            state.goto.set(Some((path.clone(), *line)));
+        }
+        _ => {
+            let hits = locations
+                .into_iter()
+                .map(|(path, line)| SearchHit {
+                    text: format!("{}:{}", basename(&path), line),
+                    path,
+                    line,
+                })
+                .collect();
+            state.symbol_picker.set(hits);
+        }
     }
 }
 
@@ -1058,7 +1099,7 @@ fn handle_rpc(state: EditorState, value: Value) {
             Pending::Completion { prefix, x, y } => apply_completion(state, &value, prefix, x, y),
             Pending::Hover { x, y } => apply_hover(state, &value, x, y),
             Pending::Signature { x, y } => apply_signature(state, &value, x, y),
-            Pending::Definition => apply_definition(state, &value),
+            Pending::Definition => apply_locations(state, &value),
             Pending::Format { path } => apply_format(state, &value, &path),
             Pending::References => apply_references(state, &value),
             Pending::Symbols { path } => apply_symbols(state, &value, &path),

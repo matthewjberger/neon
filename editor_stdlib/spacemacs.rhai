@@ -14,7 +14,8 @@
 //          w/W/=/x   focus other / previous / balance / close split
 //   SPC s  s/p///j   search: find buffer / project / project / jump word
 //   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
-//   SPC g  g/r/R/s   goto: definition (also "gd") / references / rename / symbol
+//   SPC g  g/t/i/r/R/s/S  goto: definition (also "gd") / type / impl /
+//                         references / rename / symbol / workspace symbols
 //   SPC h  h/s/k     help: hover (also "K") / signature help / keybindings
 //   SPC a            code action (also SPC x .)
 //   SPC e  n/p/l     errors: next / previous / rust-analyzer log
@@ -100,6 +101,7 @@ fn search_menu() {
         #{ key: "p", label: "Search project" },
         #{ key: "/", label: "Search project" },
         #{ key: "j", label: "Jump to symbol" },
+        #{ key: "J", label: "Workspace symbols" },
     ] };
 }
 
@@ -118,9 +120,12 @@ fn goto_menu() {
     #{ title: "+Goto", items: [
         #{ key: "g", label: "Go to definition" },
         #{ key: "d", label: "Go to definition" },
+        #{ key: "t", label: "Go to type definition" },
+        #{ key: "i", label: "Go to implementation" },
         #{ key: "r", label: "Find references" },
         #{ key: "R", label: "Rename symbol" },
         #{ key: "s", label: "Jump to symbol" },
+        #{ key: "S", label: "Workspace symbols" },
     ] };
 }
 
@@ -269,6 +274,7 @@ fn on_key() {
         if key == "s" { ops.push(#{ RunCommand: "find" }); }
         else if key == "p" || key == "/" { ops.push(#{ RunCommand: "show-search" }); }
         else if key == "j" { ops.push(#{ RunCommand: "jump-symbol" }); }
+        else if key == "J" { ops.push(#{ RunCommand: "workspace-symbols" }); }
         return;
     }
     if pending == "SPC j" {
@@ -287,9 +293,12 @@ fn on_key() {
         ops.push("HideMenu");
         state.pending = "";
         if key == "g" || key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
+        else if key == "t" { ops.push(#{ RunCommand: "go-to-type-definition" }); }
+        else if key == "i" { ops.push(#{ RunCommand: "go-to-implementation" }); }
         else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
         else if key == "R" { ops.push(#{ RunCommand: "rename-symbol" }); }
         else if key == "s" { ops.push(#{ RunCommand: "jump-symbol" }); }
+        else if key == "S" { ops.push(#{ RunCommand: "workspace-symbols" }); }
         return;
     }
     if pending == "SPC h" {

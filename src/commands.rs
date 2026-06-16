@@ -39,8 +39,11 @@ pub enum EditorCommand {
     JumpLine,
     JumpChar,
     GoToDefinition,
+    GoToTypeDefinition,
+    GoToImplementation,
     FindReferences,
     JumpSymbol,
+    WorkspaceSymbols,
     Hover,
     SignatureHelp,
     Rename,
@@ -89,8 +92,11 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "jump-line" => EditorCommand::JumpLine,
         "jump-char" => EditorCommand::JumpChar,
         "go-to-definition" => EditorCommand::GoToDefinition,
+        "go-to-type-definition" => EditorCommand::GoToTypeDefinition,
+        "go-to-implementation" => EditorCommand::GoToImplementation,
         "find-references" => EditorCommand::FindReferences,
         "jump-symbol" => EditorCommand::JumpSymbol,
+        "workspace-symbols" => EditorCommand::WorkspaceSymbols,
         "hover" => EditorCommand::Hover,
         "signature-help" => EditorCommand::SignatureHelp,
         "rename-symbol" => EditorCommand::Rename,
@@ -162,8 +168,20 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
             "Go to definition".to_string(),
             EditorCommand::GoToDefinition,
         ),
+        (
+            "Go to type definition".to_string(),
+            EditorCommand::GoToTypeDefinition,
+        ),
+        (
+            "Go to implementation".to_string(),
+            EditorCommand::GoToImplementation,
+        ),
         ("Find references".to_string(), EditorCommand::FindReferences),
         ("Jump to symbol".to_string(), EditorCommand::JumpSymbol),
+        (
+            "Search workspace symbols".to_string(),
+            EditorCommand::WorkspaceSymbols,
+        ),
         ("Show hover".to_string(), EditorCommand::Hover),
         ("Signature help".to_string(), EditorCommand::SignatureHelp),
         ("Rename symbol".to_string(), EditorCommand::Rename),
@@ -280,9 +298,18 @@ pub fn run(
         EditorCommand::JumpWord => crate::jump::start(state, crate::jump::JumpKind::Word),
         EditorCommand::JumpLine => crate::jump::start(state, crate::jump::JumpKind::Line),
         EditorCommand::JumpChar => crate::jump::start_char(state),
-        EditorCommand::GoToDefinition => crate::lsp::request_definition(state),
+        EditorCommand::GoToDefinition => {
+            crate::lsp::request_locations(state, "textDocument/definition")
+        }
+        EditorCommand::GoToTypeDefinition => {
+            crate::lsp::request_locations(state, "textDocument/typeDefinition")
+        }
+        EditorCommand::GoToImplementation => {
+            crate::lsp::request_locations(state, "textDocument/implementation")
+        }
         EditorCommand::FindReferences => crate::lsp::request_references(state),
         EditorCommand::JumpSymbol => crate::lsp::request_symbols(state),
+        EditorCommand::WorkspaceSymbols => crate::lsp::request_workspace_symbols(),
         EditorCommand::Hover => crate::lsp::request_hover_at_caret(state),
         EditorCommand::SignatureHelp => crate::lsp::request_signature_help(state),
         EditorCommand::Rename => crate::lsp::start_rename(state),

@@ -60,9 +60,10 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
             ("SPC j j / l / w / i", "Jump to char / line / word / symbol"),
             ("SPC j + / =", "Format the buffer (rust-analyzer)"),
             (
-                "SPC g g / r / R / s",
-                "Definition (also gd) / references / rename / symbol",
+                "SPC g g / t / i / r",
+                "Definition (also gd) / type / implementation / references",
             ),
+            ("SPC g R / s / S", "Rename / symbol / workspace symbols"),
             (
                 "SPC h h / s / k",
                 "Hover (also K) / signature help / keybindings",
