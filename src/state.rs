@@ -39,6 +39,11 @@ pub struct EditorState {
     pub editor_mode: RwSignal<String>,
     /// A transient status line an editor plugin can set.
     pub status: RwSignal<String>,
+    /// Whether the 3D preview pane is shown. Hiding it gives the editor the full
+    /// width, so neon works as a plain code editor.
+    pub viewport_open: RwSignal<bool>,
+    /// Whether the console pane is shown.
+    pub console_open: RwSignal<bool>,
     pub log: RwSignal<Vec<LogEntry>>,
     /// Diagnostics for the active plugin, from the language worker.
     pub diagnostics: RwSignal<Vec<Diagnostic>>,
@@ -68,6 +73,8 @@ impl EditorState {
             editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
             editor_mode: RwSignal::new("normal".to_string()),
             status: RwSignal::new(String::new()),
+            viewport_open: RwSignal::new(true),
+            console_open: RwSignal::new(true),
             log: RwSignal::new(Vec::new()),
             diagnostics: RwSignal::new(Vec::new()),
             running: RwSignal::new(true),
@@ -91,6 +98,22 @@ impl EditorState {
                 .iter()
                 .find(|plugin| Some(&plugin.id) == active.as_ref())
                 .map(|plugin| plugin.source.clone())
+                .unwrap_or_default()
+        })
+    }
+
+    /// The active buffer's display name.
+    pub fn active_name(&self) -> String {
+        let active = self.active.get();
+        let signal = match self.active_kind.get() {
+            PluginKind::Scene => self.plugins,
+            PluginKind::Editor => self.editor_plugins,
+        };
+        signal.with(|plugins| {
+            plugins
+                .iter()
+                .find(|plugin| Some(&plugin.id) == active.as_ref())
+                .map(|plugin| plugin.name.clone())
                 .unwrap_or_default()
         })
     }

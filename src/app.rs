@@ -105,9 +105,14 @@ pub fn App() -> impl IntoView {
             <div class="workspace">
                 <PluginPanel bridge state />
                 <EditorPane bridge lang state />
-                <div class="right-column">
+                <div
+                    class="right-column"
+                    style:display=move || if state.viewport_open.get() { "flex" } else { "none" }
+                >
                     <Viewport bridge state />
-                    <Console bridge state />
+                    <Show when=move || state.console_open.get() fallback=|| ()>
+                        <Console bridge state />
+                    </Show>
                 </div>
             </div>
             <Reference state />

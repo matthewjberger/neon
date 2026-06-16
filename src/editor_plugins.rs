@@ -318,6 +318,31 @@ fn hash_source(source: &str) -> u64 {
     hasher.finish()
 }
 
+/// Inserts text at the caret and updates the active buffer. Used for the editor's
+/// own Tab-to-indent, independent of any plugin.
+pub fn insert_text(state: EditorState, textarea: &HtmlTextAreaElement, text: &str) {
+    let mut chars: Vec<char> = textarea.value().chars().collect();
+    let mut caret = textarea.selection_start().ok().flatten().unwrap_or(0) as usize;
+    caret = caret.min(chars.len());
+    let inserted: Vec<char> = text.chars().collect();
+    let count = inserted.len();
+    chars.splice(caret..caret, inserted);
+    let value: String = chars.iter().collect();
+    textarea.set_value(&value);
+    let caret = (caret + count) as u32;
+    let _ = textarea.set_selection_range(caret, caret);
+    let signal = state.active_signal();
+    let active = state.active.get_untracked();
+    signal.update(|plugins| {
+        if let Some(plugin) = plugins
+            .iter_mut()
+            .find(|plugin| Some(&plugin.id) == active.as_ref())
+        {
+            plugin.source = value.clone();
+        }
+    });
+}
+
 /// Whether any editor plugin is enabled, so the editor pane should route keys.
 pub fn any_enabled(state: EditorState) -> bool {
     state

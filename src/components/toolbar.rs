@@ -42,6 +42,22 @@ pub fn Toolbar(
             <button class="tool-button" on:click=reset>"Reset"</button>
             <button
                 class="tool-button"
+                class:active=move || state.viewport_open.get()
+                title="Show or hide the 3D preview"
+                on:click=move |_| state.viewport_open.update(|open| *open = !*open)
+            >
+                "Preview"
+            </button>
+            <button
+                class="tool-button"
+                class:active=move || state.console_open.get()
+                title="Show or hide the console"
+                on:click=move |_| state.console_open.update(|open| *open = !*open)
+            >
+                "Console"
+            </button>
+            <button
+                class="tool-button"
                 class:active=move || state.reference_open.get()
                 on:click=toggle_reference
             >

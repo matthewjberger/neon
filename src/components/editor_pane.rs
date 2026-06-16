@@ -25,6 +25,7 @@ pub fn EditorPane(
     state: EditorState,
 ) -> impl IntoView {
     let layer = NodeRef::<html::Pre>::new();
+    let gutter = NodeRef::<html::Div>::new();
     let textarea = NodeRef::<html::Textarea>::new();
     let debounce = StoredValue::new(None::<i32>);
     let request_id = StoredValue::new(0_u32);
@@ -52,6 +53,14 @@ pub fn EditorPane(
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
+        if event.key() == "Tab" {
+            event.prevent_default();
+            if let Some(element) = textarea.get() {
+                editor_plugins::insert_text(state, &element, "    ");
+                commit(bridge, lang, state, debounce, request_id);
+            }
+            return;
+        }
         if !editor_plugins::any_enabled(state) {
             return;
         }
@@ -80,7 +89,18 @@ pub fn EditorPane(
                 when=move || state.active.get().is_some()
                 fallback=|| view! { <div class="editor-empty">"Select or create a plugin to edit"</div> }
             >
+                <div class="editor-header">
+                    <span class="editor-filename">{move || state.active_name()}</span>
+                </div>
                 <div class="editor-wrap">
+                    <div class="editor-gutter" node_ref=gutter>
+                        {move || {
+                            let count = state.active_source().split('\n').count().max(1);
+                            (1..=count)
+                                .map(|number| view! { <div>{number}</div> })
+                                .collect_view()
+                        }}
+                    </div>
                     <pre class="editor-highlight" node_ref=layer aria-hidden="true">
                         {move || {
                             let source = state.active_source();
@@ -99,12 +119,16 @@ pub fn EditorPane(
                         on:input=on_input
                         on:keydown=on_keydown
                         on:scroll=move |event| {
-                            if let Some(layer) = layer.get()
-                                && let Some(target) = event.target()
+                            if let Some(target) = event.target()
                                 && let Ok(element) = target.dyn_into::<web_sys::HtmlElement>()
                             {
-                                layer.set_scroll_top(element.scroll_top());
-                                layer.set_scroll_left(element.scroll_left());
+                                if let Some(layer) = layer.get() {
+                                    layer.set_scroll_top(element.scroll_top());
+                                    layer.set_scroll_left(element.scroll_left());
+                                }
+                                if let Some(gutter) = gutter.get() {
+                                    gutter.set_scroll_top(element.scroll_top());
+                                }
                             }
                         }
                     />

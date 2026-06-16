@@ -165,8 +165,7 @@ body {
 .workspace {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 240px minmax(280px, 1fr) 1.2fr;
+  display: flex;
 }
 
 .plugin-panel,
@@ -180,7 +179,16 @@ body {
   overflow: hidden;
 }
 
+.plugin-panel {
+  flex: 0 0 220px;
+}
+
+.editor-pane {
+  flex: 1 1 0;
+}
+
 .right-column {
+  flex: 0 0 40%;
   border-right: none;
 }
 
@@ -262,6 +270,40 @@ body {
   color: var(--text-dim);
 }
 
+.editor-header {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+
+.editor-filename {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.editor-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 52px;
+  margin: 0;
+  padding: 12px 8px 12px 0;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border-right: 1px solid var(--panel-border);
+  overflow: hidden;
+  user-select: none;
+}
+
 .editor-wrap {
   position: relative;
   flex: 1;
@@ -272,9 +314,12 @@ body {
 .editor-highlight,
 .editor-textarea {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 52px;
   margin: 0;
-  padding: 12px;
+  padding: 12px 12px 12px 8px;
   border: 0;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 13px;
