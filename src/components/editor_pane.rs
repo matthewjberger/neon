@@ -164,6 +164,15 @@ pub fn EditorPane(
                 )
                 .unwrap_or(0);
             completion_timer.set_value(Some(handle));
+            if let Some(element) = textarea.get() {
+                let caret = element.selection_start().ok().flatten().unwrap_or(0) as usize;
+                let characters: Vec<char> = element.value().chars().collect();
+                match caret.checked_sub(1).and_then(|index| characters.get(index)) {
+                    Some('(') | Some(',') => crate::lsp::request_signature_help(state),
+                    Some(')') => state.hover.set(None),
+                    _ => {}
+                }
+            }
         }
     };
 

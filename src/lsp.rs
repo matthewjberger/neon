@@ -23,6 +23,7 @@ use crate::state::{
 enum Pending {
     Completion { prefix: String, x: f64, y: f64 },
     Hover { x: f64, y: f64 },
+    Signature { x: f64, y: f64 },
     Definition,
     Format { path: String },
     References,
@@ -257,6 +258,29 @@ pub fn request_hover_at_caret(state: EditorState) {
     send_request_id(
         id,
         "textDocument/hover",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+        }),
+    );
+}
+
+/// Requests signature help at the caret, shown in the hover card.
+pub fn request_signature_help(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let Some(element) = crate::components::find::active() else {
+        return;
+    };
+    let (x, y) = caret_pixel(&element, line, character);
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::Signature { x, y });
+    });
+    send_request_id(
+        id,
+        "textDocument/signatureHelp",
         json!({
             "textDocument": { "uri": file_uri(&path) },
             "position": { "line": line, "character": character },
@@ -807,6 +831,36 @@ fn offset_of(value: &str, line: u32, character: u32) -> u32 {
     offset + character
 }
 
+fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
+    let result = value.get("result");
+    let signatures = result
+        .and_then(|result| result.get("signatures"))
+        .and_then(Value::as_array);
+    let Some(signatures) = signatures.filter(|items| !items.is_empty()) else {
+        state.hover.set(None);
+        return;
+    };
+    let active = result
+        .and_then(|result| result.get("activeSignature"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    let label = signatures
+        .get(active)
+        .or_else(|| signatures.first())
+        .and_then(|signature| signature.get("label"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if label.trim().is_empty() {
+        state.hover.set(None);
+    } else {
+        state.hover.set(Some(HoverCard {
+            text: label.to_string(),
+            x,
+            y,
+        }));
+    }
+}
+
 fn apply_hover(state: EditorState, value: &Value, x: f64, y: f64) {
     let contents = value.pointer("/result/contents");
     let text = match contents {
@@ -1003,6 +1057,7 @@ fn handle_rpc(state: EditorState, value: Value) {
         match pending {
             Pending::Completion { prefix, x, y } => apply_completion(state, &value, prefix, x, y),
             Pending::Hover { x, y } => apply_hover(state, &value, x, y),
+            Pending::Signature { x, y } => apply_signature(state, &value, x, y),
             Pending::Definition => apply_definition(state, &value),
             Pending::Format { path } => apply_format(state, &value, &path),
             Pending::References => apply_references(state, &value),

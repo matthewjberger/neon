@@ -15,7 +15,7 @@
 //   SPC s  s/p///j   search: find buffer / project / project / jump word
 //   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
 //   SPC g  g/r/R/s   goto: definition (also "gd") / references / rename / symbol
-//   SPC h  h/k       help: hover (also "K") / keybindings
+//   SPC h  h/s/k     help: hover (also "K") / signature help / keybindings
 //   SPC a            code action (also SPC x .)
 //   SPC e  n/p/l     errors: next / previous / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
@@ -157,6 +157,7 @@ fn toggle_menu() {
 fn help_menu() {
     #{ title: "+Help", items: [
         #{ key: "h", label: "Describe symbol (hover)" },
+        #{ key: "s", label: "Signature help" },
         #{ key: "k", label: "Keybindings" },
     ] };
 }
@@ -296,6 +297,7 @@ fn on_key() {
         ops.push("HideMenu");
         state.pending = "";
         if key == "h" { ops.push(#{ RunCommand: "hover" }); }
+        else if key == "s" { ops.push(#{ RunCommand: "signature-help" }); }
         else if key == "k" { ops.push(#{ RunCommand: "open-help" }); }
         return;
     }
