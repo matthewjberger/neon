@@ -7,6 +7,7 @@
 //! parts the facade does not cover from a worker: the renderer, the offscreen
 //! driver, and input injection.
 
+mod screenshot;
 mod state;
 mod stdlib;
 mod systems;
@@ -80,6 +81,7 @@ fn handle_data(
             let app_slot = app_slot.clone();
             let pending = pending.clone();
             spawn_local(async move {
+                screenshot::set_canvas(canvas.clone());
                 let app = create_app(canvas, width, height).await;
                 *app_slot.borrow_mut() = Some(app);
                 let queued = std::mem::take(&mut *pending.borrow_mut());
@@ -176,8 +178,16 @@ fn apply_client_message(world: &mut World, scene: &mut Scene, message: ClientMes
             systems::plugins::set_running(scene, running);
         }
         ClientMessage::Agent(request) => {
-            let response = handle_agent(world, *request);
-            post(&WorkerMessage::Agent(Box::new(response)));
+            if let AgentRequest::Screenshot {
+                correlation_id,
+                max_dimension,
+            } = *request
+            {
+                screenshot::queue(correlation_id, max_dimension);
+            } else {
+                let response = handle_agent(world, *request);
+                post(&WorkerMessage::Agent(Box::new(response)));
+            }
         }
         ClientMessage::Init { .. } | ClientMessage::Resize { .. } => {}
     }
@@ -224,10 +234,6 @@ fn handle_agent(world: &mut World, request: AgentRequest) -> AgentResponse {
                 result: serde_json::json!({ "entities": ids }),
             }
         }
-        AgentRequest::Screenshot { correlation_id, .. } => AgentResponse::Error {
-            correlation_id,
-            message: "screenshot from the worker is not yet wired".to_string(),
-        },
         other => AgentResponse::Error {
             correlation_id: correlation_of(&other),
             message: "request is editor-domain, not scene-domain".to_string(),
@@ -289,6 +295,7 @@ fn start_render_loop(app_slot: AppSlot) {
     spawn_animation_frame_loop(move || {
         if let Some(app) = app_slot.borrow_mut().as_mut() {
             tick_offscreen(&mut app.world, &mut app.state, &mut app.renderer);
+            screenshot::flush();
 
             if !app.state.log.is_empty() {
                 let entries = std::mem::take(&mut app.state.log);
