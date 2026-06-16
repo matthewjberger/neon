@@ -63,6 +63,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
                 "SPC g g / r / R / s",
                 "Definition (also gd) / references / rename / symbol",
             ),
+            ("SPC h h / k", "Hover (also K) / keybindings"),
             ("SPC a", "Code action (also SPC x .)"),
             (
                 "SPC x ; / d / j / k / J",

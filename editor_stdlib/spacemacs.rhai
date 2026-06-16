@@ -15,6 +15,7 @@
 //   SPC s  s/p///j   search: find buffer / project / project / jump word
 //   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
 //   SPC g  g/r/R/s   goto: definition (also "gd") / references / rename / symbol
+//   SPC h  h/k       help: hover (also "K") / keybindings
 //   SPC a            code action (also SPC x .)
 //   SPC e  n/p/l     errors: next / previous / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
@@ -44,6 +45,7 @@ fn leader_menu() {
         #{ key: "s", label: "+Search" },
         #{ key: "j", label: "+Jump" },
         #{ key: "g", label: "+Goto" },
+        #{ key: "h", label: "+Help" },
         #{ key: "a", label: "Code action" },
         #{ key: "x", label: "+Text" },
         #{ key: "t", label: "+Toggles" },
@@ -152,6 +154,13 @@ fn toggle_menu() {
     ] };
 }
 
+fn help_menu() {
+    #{ title: "+Help", items: [
+        #{ key: "h", label: "Describe symbol (hover)" },
+        #{ key: "k", label: "Keybindings" },
+    ] };
+}
+
 fn error_menu() {
     #{ title: "+Errors", items: [
         #{ key: "n", label: "Next error" },
@@ -209,6 +218,7 @@ fn on_key() {
         else if key == "s" { state.pending = "SPC s"; ops.push(#{ ShowMenu: search_menu() }); }
         else if key == "j" { state.pending = "SPC j"; ops.push(#{ ShowMenu: jump_menu() }); }
         else if key == "g" { state.pending = "SPC g"; ops.push(#{ ShowMenu: goto_menu() }); }
+        else if key == "h" { state.pending = "SPC h"; ops.push(#{ ShowMenu: help_menu() }); }
         else if key == "x" { state.pending = "SPC x"; ops.push(#{ ShowMenu: text_menu() }); }
         else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
         else if key == "e" { state.pending = "SPC e"; ops.push(#{ ShowMenu: error_menu() }); }
@@ -279,6 +289,14 @@ fn on_key() {
         else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
         else if key == "R" { ops.push(#{ RunCommand: "rename-symbol" }); }
         else if key == "s" { ops.push(#{ RunCommand: "jump-symbol" }); }
+        return;
+    }
+    if pending == "SPC h" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "h" { ops.push(#{ RunCommand: "hover" }); }
+        else if key == "k" { ops.push(#{ RunCommand: "open-help" }); }
         return;
     }
     if pending == "SPC x" {
@@ -375,5 +393,6 @@ fn on_key() {
     else if key == "D" { ops.push("DeleteToLineEnd"); }
     else if key == "C" { ops.push("DeleteToLineEnd"); ops.push(#{ SetMode: "insert" }); }
     else if key == "J" { ops.push("JoinLines"); }
+    else if key == "K" { ops.push(#{ RunCommand: "hover" }); }
     else if key == "d" { state.pending = "d"; }
 }

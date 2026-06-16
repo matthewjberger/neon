@@ -241,6 +241,29 @@ pub fn format_document(state: EditorState) {
     );
 }
 
+/// Requests hover for the symbol at the caret, anchored under it.
+pub fn request_hover_at_caret(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let Some(element) = crate::components::find::active() else {
+        return;
+    };
+    let (x, y) = caret_pixel(&element, line, character);
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::Hover { x, y });
+    });
+    send_request_id(
+        id,
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+        }),
+    );
+}
+
 /// Requests all references to the symbol at the caret into the search panel.
 pub fn request_references(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {
