@@ -231,6 +231,9 @@ pub struct EditorState {
     /// The titles of the code actions offered for the caret, when the picker is
     /// open. Empty means closed; the index selects the action.
     pub code_actions: RwSignal<Vec<String>>,
+    /// The document symbols offered in the fuzzy symbol picker. Empty means
+    /// closed; selecting one jumps to it.
+    pub symbol_picker: RwSignal<Vec<SearchHit>>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -301,6 +304,7 @@ impl EditorState {
             context_menu: RwSignal::new(None),
             rename: RwSignal::new(None),
             code_actions: RwSignal::new(Vec::new()),
+            symbol_picker: RwSignal::new(Vec::new()),
         }
     }
 

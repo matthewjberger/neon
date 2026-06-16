@@ -628,8 +628,7 @@ fn apply_symbols(state: EditorState, value: &Value, path: &str) {
     };
     let mut hits = Vec::new();
     collect_symbols(items, path, &mut hits);
-    state.search_results.set(hits);
-    state.sidebar_view.set(SidebarView::Search);
+    state.symbol_picker.set(hits);
 }
 
 fn collect_symbols(items: &[Value], path: &str, out: &mut Vec<SearchHit>) {

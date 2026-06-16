@@ -596,6 +596,16 @@ body {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+.palette-symbol {
+  color: var(--text);
+}
+
+.palette-symbol-loc {
+  margin-left: 10px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 .help-overlay {
   position: fixed;
   inset: 0;
