@@ -341,6 +341,23 @@ fn apply(
                 let end = line_end(&text, caret);
                 if end < text.len() {
                     text.remove(end);
+                    let mut whitespace = 0;
+                    while end + whitespace < text.len()
+                        && (text[end + whitespace] == ' ' || text[end + whitespace] == '\t')
+                    {
+                        whitespace += 1;
+                    }
+                    if whitespace > 0 {
+                        text.drain(end..end + whitespace);
+                    }
+                    let previous_is_break = end == 0
+                        || text[end - 1] == ' '
+                        || text[end - 1] == '\t'
+                        || text[end - 1] == '\n';
+                    let has_following = end < text.len() && text[end] != '\n';
+                    if !previous_is_break && has_following {
+                        text.insert(end, ' ');
+                    }
                     caret = end;
                     changed = true;
                 }

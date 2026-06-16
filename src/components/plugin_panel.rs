@@ -128,6 +128,12 @@ pub fn PluginPanel(
                                             {
                                                 plugin.enabled = enabled;
                                             }
+                                            if enabled {
+                                                crate::plugins::enforce_modal_exclusivity(
+                                                    plugins,
+                                                    &toggle_id,
+                                                );
+                                            }
                                         });
                                         editor_plugins::reset_mode(state);
                                     }

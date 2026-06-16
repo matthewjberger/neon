@@ -239,6 +239,24 @@ pub fn catalog() -> Vec<CatalogEntry> {
     ]
 }
 
+/// Whether an editor plugin is a modal keybinding layer. Only one should be
+/// enabled at a time, since they each claim the whole keyboard in normal mode.
+pub fn is_modal(id: &str) -> bool {
+    matches!(id, "vim" | "spacemacs")
+}
+
+/// Disables every other modal layer when one is enabled, so they never stack.
+pub fn enforce_modal_exclusivity(plugins: &mut [PluginSource], enabled: &str) {
+    if !is_modal(enabled) {
+        return;
+    }
+    for plugin in plugins.iter_mut() {
+        if plugin.id != enabled && is_modal(&plugin.id) {
+            plugin.enabled = false;
+        }
+    }
+}
+
 /// An installed, enabled plugin from a catalog entry.
 pub fn entry_to_plugin(entry: &CatalogEntry) -> PluginSource {
     PluginSource {

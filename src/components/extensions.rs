@@ -82,7 +82,12 @@ fn toggle_install(
             state.open_in_focused(kind, None);
         }
     } else if let Some(entry) = catalog().iter().find(|entry| entry.id == id) {
-        signal.update(|plugins| plugins.push(entry_to_plugin(entry)));
+        signal.update(|plugins| {
+            plugins.push(entry_to_plugin(entry));
+            if kind == PluginKind::Editor {
+                crate::plugins::enforce_modal_exclusivity(plugins, id);
+            }
+        });
         state.open_in_focused(kind, Some(id.to_string()));
     }
     if kind == PluginKind::Scene

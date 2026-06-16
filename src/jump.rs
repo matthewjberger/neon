@@ -127,11 +127,16 @@ fn show(state: EditorState, element: &HtmlTextAreaElement, spots: Vec<Spot>) {
     }));
 }
 
-/// The inclusive range of document lines currently scrolled into view.
+/// The inclusive range of document lines currently scrolled into view. Falls
+/// back to the whole buffer (capped by `LIMIT`) when the pane has no measured
+/// height yet, so a jump right after layout still finds targets.
 fn visible_lines(element: &HtmlTextAreaElement) -> (u32, u32) {
+    let height = element.client_height() as f64;
+    if height <= 0.0 {
+        return (0, u32::MAX);
+    }
     let line_height = caret::line_height(element).max(1.0);
     let top = element.scroll_top() as f64;
-    let height = element.client_height() as f64;
     let first = (top / line_height).floor().max(0.0) as u32;
     let last = ((top + height) / line_height).ceil() as u32 + 1;
     (first, last)
