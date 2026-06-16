@@ -107,11 +107,14 @@ pub struct JumpTarget {
     pub offset: u32,
 }
 
-/// Active jump mode: the labeled targets and the label prefix typed so far.
+/// Active jump mode: the labeled targets and the label prefix typed so far. When
+/// `awaiting_char` is set, the next keystroke chooses the character to jump to
+/// and the targets are built then.
 #[derive(Clone, PartialEq)]
 pub struct JumpState {
     pub targets: Vec<JumpTarget>,
     pub pending: String,
+    pub awaiting_char: bool,
 }
 
 /// One editor pane: a stable key, its open buffers as tabs with an active index,

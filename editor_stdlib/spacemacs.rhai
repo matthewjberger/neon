@@ -66,6 +66,7 @@ fn plugin_menu() {
 
 fn jump_menu() {
     #{ title: "+Jump", items: [
+        #{ key: "j", label: "Jump to char" },
         #{ key: "w", label: "Jump to word" },
         #{ key: "l", label: "Jump to line" },
     ] };
@@ -102,7 +103,8 @@ fn on_key() {
         ops.push("Consume");
         ops.push("HideMenu");
         state.pending = "";
-        if key == "w" { ops.push(#{ RunCommand: "jump-word" }); }
+        if key == "j" { ops.push(#{ RunCommand: "jump-char" }); }
+        else if key == "w" { ops.push(#{ RunCommand: "jump-word" }); }
         else if key == "l" { ops.push(#{ RunCommand: "jump-line" }); }
         return;
     }

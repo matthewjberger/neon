@@ -28,6 +28,7 @@ pub enum EditorCommand {
     Find,
     JumpWord,
     JumpLine,
+    JumpChar,
     ToggleLspLog,
     NewPlugin,
     RunPause,
@@ -58,6 +59,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "find" => EditorCommand::Find,
         "jump-word" => EditorCommand::JumpWord,
         "jump-line" => EditorCommand::JumpLine,
+        "jump-char" => EditorCommand::JumpChar,
         "toggle-lsp-log" => EditorCommand::ToggleLspLog,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
@@ -107,6 +109,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Find and replace".to_string(), EditorCommand::Find),
         ("Jump to word".to_string(), EditorCommand::JumpWord),
         ("Jump to line".to_string(), EditorCommand::JumpLine),
+        ("Jump to char".to_string(), EditorCommand::JumpChar),
         (
             "Toggle rust-analyzer log".to_string(),
             EditorCommand::ToggleLspLog,
@@ -183,6 +186,7 @@ pub fn run(
         EditorCommand::Find => state.find_open.set(true),
         EditorCommand::JumpWord => crate::jump::start(state, crate::jump::JumpKind::Word),
         EditorCommand::JumpLine => crate::jump::start(state, crate::jump::JumpKind::Line),
+        EditorCommand::JumpChar => crate::jump::start_char(state),
         EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");
