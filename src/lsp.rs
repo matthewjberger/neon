@@ -9,15 +9,22 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use leptos::prelude::*;
-use protocol::{Diagnostic, LspClientMessage, LspServerMessage, SearchHit, Severity};
+use protocol::{Diagnostic, LspServerMessage, SearchHit, Severity};
 use serde_json::{Value, json};
-use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
-use web_sys::{HtmlTextAreaElement, MessageEvent, WebSocket};
+use web_sys::{HtmlTextAreaElement, WebSocket};
 
 use crate::state::{
     CompletionEntry, CompletionMenu, EditorState, HoverCard, PluginKind, SidebarView, basename,
     language_for_path,
+};
+
+mod edits;
+mod transport;
+
+pub use edits::apply_pending_edits;
+use edits::{RangeEdit, apply_edits_to_file, apply_workspace_edit, parse_edits, splice_utf16};
+use transport::{
+    connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
 };
 
 enum Pending {
@@ -33,20 +40,6 @@ enum Pending {
     ResolveAction,
     Command,
 }
-
-/// One ranged text edit from the server, before it is resolved to byte offsets
-/// against a specific document version.
-#[derive(Clone)]
-struct RangeEdit {
-    start_line: u32,
-    start_character: u32,
-    end_line: u32,
-    end_character: u32,
-    new_text: String,
-}
-
-const LSP_URL: &str = "ws://127.0.0.1:8793";
-const RECONNECT_MS: i32 = 1000;
 
 /// The LSP client's per-page state, in one place: the socket, the handshake
 /// flag, the request-id counter, the per-file document versions, the latest
@@ -494,15 +487,6 @@ fn execute_command(command: &Value) {
     );
 }
 
-/// Applies edits queued for a file that was not open when a workspace edit
-/// arrived, called once the file's content is loaded.
-pub fn apply_pending_edits(state: EditorState, path: &str) {
-    let edits = client(|client| client.pending_edits.remove(path));
-    if let Some(edits) = edits {
-        apply_edits_to_file(state, path, &edits);
-    }
-}
-
 /// Moves the caret to the next or previous diagnostic in the focused file.
 pub fn goto_diagnostic(state: EditorState, forward: bool) {
     let buffer = state.focused_buffer();
@@ -832,44 +816,6 @@ fn apply_code_actions(state: EditorState, value: &Value) {
     state.code_actions.set(titles);
 }
 
-fn apply_workspace_edit(state: EditorState, edit: &Value) {
-    if let Some(changes) = edit.get("changes").and_then(Value::as_object) {
-        for (uri, edits) in changes {
-            if let Some(array) = edits.as_array() {
-                apply_uri_edits(state, uri, array);
-            }
-        }
-    }
-    if let Some(document_changes) = edit.get("documentChanges").and_then(Value::as_array) {
-        for change in document_changes {
-            let uri = change.pointer("/textDocument/uri").and_then(Value::as_str);
-            let edits = change.get("edits").and_then(Value::as_array);
-            if let (Some(uri), Some(edits)) = (uri, edits) {
-                apply_uri_edits(state, uri, edits);
-            }
-        }
-    }
-}
-
-fn apply_uri_edits(state: EditorState, uri: &str, raw: &[Value]) {
-    let path = path_from_uri(uri);
-    let edits = parse_edits(raw);
-    if edits.is_empty() {
-        return;
-    }
-    let open = state
-        .files
-        .with_untracked(|files| files.iter().any(|file| file.path == path));
-    if open {
-        apply_edits_to_file(state, &path, &edits);
-    } else {
-        client(|client| {
-            client.pending_edits.insert(path.clone(), edits);
-        });
-        crate::fs::read_file(&path);
-    }
-}
-
 fn word_at(value: &str, caret: u32) -> String {
     let mut offset = 0;
     let mut current = String::new();
@@ -893,71 +839,6 @@ fn word_at(value: &str, caret: u32) -> String {
         return current;
     }
     String::new()
-}
-
-fn parse_edits(raw: &[Value]) -> Vec<RangeEdit> {
-    raw.iter().filter_map(to_range_edit).collect()
-}
-
-fn to_range_edit(edit: &Value) -> Option<RangeEdit> {
-    Some(RangeEdit {
-        start_line: edit.pointer("/range/start/line").and_then(Value::as_u64)? as u32,
-        start_character: edit
-            .pointer("/range/start/character")
-            .and_then(Value::as_u64)? as u32,
-        end_line: edit.pointer("/range/end/line").and_then(Value::as_u64)? as u32,
-        end_character: edit
-            .pointer("/range/end/character")
-            .and_then(Value::as_u64)? as u32,
-        new_text: edit.get("newText").and_then(Value::as_str)?.to_string(),
-    })
-}
-
-/// Applies ranged edits to a string, resolving each range to a unit offset and
-/// splicing from the end so earlier offsets stay valid.
-fn apply_range_edits(text: &str, edits: &[RangeEdit]) -> String {
-    let mut resolved: Vec<(u32, u32, &str)> = edits
-        .iter()
-        .map(|edit| {
-            (
-                offset_of(text, edit.start_line, edit.start_character),
-                offset_of(text, edit.end_line, edit.end_character),
-                edit.new_text.as_str(),
-            )
-        })
-        .collect();
-    resolved.sort_by_key(|edit| std::cmp::Reverse(edit.0));
-    let mut result = text.to_string();
-    for (start, end, new_text) in resolved {
-        result = splice_utf16(&result, start, end, new_text);
-    }
-    result
-}
-
-/// Applies edits to an open file's buffer and notifies the server.
-fn apply_edits_to_file(state: EditorState, path: &str, edits: &[RangeEdit]) {
-    if edits.is_empty() {
-        return;
-    }
-    let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
-    let result = apply_range_edits(&text, edits);
-    state.set_buffer_text(PluginKind::File, &Some(path.to_string()), result);
-    did_change(state, path);
-}
-
-fn offset_of(value: &str, line: u32, character: u32) -> u32 {
-    let mut current_line = 0;
-    let mut offset = 0;
-    for unit in value.chars() {
-        if current_line == line {
-            break;
-        }
-        if unit == '\n' {
-            current_line += 1;
-        }
-        offset += unit.len_utf16() as u32;
-    }
-    offset + character
 }
 
 fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
@@ -1059,69 +940,6 @@ fn word_prefix(value: &str, caret: u32) -> String {
 fn caret_pixel(element: &HtmlTextAreaElement, line: u32, column: u32) -> (f64, f64) {
     let (x, top) = crate::caret::cell(element, line, column);
     (x, top + crate::caret::line_height(element))
-}
-
-fn splice_utf16(value: &str, start: u32, end: u32, replacement: &str) -> String {
-    let units: Vec<u16> = value.encode_utf16().collect();
-    let head = String::from_utf16_lossy(&units[..start as usize]);
-    let tail = String::from_utf16_lossy(&units[end as usize..]);
-    format!("{head}{replacement}{tail}")
-}
-
-fn send_request_id(id: i64, method: &str, params: Value) {
-    send_raw(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
-}
-
-fn connect(state: EditorState) {
-    let Ok(websocket) = WebSocket::new(LSP_URL) else {
-        schedule_reconnect(state);
-        return;
-    };
-    let open_state = state;
-    let onopen = Closure::<dyn FnMut()>::new(move || {
-        if let Some(root) = open_state.workspace_root.get_untracked() {
-            send(&LspClientMessage::Start {
-                root_uri: file_uri(&root),
-            });
-        }
-    });
-    websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-    onopen.forget();
-
-    let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
-        if let Some(text) = event.data().as_string()
-            && let Ok(message) = serde_json::from_str::<LspServerMessage>(&text)
-        {
-            handle(state, message);
-        }
-    });
-    websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-    onmessage.forget();
-
-    let onclose = Closure::<dyn FnMut()>::new(move || {
-        client(|client| client.ready = false);
-        schedule_reconnect(state);
-    });
-    websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-    onclose.forget();
-
-    client(|client| client.socket = Some(websocket));
-}
-
-fn schedule_reconnect(state: EditorState) {
-    client(|client| client.socket = None);
-    if !state.lsp_started.get_untracked() {
-        return;
-    }
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let callback = Closure::<dyn FnMut()>::new(move || connect(state));
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        callback.as_ref().unchecked_ref(),
-        RECONNECT_MS,
-    );
-    callback.forget();
 }
 
 fn handle(state: EditorState, message: LspServerMessage) {
@@ -1308,46 +1126,4 @@ fn log(state: EditorState, line: String) {
             entries.drain(0..overflow);
         }
     });
-}
-
-fn send_request(method: &str, params: Value) {
-    send_raw(json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }));
-}
-
-fn notify(method: &str, params: Value) {
-    send_raw(json!({ "jsonrpc": "2.0", "method": method, "params": params }));
-}
-
-fn send_raw(message: Value) {
-    send(&LspClientMessage::Rpc {
-        json: message.to_string(),
-    });
-}
-
-fn send(message: &LspClientMessage) {
-    client(|client| {
-        if let Some(websocket) = client.socket.as_ref()
-            && websocket.ready_state() == WebSocket::OPEN
-            && let Ok(text) = serde_json::to_string(message)
-        {
-            let _ = websocket.send_with_str(&text);
-        }
-    });
-}
-
-fn file_uri(path: &str) -> String {
-    let normalized = path.replace('\\', "/");
-    if normalized.starts_with('/') {
-        format!("file://{normalized}")
-    } else {
-        format!("file:///{normalized}")
-    }
-}
-
-fn path_from_uri(uri: &str) -> String {
-    let trimmed = uri
-        .strip_prefix("file:///")
-        .or_else(|| uri.strip_prefix("file://"))
-        .unwrap_or(uri);
-    trimmed.replace('/', "\\")
 }
