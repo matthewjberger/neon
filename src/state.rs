@@ -438,6 +438,9 @@ impl EditorState {
                 && index < pane.tabs.len()
             {
                 pane.tabs.remove(index);
+                if index < pane.active {
+                    pane.active -= 1;
+                }
                 if pane.active >= pane.tabs.len() {
                     pane.active = pane.tabs.len().saturating_sub(1);
                 }

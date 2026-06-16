@@ -2,6 +2,8 @@
 //! saved to local storage and restored on launch, so neon reopens where you left
 //! off. The plugin set persists separately (`plugins.rs`).
 
+use std::cell::RefCell;
+
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -15,17 +17,27 @@ struct Session {
     files: Vec<String>,
 }
 
+thread_local! {
+    static PENDING: RefCell<Option<Session>> = const { RefCell::new(None) };
+}
+
 fn storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok().flatten()
 }
 
-/// Reopens the saved folder and files. Called once the filesystem socket opens,
-/// so the requests are not dropped.
+/// Reads the saved session into memory at startup, before the save effect runs
+/// and overwrites it with the empty initial state.
+pub fn capture() {
+    let session = storage()
+        .and_then(|storage| storage.get_item(KEY).ok().flatten())
+        .and_then(|text| serde_json::from_str::<Session>(&text).ok());
+    PENDING.with(|pending| *pending.borrow_mut() = session);
+}
+
+/// Reopens the captured folder and files. Called once the filesystem socket
+/// opens, so the requests are not dropped.
 pub fn restore() {
-    let Some(text) = storage().and_then(|storage| storage.get_item(KEY).ok().flatten()) else {
-        return;
-    };
-    let Ok(session) = serde_json::from_str::<Session>(&text) else {
+    let Some(session) = PENDING.with(|pending| pending.borrow_mut().take()) else {
         return;
     };
     if let Some(root) = session.root {

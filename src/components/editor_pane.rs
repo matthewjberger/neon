@@ -319,7 +319,7 @@ pub fn EditorPane(
                         }
                     />
                 </div>
-                <Show when=focused fallback=|| ()>
+                <Show when=move || state.focused_key.get() == pane_key fallback=|| ()>
                     <div class="diagnostics">
                         <For
                             each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
