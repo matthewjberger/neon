@@ -107,8 +107,11 @@ workspace (respecting gitignore); the open folder and files are restored on
 launch (`src/session.rs`). For Rust files the page is an LSP client
 (`src/lsp.rs`, one `Client` struct): after a consent prompt it starts
 rust-analyzer (discovered through rustup), runs the initialize handshake, syncs
-open files with `didOpen`/`didChange`, and surfaces diagnostics, completion, and
-hover. The LSP log panel shows the server output.
+open files with `didOpen`/`didChange`, and surfaces diagnostics, completion,
+hover, signature help, go to definition, references, document symbols, rename,
+code actions, formatting, and diagnostic stepping. Every feature is an editor
+command, so the palette, the Spacemacs leader, and editor plugins all reach the
+same set. The LSP log panel shows the server output.
 
 ## Theming
 
@@ -186,7 +189,9 @@ one experience.
    Built.
 4. **Files and rust-analyzer.** The filesystem bridge (tree, read/write, project
    search), file buffers with tabs, session restore, and the rust-analyzer LSP
-   client (diagnostics, completion, hover) behind a consent prompt. Built.
+   client (diagnostics, completion, hover, signature help, definition,
+   references, symbols, rename, code actions, formatting) behind a consent
+   prompt. Built.
 5. **Deeper editor surface.** A custom-rendered surface for multi-cursor,
    integrated terminals, and richer multi-buffer manipulation, extending the same
    op and command vocabulary. Undo, tabs, find, and project search are already in.

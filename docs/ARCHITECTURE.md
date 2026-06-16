@@ -167,6 +167,7 @@ applies. The host owns the buffer text, so the ops do real editing: caret motion
 `PrevWord`, `FindChar`), edits (`Insert`, `DeleteForward`/`DeleteBackward`,
 `DeleteWordForward`/`DeleteWordBackward`, `DeleteLine`, `DeleteToLineEnd`,
 `DuplicateLine`, `MoveLineUp`/`MoveLineDown`, `JoinLines`, `Indent`/`Outdent`,
+`UpperCaseWord`/`LowerCaseWord`, `SortLines`, `DeleteTrailingWhitespace`,
 `ToggleComment`), and editor control (`SetMode`, `SetStatus`, `Consume`,
 `RunCommand`, `OpenPalette`, `ShowMenu`/`HideMenu`). The dispatch mirrors the
 scene-plugin model, on the editor instead of the scene, and runs synchronously in
@@ -178,14 +179,17 @@ layers.
 
 Editor commands live in one registry (`src/commands.rs`): split, focus, and
 balance panes, tabs (close, next, previous), files (open folder, save, save all,
-tree, search), the sidebar views, find, the jumps, run or pause, reset, themes,
-open buffers, and the palette or help. The command palette and the leader menus
+tree, search), the sidebar views, find, the jumps, the language features
+(definition, references, symbols, hover, signature help, rename, code actions,
+format, diagnostic stepping), run or pause, reset, themes, open buffers, the
+control panel, and the palette or help. The command palette and the leader menus
 both drive this one set, and an editor plugin invokes any of it through
 `RunCommand`, so plugins dictate what the editor does, not just what the buffer
 holds. The Spacemacs leader mirrors the VSpaceCode menu tree (`SPC f` files,
-`SPC b` buffers, `SPC w` windows, `SPC s` search, `SPC j` jump, `SPC t` toggles,
-`SPC ;` comment), and editing actions like comment toggle are pushed as ops
-directly.
+`SPC b` buffers, `SPC w` windows, `SPC s` search, `SPC j` jump, `SPC g` goto,
+`SPC h` help, `SPC e` errors, `SPC x` text, `SPC t` toggles, `SPC ;` comment,
+`SPC a` code action), and editing actions like the case and line transforms are
+pushed as ops directly.
 
 The default editor plugin is a Spacemacs layer: vim modal editing plus an `SPC`
 leader. Pressing `SPC` publishes a which-key menu through `ShowMenu`, and each
@@ -211,11 +215,23 @@ For a Rust file the page acts as an LSP client (`src/lsp.rs`), whose state lives
 in one `Client` struct. After a consent prompt (spawning a process), it asks the
 desktop to start rust-analyzer, runs the initialize handshake, syncs open files
 with `didOpen` and `didChange` (the overlay model, so the server sees unsaved
-edits), and turns `publishDiagnostics` into the diagnostics strip. It also
-requests completion at the caret (a popup anchored with a canvas-measured font
-advance) and hover under the pointer. The LSP log panel shows the server's
-output. The rhai language worker still drives plugin diagnostics; rust-analyzer
-is the parallel path for file buffers.
+edits), and turns `publishDiagnostics` into the diagnostics strip. On a server
+restart the client clears its open-document set so every file is reopened, since
+a fresh process starts empty.
+
+The client drives the full set of language features as editor commands, so the
+palette, the leader, and editor plugins all reach them: completion at the caret
+(a popup anchored with a canvas-measured font advance), hover (under the pointer
+or at the caret), signature help while typing a call, go to definition,
+references and document symbols (references into the search panel, symbols into a
+fuzzy picker), rename (a prompt whose workspace edit applies across open buffers
+and opens any other affected files to patch them), code actions (a picker that
+applies the edit or runs the command, handling the server's `applyEdit`
+request), whole-buffer formatting, and stepping through diagnostics. A shared
+ranged-edit applier resolves each edit's line and character to a unit offset and
+splices from the end. The LSP log panel shows the server's output. The rhai
+language worker still drives plugin diagnostics; rust-analyzer is the parallel
+path for file buffers.
 
 ## Project search and the filesystem bridge
 
