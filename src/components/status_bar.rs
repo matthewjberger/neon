@@ -11,17 +11,17 @@ pub fn StatusBar(state: EditorState) -> impl IntoView {
         <div class="status-bar">
             <span class="status-item">
                 {move || {
-                    let pane = state.focused();
-                    match pane.kind {
-                        PluginKind::File => pane.active.clone().unwrap_or_default(),
-                        _ => state.buffer_name(pane.kind, &pane.active),
+                    let buffer = state.focused_buffer();
+                    match buffer.kind {
+                        PluginKind::File => buffer.id.clone().unwrap_or_default(),
+                        _ => state.buffer_name(buffer.kind, &buffer.id),
                     }
                 }}
             </span>
             <Show
                 when=move || {
-                    let pane = state.focused();
-                    state.is_dirty(pane.kind, &pane.active)
+                    let buffer = state.focused_buffer();
+                    state.is_dirty(buffer.kind, &buffer.id)
                 }
                 fallback=|| ()
             >
@@ -42,10 +42,10 @@ pub fn StatusBar(state: EditorState) -> impl IntoView {
 }
 
 fn language_label(state: EditorState) -> &'static str {
-    let pane = state.focused();
-    match pane.kind {
-        PluginKind::File => pane
-            .active
+    let buffer = state.focused_buffer();
+    match buffer.kind {
+        PluginKind::File => buffer
+            .id
             .as_deref()
             .map(language_for_path)
             .unwrap_or("plaintext"),

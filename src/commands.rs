@@ -163,9 +163,9 @@ pub fn run(
         EditorCommand::ShowFiles => state.sidebar_view.set(SidebarView::Files),
         EditorCommand::OpenFolder => crate::fs::open_folder(),
         EditorCommand::SaveFile => {
-            let pane = state.focused();
-            if pane.kind == PluginKind::File
-                && let Some(path) = pane.active
+            let buffer = state.focused_buffer();
+            if buffer.kind == PluginKind::File
+                && let Some(path) = buffer.id
             {
                 let text = state.buffer_source(PluginKind::File, &Some(path.clone()));
                 crate::fs::write_file(&path, text);

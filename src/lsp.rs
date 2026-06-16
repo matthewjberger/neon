@@ -77,9 +77,9 @@ pub fn did_change(state: EditorState, path: &str) {
 /// Sets the diagnostics strip from the focused buffer: a file's stored LSP
 /// diagnostics, or empty for a plugin (the language worker repopulates those).
 pub fn refresh_diagnostics(state: EditorState) {
-    let pane = state.focused();
-    if pane.kind == PluginKind::File
-        && let Some(path) = pane.active
+    let buffer = state.focused_buffer();
+    if buffer.kind == PluginKind::File
+        && let Some(path) = buffer.id
     {
         let stored = DIAGNOSTICS.with(|map| map.borrow().get(&path).cloned().unwrap_or_default());
         state.diagnostics.set(stored);
@@ -228,8 +228,8 @@ fn apply_diagnostics(state: EditorState, params: &Value) {
     DIAGNOSTICS.with(|map| {
         map.borrow_mut().insert(path.clone(), diagnostics);
     });
-    let focused = state.focused();
-    if focused.kind == PluginKind::File && focused.active.as_deref() == Some(path.as_str()) {
+    let focused = state.focused_buffer();
+    if focused.kind == PluginKind::File && focused.id.as_deref() == Some(path.as_str()) {
         refresh_diagnostics(state);
     }
 }

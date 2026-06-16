@@ -61,14 +61,30 @@ pub struct LeaderMenu {
     pub items: Vec<LeaderItem>,
 }
 
-/// One editor pane: a stable key, the buffer it shows, and its flex-grow weight
-/// in the split. Plain data, held in a `Vec`, so any number of panes can stack.
+/// A reference to an open buffer: which set it belongs to and its id (a plugin
+/// id, a built-in module name, or a file path).
+#[derive(Clone, PartialEq)]
+pub struct BufferRef {
+    pub kind: PluginKind,
+    pub id: Option<String>,
+}
+
+/// One editor pane: a stable key, its open buffers as tabs with an active index,
+/// and its flex-grow weight in the split. Plain data, held in a `Vec`, so any
+/// number of panes can stack and each can hold any number of tabs.
 #[derive(Clone, PartialEq)]
 pub struct Pane {
     pub key: usize,
-    pub active: Option<String>,
-    pub kind: PluginKind,
+    pub tabs: Vec<BufferRef>,
+    pub active: usize,
     pub flex: f32,
+}
+
+impl Pane {
+    /// The buffer the active tab points to, if any.
+    pub fn buffer(&self) -> Option<&BufferRef> {
+        self.tabs.get(self.active)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -161,8 +177,11 @@ impl EditorState {
             plugins: RwSignal::new(plugins),
             panes: RwSignal::new(vec![Pane {
                 key: 0,
-                active,
-                kind: PluginKind::Scene,
+                tabs: vec![BufferRef {
+                    kind: PluginKind::Scene,
+                    id: active,
+                }],
+                active: 0,
                 flex: 1.0,
             }]),
             focused_key: RwSignal::new(0),
@@ -297,27 +316,35 @@ impl EditorState {
                 .cloned()
                 .unwrap_or(Pane {
                     key: 0,
-                    active: None,
-                    kind: PluginKind::Scene,
+                    tabs: Vec::new(),
+                    active: 0,
                     flex: 1.0,
                 })
         })
     }
 
+    /// The focused pane's active buffer.
+    pub fn focused_buffer(&self) -> BufferRef {
+        self.focused().buffer().cloned().unwrap_or(BufferRef {
+            kind: PluginKind::Scene,
+            id: None,
+        })
+    }
+
     /// The focused pane's open buffer id.
     pub fn active_id(&self) -> Option<String> {
-        self.focused().active
+        self.focused_buffer().id
     }
 
     /// The focused pane's buffer kind.
     pub fn active_kind(&self) -> PluginKind {
-        self.focused().kind
+        self.focused_buffer().kind
     }
 
     /// The focused pane's source, used by the agent relay.
     pub fn active_source(&self) -> String {
-        let pane = self.focused();
-        self.buffer_source(pane.kind, &pane.active)
+        let buffer = self.focused_buffer();
+        self.buffer_source(buffer.kind, &buffer.id)
     }
 
     /// The number of open panes.
@@ -325,14 +352,49 @@ impl EditorState {
         self.panes.with(|panes| panes.len())
     }
 
-    /// Open a buffer in the focused pane.
+    /// Open a buffer in the focused pane: focus its tab if already open, else add
+    /// a tab and focus it.
     pub fn open_in_focused(&self, kind: PluginKind, id: Option<String>) {
         let key = self.focused_key.get_untracked();
         self.panes.update(|panes| {
             let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
             if let Some(pane) = panes.get_mut(index) {
-                pane.kind = kind;
-                pane.active = id;
+                if let Some(existing) = pane
+                    .tabs
+                    .iter()
+                    .position(|tab| tab.kind == kind && tab.id == id)
+                {
+                    pane.active = existing;
+                } else {
+                    pane.tabs.push(BufferRef { kind, id });
+                    pane.active = pane.tabs.len() - 1;
+                }
+            }
+        });
+    }
+
+    /// Switches the active tab in a pane.
+    pub fn focus_tab(&self, pane_key: usize, index: usize) {
+        self.panes.update(|panes| {
+            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == pane_key)
+                && index < pane.tabs.len()
+            {
+                pane.active = index;
+            }
+        });
+        self.focused_key.set(pane_key);
+    }
+
+    /// Closes a tab in a pane, leaving the pane open even with no tabs.
+    pub fn close_tab(&self, pane_key: usize, index: usize) {
+        self.panes.update(|panes| {
+            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == pane_key)
+                && index < pane.tabs.len()
+            {
+                pane.tabs.remove(index);
+                if pane.active >= pane.tabs.len() {
+                    pane.active = pane.tabs.len().saturating_sub(1);
+                }
             }
         });
     }
@@ -354,8 +416,8 @@ impl EditorState {
                 index,
                 Pane {
                     key,
-                    active: source.active.clone(),
-                    kind: source.kind,
+                    tabs: source.tabs.clone(),
+                    active: source.active,
                     flex: 1.0,
                 },
             );

@@ -14,7 +14,7 @@ use crate::bridge::{self, Bridge};
 use crate::editor_plugins;
 use crate::highlight::highlight;
 use crate::lang::{self, Lang};
-use crate::state::{EditorState, PluginKind, kind_readonly};
+use crate::state::{EditorState, PluginKind, kind_readonly, language_for_path};
 
 const APPLY_DELAY_MS: i32 = 350;
 
@@ -46,8 +46,13 @@ pub fn EditorPane(
             .panes
             .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
     };
-    let active_id = move || pane().and_then(|pane| pane.active);
-    let active_kind = move || pane().map(|pane| pane.kind).unwrap_or(PluginKind::Scene);
+    let buffer = move || pane().and_then(|pane| pane.buffer().cloned());
+    let active_id = move || buffer().and_then(|buffer| buffer.id);
+    let active_kind = move || {
+        buffer()
+            .map(|buffer| buffer.kind)
+            .unwrap_or(PluginKind::Scene)
+    };
     let source = move || state.buffer_source(active_kind(), &active_id());
     let readonly = move || kind_readonly(active_kind());
     let flex = move || pane().map(|pane| pane.flex as f64).unwrap_or(1.0);
@@ -58,7 +63,8 @@ pub fn EditorPane(
             panes
                 .iter()
                 .find(|pane| pane.key == pane_key)
-                .map(|pane| (pane.active.clone(), pane.kind))
+                .and_then(|pane| pane.buffer().cloned())
+                .map(|buffer| (buffer.id, buffer.kind))
                 .unwrap_or((None, PluginKind::Scene))
         })
     };
@@ -131,18 +137,47 @@ pub fn EditorPane(
             class:focused=focused
             style:flex-grow=move || flex().to_string()
         >
+            <div class="tab-bar">
+                {move || {
+                    let current_pane = pane();
+                    let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
+                    current_pane
+                        .map(|pane| pane.tabs)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, tab)| {
+                            let name = state.buffer_name(tab.kind, &tab.id);
+                            let dirty = state.is_dirty(tab.kind, &tab.id);
+                            view! {
+                                <div
+                                    class="tab"
+                                    class:active=index == active
+                                    on:click=move |_| state.focus_tab(pane_key, index)
+                                >
+                                    <span class="tab-name">{name}</span>
+                                    <Show when=move || dirty fallback=|| ()>
+                                        <span class="tab-dirty">"\u{2022}"</span>
+                                    </Show>
+                                    <button
+                                        class="tab-close"
+                                        on:click=move |event: web_sys::MouseEvent| {
+                                            event.stop_propagation();
+                                            state.close_tab(pane_key, index);
+                                        }
+                                    >
+                                        "\u{00d7}"
+                                    </button>
+                                </div>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </div>
             <Show
                 when=move || active_id().is_some()
-                fallback=|| view! { <div class="editor-empty">"Open a plugin to edit"</div> }
+                fallback=|| view! { <div class="editor-empty">"Open a buffer to edit"</div> }
             >
-                <div class="editor-header">
-                    <span class="editor-filename">
-                        {move || state.buffer_name(active_kind(), &active_id())}
-                    </span>
-                    <Show when=readonly fallback=|| ()>
-                        <span class="editor-lock">"read-only built-in"</span>
-                    </Show>
-                </div>
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
                         {move || {
@@ -154,7 +189,14 @@ pub fn EditorPane(
                         {move || {
                             let text = source();
                             let set = command_set.get();
-                            highlight(&text, &set)
+                            let language = match active_kind() {
+                                PluginKind::File => active_id()
+                                    .as_deref()
+                                    .map(language_for_path)
+                                    .unwrap_or("plaintext"),
+                                _ => "rhai",
+                            };
+                            highlight(&text, language, &set)
                                 .into_iter()
                                 .map(|(class, run)| view! { <span class=class>{run}</span> })
                                 .collect_view()
@@ -217,18 +259,21 @@ fn commit(
     debounce: StoredValue<Option<i32>>,
     request_id: StoredValue<u32>,
 ) {
-    let pane = state
-        .panes
-        .with_untracked(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned());
-    let Some(pane) = pane else {
+    let buffer = state.panes.with_untracked(|panes| {
+        panes
+            .iter()
+            .find(|pane| pane.key == pane_key)
+            .and_then(|pane| pane.buffer().cloned())
+    });
+    let Some(buffer) = buffer else {
         return;
     };
-    match pane.kind {
+    match buffer.kind {
         PluginKind::Scene => {
             schedule_apply(bridge, lang, state, pane_key, debounce, request_id);
         }
         PluginKind::File => {
-            if let Some(path) = pane.active {
+            if let Some(path) = buffer.id {
                 crate::lsp::did_change(state, &path);
             }
         }
@@ -261,7 +306,8 @@ fn schedule_apply(
                 panes
                     .iter()
                     .find(|pane| pane.key == pane_key)
-                    .map(|pane| (pane.active.clone(), pane.kind))
+                    .and_then(|pane| pane.buffer().cloned())
+                    .map(|buffer| (buffer.id, buffer.kind))
                     .unwrap_or((None, PluginKind::Scene))
             });
             lang::check(&lang, id, state.buffer_source(kind, &active));
