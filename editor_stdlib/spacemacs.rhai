@@ -201,6 +201,12 @@ fn on_key() {
         return;
     }
 
+    if ctrl && key == "r" {
+        ops.push("Consume");
+        ops.push(#{ RunCommand: "redo" });
+        return;
+    }
+
     if ctrl || alt {
         return;
     }
@@ -405,5 +411,6 @@ fn on_key() {
     else if key == "C" { ops.push("DeleteToLineEnd"); ops.push(#{ SetMode: "insert" }); }
     else if key == "J" { ops.push("JoinLines"); }
     else if key == "K" { ops.push(#{ RunCommand: "hover" }); }
+    else if key == "u" { ops.push(#{ RunCommand: "undo" }); }
     else if key == "d" { state.pending = "d"; }
 }

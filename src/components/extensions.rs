@@ -13,6 +13,7 @@ pub fn Extensions(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     state: EditorState,
 ) -> impl IntoView {
+    let filter = RwSignal::new(String::new());
     view! {
         <div
             class="extensions"
@@ -28,13 +29,26 @@ pub fn Extensions(
             }
         >
             <div class="panel-title">"Plugins"</div>
+            <input
+                class="search-input"
+                placeholder="Search plugins"
+                prop:value=move || filter.get()
+                on:input=move |event| filter.set(event_target_value(&event))
+            />
             <div class="extensions-list">
-                {CATEGORIES
+                {move || {
+                    let needle = filter.get().to_lowercase();
+                    CATEGORIES
                     .iter()
                     .filter_map(|group| {
                         let entries = catalog()
                             .into_iter()
                             .filter(|entry| category(entry) == *group)
+                            .filter(|entry| {
+                                needle.is_empty()
+                                    || entry.name.to_lowercase().contains(&needle)
+                                    || entry.description.to_lowercase().contains(&needle)
+                            })
                             .collect::<Vec<_>>();
                         if entries.is_empty() {
                             return None;
@@ -69,7 +83,8 @@ pub fn Extensions(
                             {rows}
                         })
                     })
-                    .collect_view()}
+                    .collect_view()
+                }}
             </div>
         </div>
     }

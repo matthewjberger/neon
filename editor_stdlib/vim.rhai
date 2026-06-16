@@ -12,6 +12,12 @@ fn on_key() {
         return;
     }
 
+    if ctrl && key == "r" {
+        ops.push("Consume");
+        ops.push(#{ RunCommand: "redo" });
+        return;
+    }
+
     // Let Ctrl and Alt chords through to other layers and the global shortcuts.
     if ctrl || alt {
         return;
@@ -55,5 +61,6 @@ fn on_key() {
     else if key == "w" { ops.push("NextWord"); }
     else if key == "b" { ops.push("PrevWord"); }
     else if key == "x" { ops.push(#{ DeleteForward: 1 }); }
+    else if key == "u" { ops.push(#{ RunCommand: "undo" }); }
     else if key == "d" { state.pending = "d"; ops.push(#{ SetStatus: "d-" }); }
 }
