@@ -5,12 +5,14 @@
 use leptos::prelude::*;
 use protocol::{CommandInfo, Diagnostic, LogEntry, PluginSource, SelectedEntity, StdModule};
 
-/// Which set a buffer belongs to: scene plugins run in the engine worker, editor
-/// plugins run on the page and drive the editor through key dispatch.
+/// Which set the open buffer belongs to: scene plugins run in the engine worker,
+/// editor plugins run on the page and drive the editor through key dispatch, and
+/// built-ins are the standard library, viewable but locked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PluginKind {
     Scene,
     Editor,
+    Builtin,
 }
 
 #[derive(Clone, Copy)]
@@ -86,13 +88,19 @@ impl EditorState {
     }
 
     /// The active buffer's source, or empty when none is open. Reads from the
-    /// scene or editor set depending on the active kind.
+    /// scene set, the editor set, or the read-only standard library.
     pub fn active_source(&self) -> String {
         let active = self.active.get();
-        let signal = match self.active_kind.get() {
-            PluginKind::Scene => self.plugins,
-            PluginKind::Editor => self.editor_plugins,
-        };
+        if self.active_kind.get() == PluginKind::Builtin {
+            return self.stdlib.with(|modules| {
+                modules
+                    .iter()
+                    .find(|module| Some(&module.name) == active.as_ref())
+                    .map(|module| module.source.clone())
+                    .unwrap_or_default()
+            });
+        }
+        let signal = self.active_signal();
         signal.with(|plugins| {
             plugins
                 .iter()
@@ -105,10 +113,10 @@ impl EditorState {
     /// The active buffer's display name.
     pub fn active_name(&self) -> String {
         let active = self.active.get();
-        let signal = match self.active_kind.get() {
-            PluginKind::Scene => self.plugins,
-            PluginKind::Editor => self.editor_plugins,
-        };
+        if self.active_kind.get() == PluginKind::Builtin {
+            return active.unwrap_or_default();
+        }
+        let signal = self.active_signal();
         signal.with(|plugins| {
             plugins
                 .iter()
@@ -118,12 +126,18 @@ impl EditorState {
         })
     }
 
-    /// The signal backing the active buffer's set.
+    /// The signal backing the active editable set. Built-ins are read-only, so
+    /// this falls back to the scene set for them and is never written.
     pub fn active_signal(&self) -> RwSignal<Vec<PluginSource>> {
-        match self.active_kind.get_untracked() {
-            PluginKind::Scene => self.plugins,
+        match self.active_kind.get() {
             PluginKind::Editor => self.editor_plugins,
+            _ => self.plugins,
         }
+    }
+
+    /// Whether the active buffer is a locked built-in.
+    pub fn active_readonly(&self) -> bool {
+        self.active_kind.get() == PluginKind::Builtin
     }
 }
 

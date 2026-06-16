@@ -154,10 +154,29 @@ pub fn PluginPanel(
                     key=|module| module.name.clone()
                     let:module
                 >
-                    <details class="stdlib-module">
-                        <summary>{module.name.clone()}</summary>
-                        <pre class="stdlib-source">{module.source.clone()}</pre>
-                    </details>
+                    {
+                        let open_name = module.name.clone();
+                        let active_name = module.name.clone();
+                        view! {
+                            <div
+                                class="plugin-row"
+                                class:active=move || {
+                                    state.active_kind.get() == PluginKind::Builtin
+                                        && state.active.get().as_deref() == Some(active_name.as_str())
+                                }
+                            >
+                                <span
+                                    class="plugin-name builtin-name"
+                                    on:click=move |_| {
+                                        state.active_kind.set(PluginKind::Builtin);
+                                        state.active.set(Some(open_name.clone()));
+                                    }
+                                >
+                                    {module.name.clone()}
+                                </span>
+                            </div>
+                        }
+                    }
                 </For>
             </div>
         </div>

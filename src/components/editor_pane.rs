@@ -40,6 +40,9 @@ pub fn EditorPane(
     });
 
     let on_input = move |event: web_sys::Event| {
+        if state.active_readonly() {
+            return;
+        }
         let value = event_target_value(&event);
         let Some(id) = state.active.get_untracked() else {
             return;
@@ -53,6 +56,9 @@ pub fn EditorPane(
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
+        if state.active_readonly() {
+            return;
+        }
         if event.key() == "Tab" {
             event.prevent_default();
             if let Some(element) = textarea.get() {
@@ -91,6 +97,9 @@ pub fn EditorPane(
             >
                 <div class="editor-header">
                     <span class="editor-filename">{move || state.active_name()}</span>
+                    <Show when=move || state.active_readonly() fallback=|| ()>
+                        <span class="editor-lock">"read-only built-in"</span>
+                    </Show>
                 </div>
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
@@ -115,6 +124,7 @@ pub fn EditorPane(
                         class="editor-textarea"
                         spellcheck="false"
                         node_ref=textarea
+                        prop:readonly=move || state.active_readonly()
                         prop:value=move || state.active_source()
                         on:input=on_input
                         on:keydown=on_keydown

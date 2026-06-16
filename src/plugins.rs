@@ -100,10 +100,22 @@ fn on_tick() {\n\
         PluginSource {
             id: "example-confetti".to_string(),
             name: "Confetti Rain".to_string(),
-            source: "fn on_tick() {\n\
-\u{20}   if random() < 0.2 {\n\
-\u{20}       commands.sphere(random_point(6.0), 0.2, random_color());\n\
-\u{20}   }\n}\n"
+            source: "// Falling confetti. Tracks drops in `state` and draws them each frame\n\
+// with immediate-mode draw_sphere, so they actually fall.\n\
+fn on_tick() {\n\
+\u{20}   if !(\"drops\" in state) { state.drops = []; }\n\
+\u{20}   if random() < 0.4 {\n\
+\u{20}       state.drops.push(#{ x: random_range(-6.0, 6.0), y: 9.0, z: random_range(-6.0, 6.0), c: random_color() });\n\
+\u{20}   }\n\
+\u{20}   let alive = [];\n\
+\u{20}   for drop in state.drops {\n\
+\u{20}       drop.y -= dt * 5.0;\n\
+\u{20}       if drop.y > 0.0 {\n\
+\u{20}           commands.draw_sphere([drop.x, drop.y, drop.z], 0.2, drop.c);\n\
+\u{20}           alive.push(drop);\n\
+\u{20}       }\n\
+\u{20}   }\n\
+\u{20}   state.drops = alive;\n}\n"
                 .to_string(),
             enabled: false,
         },

@@ -285,6 +285,22 @@ body {
   color: var(--text);
 }
 
+.editor-lock {
+  margin-left: 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+
+.builtin-name {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 .editor-gutter {
   position: absolute;
   top: 0;

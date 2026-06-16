@@ -7,14 +7,17 @@ fn cube(position, color) {
 }
 
 fn sphere(position, radius, color) {
-    this.spawn_sphere(position, radius);
-    this.set_color(this.last(), color);
+    this.spawn_sphere(position);
+    let entity = this.last();
+    this.set_color(entity, color);
+    this.set_scale(entity, [radius * 2.0, radius * 2.0, radius * 2.0]);
 }
 
 fn glowing(position, color, strength) {
-    this.spawn_sphere(position, 0.5);
-    this.set_color(this.last(), color);
-    this.set_emissive(this.last(), [color[0], color[1], color[2]], strength);
+    this.spawn_sphere(position);
+    let entity = this.last();
+    this.set_color(entity, color);
+    this.set_emissive(entity, [color[0], color[1], color[2]], strength);
 }
 
 // A flat columns x rows grid of cubes centered on the origin.
