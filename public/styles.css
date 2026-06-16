@@ -1025,7 +1025,8 @@ body {
   background: var(--input-bg);
 }
 
-.file-tree-panel {
+.file-tree-panel,
+.search-panel {
   flex: 0 0 250px;
   min-height: 0;
   display: flex;
@@ -1033,6 +1034,42 @@ body {
   border-right: 1px solid var(--panel-border);
   background: var(--panel-2);
   overflow: hidden;
+}
+
+.search-input {
+  margin: 8px;
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+
+.search-hit:hover {
+  background: var(--input-bg);
+}
+
+.search-hit-loc {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.search-hit-text {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-tree {

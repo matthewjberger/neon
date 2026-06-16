@@ -102,6 +102,15 @@ pub fn write_file(path: &str, text: String) {
     });
 }
 
+/// Searches the workspace for a substring.
+pub fn search(root: &str, query: &str) {
+    send(&FsRequest::Search {
+        request_id: 0,
+        root: root.to_string(),
+        query: query.to_string(),
+    });
+}
+
 /// Toggles a tree directory, loading its children on first expand.
 pub fn toggle_dir(state: EditorState, path: &str) {
     let mut needs_load = false;
@@ -152,6 +161,9 @@ fn dispatch(state: EditorState, response: FsResponse) {
                     file.dirty = false;
                 }
             });
+        }
+        FsResponse::SearchResults { hits, .. } => {
+            state.search_results.set(hits);
         }
         FsResponse::Error { message, .. } => {
             state.log.update(|log| {

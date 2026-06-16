@@ -3,7 +3,9 @@
 //! constructor.
 
 use leptos::prelude::*;
-use protocol::{CommandInfo, Diagnostic, LogEntry, PluginSource, SelectedEntity, StdModule};
+use protocol::{
+    CommandInfo, Diagnostic, LogEntry, PluginSource, SearchHit, SelectedEntity, StdModule,
+};
 
 /// Which set the open buffer belongs to: scene plugins run in the engine worker,
 /// editor plugins run on the page and drive the editor through key dispatch,
@@ -43,6 +45,7 @@ pub enum SidebarView {
     Installed,
     Extensions,
     Files,
+    Search,
 }
 
 /// One row in the leader menu: the key to press and what it does. A label that
@@ -114,6 +117,10 @@ pub struct EditorState {
     pub workspace_root: RwSignal<Option<String>>,
     /// The file tree under the workspace root.
     pub tree: RwSignal<Vec<TreeNode>>,
+    /// Project search results.
+    pub search_results: RwSignal<Vec<SearchHit>>,
+    /// A pending jump to a file and 1-based line, applied when the file opens.
+    pub goto: RwSignal<Option<(String, u32)>>,
     /// Whether the language server has been started for this session.
     pub lsp_started: RwSignal<bool>,
     /// Whether the consent toast asking to start rust-analyzer is showing.
@@ -190,6 +197,8 @@ impl EditorState {
             files: RwSignal::new(Vec::new()),
             workspace_root: RwSignal::new(None),
             tree: RwSignal::new(Vec::new()),
+            search_results: RwSignal::new(Vec::new()),
+            goto: RwSignal::new(None),
             lsp_started: RwSignal::new(false),
             lsp_consent: RwSignal::new(false),
             lsp_log: RwSignal::new(Vec::new()),

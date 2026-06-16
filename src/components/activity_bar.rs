@@ -19,6 +19,14 @@ pub fn ActivityBar(state: EditorState) -> impl IntoView {
             </button>
             <button
                 class="activity-icon"
+                class:active=move || state.sidebar_view.get() == SidebarView::Search
+                title="Search"
+                on:click=move |_| state.sidebar_view.set(SidebarView::Search)
+            >
+                "\u{1f50d}"
+            </button>
+            <button
+                class="activity-icon"
                 class:active=move || state.sidebar_view.get() == SidebarView::Installed
                 title="Installed plugins"
                 on:click=move |_| state.sidebar_view.set(SidebarView::Installed)

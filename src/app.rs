@@ -22,6 +22,7 @@ use crate::components::lsp_panel::{LspConsent, LspLog};
 use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
 use crate::components::reference::Reference;
+use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
@@ -195,6 +196,7 @@ pub fn App() -> impl IntoView {
                     SidebarView::Installed => view! { <PluginPanel bridge state /> }.into_any(),
                     SidebarView::Extensions => view! { <Extensions bridge state /> }.into_any(),
                     SidebarView::Files => view! { <FileTree state /> }.into_any(),
+                    SidebarView::Search => view! { <SearchPanel state /> }.into_any(),
                 }}
                 <div
                     class="editor-area"

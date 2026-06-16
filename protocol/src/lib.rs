@@ -242,6 +242,14 @@ pub struct DirEntry {
     pub is_dir: bool,
 }
 
+/// One project-search match: the file, the 1-based line, and the line's text.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub path: String,
+    pub line: u32,
+    pub text: String,
+}
+
 /// Page to the desktop filesystem bridge. The page has no disk access, so every
 /// file operation crosses this seam to the native shell.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -257,6 +265,12 @@ pub enum FsRequest {
         request_id: u64,
         path: String,
         text: String,
+    },
+    /// Search the workspace for a substring, respecting gitignore.
+    Search {
+        request_id: u64,
+        root: String,
+        query: String,
     },
 }
 
@@ -281,6 +295,10 @@ pub enum FsResponse {
     Wrote {
         request_id: u64,
         path: String,
+    },
+    SearchResults {
+        request_id: u64,
+        hits: Vec<SearchHit>,
     },
     Error {
         request_id: u64,

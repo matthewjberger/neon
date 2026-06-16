@@ -138,7 +138,59 @@ async fn handle(request: FsRequest) -> FsResponse {
                 message: error.to_string(),
             },
         },
+        FsRequest::Search {
+            request_id,
+            root,
+            query,
+        } => {
+            let hits = tokio::task::spawn_blocking(move || search(&root, &query))
+                .await
+                .unwrap_or_default();
+            FsResponse::SearchResults { request_id, hits }
+        }
     }
+}
+
+const SEARCH_LIMIT: usize = 500;
+
+fn search(root: &str, query: &str) -> Vec<protocol::SearchHit> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let needle = query.to_lowercase();
+    let mut hits = Vec::new();
+    for entry in ignore::WalkBuilder::new(root)
+        .hidden(true)
+        .build()
+        .flatten()
+    {
+        if hits.len() >= SEARCH_LIMIT {
+            break;
+        }
+        if !entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_file())
+        {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        for (number, line) in text.lines().enumerate() {
+            if line.to_lowercase().contains(&needle) {
+                hits.push(protocol::SearchHit {
+                    path: path.to_string_lossy().to_string(),
+                    line: number as u32 + 1,
+                    text: line.trim().chars().take(200).collect(),
+                });
+                if hits.len() >= SEARCH_LIMIT {
+                    break;
+                }
+            }
+        }
+    }
+    hits
 }
 
 async fn list_dir(path: &Path) -> Result<Vec<DirEntry>, String> {

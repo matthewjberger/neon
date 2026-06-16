@@ -77,6 +77,40 @@ pub fn EditorPane(
         }
     });
 
+    Effect::new(move |_| {
+        let goto = state.goto.get();
+        let current = buffer();
+        let Some((path, line)) = goto else {
+            return;
+        };
+        let Some(current) = current else {
+            return;
+        };
+        if current.kind != PluginKind::File || current.id.as_deref() != Some(path.as_str()) {
+            return;
+        }
+        let Some(element) = textarea.get() else {
+            return;
+        };
+        state.goto.set(None);
+        let callback = Closure::once_into_js(move || {
+            let value = element.value();
+            let mut offset = 0_u32;
+            for (number, segment) in value.split_inclusive('\n').enumerate() {
+                if number as u32 + 1 >= line {
+                    break;
+                }
+                offset += segment.encode_utf16().count() as u32;
+            }
+            let _ = element.focus();
+            let _ = element.set_selection_range(offset, offset);
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0);
+        }
+    });
+
     let on_focus = move |_| {
         state.focused_key.set(pane_key);
         if let Some(element) = textarea.get() {
