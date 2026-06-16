@@ -21,17 +21,32 @@ pub fn stored_theme() -> String {
         .unwrap_or_else(|| THEMES[0].0.to_string())
 }
 
-/// Switches the page to the given theme and persists the choice.
-pub fn apply_theme(id: &str) {
+/// Switches the page to the given theme without persisting, for live previews
+/// while hovering the picker.
+pub fn preview_theme(id: &str) {
     if let Some(element) = web_sys::window()
         .and_then(|window| window.document())
         .and_then(|document| document.document_element())
     {
         let _ = element.set_attribute("data-theme", id);
     }
+}
+
+/// Switches the page to the given theme and persists the choice.
+pub fn apply_theme(id: &str) {
+    preview_theme(id);
     if let Some(storage) =
         web_sys::window().and_then(|window| window.local_storage().ok().flatten())
     {
         let _ = storage.set_item(THEME_KEY, id);
     }
+}
+
+/// The label for a theme id.
+pub fn theme_label(id: &str) -> &'static str {
+    THEMES
+        .iter()
+        .find(|(theme_id, _)| *theme_id == id)
+        .map(|(_, label)| *label)
+        .unwrap_or(THEMES[0].1)
 }

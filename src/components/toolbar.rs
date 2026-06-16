@@ -7,7 +7,7 @@ use protocol::ClientMessage;
 
 use crate::bridge::{Bridge, send};
 use crate::state::EditorState;
-use crate::theme::THEMES;
+use crate::theme::{self, THEMES};
 
 #[component]
 pub fn Toolbar(
@@ -31,7 +31,7 @@ pub fn Toolbar(
     let toggle_reference = move |_| state.reference_open.update(|open| *open = !*open);
     let toggle_chat = move |_| state.chat_open.update(|open| *open = !*open);
 
-    let on_theme = move |event: web_sys::Event| state.theme.set(event_target_value(&event));
+    let theme_open = RwSignal::new(false);
 
     view! {
         <div class="toolbar">
@@ -72,12 +72,41 @@ pub fn Toolbar(
             </Show>
             <span class="stat">{move || format!("{:.0} fps", state.fps.get())}</span>
             <span class="stat">{move || format!("{} entities", state.entity_count.get())}</span>
-            <select class="theme-select" prop:value=move || state.theme.get() on:change=on_theme>
-                {THEMES
-                    .iter()
-                    .map(|(id, label)| view! { <option value=*id>{*label}</option> })
-                    .collect_view()}
-            </select>
+            <div class="theme-picker">
+                <button
+                    class="tool-button theme-button"
+                    on:click=move |_| theme_open.update(|open| *open = !*open)
+                >
+                    {move || theme::theme_label(&state.theme.get())}
+                    " \u{25be}"
+                </button>
+                <Show when=move || theme_open.get() fallback=|| ()>
+                    <div
+                        class="theme-menu"
+                        on:mouseleave=move |_| theme::preview_theme(&state.theme.get_untracked())
+                    >
+                        <For each=move || THEMES.to_vec() key=|(id, _)| id.to_string() let:item>
+                            {
+                                let id = item.0;
+                                let label = item.1;
+                                view! {
+                                    <div
+                                        class="theme-option"
+                                        class:active=move || state.theme.get() == id
+                                        on:mouseenter=move |_| theme::preview_theme(id)
+                                        on:click=move |_| {
+                                            state.theme.set(id.to_string());
+                                            theme_open.set(false);
+                                        }
+                                    >
+                                        {label}
+                                    </div>
+                                }
+                            }
+                        </For>
+                    </div>
+                </Show>
+            </div>
             <button
                 class="tool-button claude-toggle"
                 class:active=move || state.chat_open.get()
