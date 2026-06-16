@@ -132,7 +132,11 @@ pub fn App() -> impl IntoView {
             state.find_open.set(true);
             return;
         }
-        if event.ctrl_key() && !event.shift_key() && event.key().eq_ignore_ascii_case("z") {
+        if event.ctrl_key()
+            && !event.shift_key()
+            && event.key().eq_ignore_ascii_case("z")
+            && !target_is_input(&event)
+        {
             event.prevent_default();
             crate::undo::undo(state);
             return;
@@ -140,6 +144,7 @@ pub fn App() -> impl IntoView {
         if event.ctrl_key()
             && (event.key().eq_ignore_ascii_case("y")
                 || (event.shift_key() && event.key().eq_ignore_ascii_case("z")))
+            && !target_is_input(&event)
         {
             event.prevent_default();
             crate::undo::redo(state);
@@ -315,6 +320,20 @@ fn unsupported() -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// Whether the event targets a panel field (an `input` or `select`), where the
+/// browser's native undo should win over the editor's. The editor surface is a
+/// `textarea`, so this leaves it alone.
+fn target_is_input(event: &web_sys::KeyboardEvent) -> bool {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::HtmlElement>().ok())
+        .map(|element| {
+            let tag = element.tag_name();
+            tag.eq_ignore_ascii_case("input") || tag.eq_ignore_ascii_case("select")
+        })
+        .unwrap_or(false)
 }
 
 fn typing_in_field(event: &web_sys::KeyboardEvent) -> bool {

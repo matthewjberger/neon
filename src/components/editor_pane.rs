@@ -165,9 +165,8 @@ pub fn EditorPane(
                 .unwrap_or(0);
             completion_timer.set_value(Some(handle));
             if let Some(element) = textarea.get() {
-                let caret = element.selection_start().ok().flatten().unwrap_or(0) as usize;
-                let characters: Vec<char> = element.value().chars().collect();
-                match caret.checked_sub(1).and_then(|index| characters.get(index)) {
+                let caret = element.selection_start().ok().flatten().unwrap_or(0);
+                match char_before(&element.value(), caret) {
                     Some('(') | Some(',') => crate::lsp::request_signature_help(state),
                     Some(')') => state.hover.set(None),
                     _ => {}
@@ -415,6 +414,22 @@ pub fn EditorPane(
 
 /// Persists the buffer and, for a scene plugin, schedules the worker sync and
 /// compile-check.
+/// The character immediately before a UTF-16 caret offset, resolved by walking
+/// code points so it stays correct across multibyte characters.
+fn char_before(value: &str, caret: u32) -> Option<char> {
+    let mut units = 0;
+    let mut previous = None;
+    for character in value.chars() {
+        let next = units + character.len_utf16() as u32;
+        if next > caret {
+            break;
+        }
+        previous = Some(character);
+        units = next;
+    }
+    previous
+}
+
 fn commit(
     bridge: StoredValue<Option<Bridge>, LocalStorage>,
     lang: StoredValue<Option<Lang>, LocalStorage>,

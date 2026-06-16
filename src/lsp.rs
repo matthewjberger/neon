@@ -30,6 +30,8 @@ enum Pending {
     Symbols { path: String },
     Rename,
     CodeActions,
+    ResolveAction,
+    Command,
 }
 
 /// One ranged text edit from the server, before it is resolved to byte offsets
@@ -60,6 +62,7 @@ struct Client {
     rename_position: Option<(String, u32, u32)>,
     code_actions: Vec<Value>,
     pending_edits: HashMap<String, Vec<RangeEdit>>,
+    raw_diagnostics: HashMap<String, Vec<Value>>,
 }
 
 impl Client {
@@ -75,6 +78,7 @@ impl Client {
             rename_position: None,
             code_actions: Vec::new(),
             pending_edits: HashMap::new(),
+            raw_diagnostics: HashMap::new(),
         }
     }
 }
@@ -391,11 +395,26 @@ pub fn submit_rename(state: EditorState, new_name: &str) {
     );
 }
 
-/// Requests the code actions available at the caret into the action picker.
+/// Requests the code actions available at the caret into the action picker. The
+/// diagnostics covering the caret line are passed as context, so the server
+/// offers the quick-fixes tied to the error under the caret.
 pub fn request_code_actions(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {
         return;
     };
+    let diagnostics = client(|client| {
+        client
+            .raw_diagnostics
+            .get(&path)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|diagnostic| covers_line(diagnostic, line))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
     let id = next_id();
     client(|client| {
         client.pending.insert(id, Pending::CodeActions);
@@ -409,9 +428,19 @@ pub fn request_code_actions(state: EditorState) {
                 "start": { "line": line, "character": character },
                 "end": { "line": line, "character": character },
             },
-            "context": { "diagnostics": [] },
+            "context": { "diagnostics": diagnostics },
         }),
     );
+}
+
+fn covers_line(diagnostic: &Value, line: u32) -> bool {
+    let start = diagnostic
+        .pointer("/range/start/line")
+        .and_then(Value::as_u64);
+    let end = diagnostic
+        .pointer("/range/end/line")
+        .and_then(Value::as_u64);
+    matches!((start, end), (Some(start), Some(end)) if start <= line as u64 && line as u64 <= end)
 }
 
 /// Runs the code action chosen from the picker by index.
@@ -420,28 +449,49 @@ pub fn apply_code_action(state: EditorState, index: usize) {
     let Some(action) = client(|client| client.code_actions.get(index).cloned()) else {
         return;
     };
+    run_code_action(state, action);
+}
+
+/// Applies a code action: its edit if present, its command if present, and a
+/// `codeAction/resolve` round trip if it carries neither but has resolve data.
+fn run_code_action(state: EditorState, action: Value) {
+    let has_edit = action.get("edit").is_some();
     if let Some(edit) = action.get("edit") {
         apply_workspace_edit(state, edit);
     }
-    if let Some(command) = action
-        .get("command")
-        .or(Some(&action))
-        .filter(|value| value.get("command").and_then(Value::as_str).is_some())
-    {
-        let name = command.get("command").and_then(Value::as_str);
-        let arguments = command.get("arguments").cloned().unwrap_or(json!([]));
-        if let Some(name) = name {
-            let id = next_id();
-            client(|client| {
-                client.pending.insert(id, Pending::Rename);
-            });
-            send_request_id(
-                id,
-                "workspace/executeCommand",
-                json!({ "command": name, "arguments": arguments }),
-            );
-        }
+    let command = if action.get("command").map(Value::is_object).unwrap_or(false) {
+        action.get("command").cloned()
+    } else if action.get("command").and_then(Value::as_str).is_some() {
+        Some(action.clone())
+    } else {
+        None
+    };
+    if let Some(command) = &command {
+        execute_command(command);
     }
+    if !has_edit && command.is_none() && action.get("data").is_some() {
+        let id = next_id();
+        client(|client| {
+            client.pending.insert(id, Pending::ResolveAction);
+        });
+        send_request_id(id, "codeAction/resolve", action);
+    }
+}
+
+fn execute_command(command: &Value) {
+    let Some(name) = command.get("command").and_then(Value::as_str) else {
+        return;
+    };
+    let arguments = command.get("arguments").cloned().unwrap_or(json!([]));
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::Command);
+    });
+    send_request_id(
+        id,
+        "workspace/executeCommand",
+        json!({ "command": name, "arguments": arguments }),
+    );
 }
 
 /// Applies edits queued for a file that was not open when a workspace edit
@@ -1147,6 +1197,16 @@ fn handle_rpc(state: EditorState, value: Value) {
                 }
             }
             Pending::CodeActions => apply_code_actions(state, &value),
+            Pending::ResolveAction => {
+                if let Some(result) = value.get("result").filter(|result| result.is_object()) {
+                    run_code_action(state, result.clone());
+                }
+            }
+            Pending::Command => {
+                if let Some(result) = value.get("result").filter(|result| result.is_object()) {
+                    apply_workspace_edit(state, result);
+                }
+            }
         }
         return;
     }
@@ -1186,13 +1246,15 @@ fn apply_diagnostics(state: EditorState, params: &Value) {
         return;
     };
     let path = path_from_uri(uri);
-    let diagnostics: Vec<Diagnostic> = params
+    let raw = params
         .get("diagnostics")
         .and_then(Value::as_array)
-        .map(|items| items.iter().map(to_diagnostic).collect())
+        .cloned()
         .unwrap_or_default();
+    let diagnostics: Vec<Diagnostic> = raw.iter().map(to_diagnostic).collect();
     client(|client| {
         client.diagnostics.insert(path.clone(), diagnostics);
+        client.raw_diagnostics.insert(path.clone(), raw);
     });
     let focused = state.focused_buffer();
     if focused.kind == PluginKind::File && focused.id.as_deref() == Some(path.as_str()) {
