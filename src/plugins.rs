@@ -402,23 +402,19 @@ const FIREWORKS: &str = include_str!("../examples/fireworks.rhai");
 
 const TEMPLATE_SCENE: &str = r#"// TEMPLATE: how to write a Neon plugin.
 //
-// A plugin is rhai with two optional hooks:
+// A plugin is rhai with two optional hooks.
 //   on_start()  runs once when the plugin loads
 //   on_tick()   runs every frame
 //
-// Push api Commands to `commands`; read this frame's Events from `events`.
+// Push api Commands to `commands` and read this frame's Events from `events`.
 // Always in scope: dt, time, keys, mouse, named, tagged.
 // The standard library adds helpers like commands.cube and hsv.
 
 fn on_start() {
     commands.cube([0.0, 0.5, 0.0], hsv(0.6, 0.7, 1.0));
-    commands.ring(12, 3.0, [1.0, 0.5, 0.2, 1.0]);
 }
 
 fn on_tick() {
-    if random() < 0.02 {
-        commands.sphere(random_point(5.0), 0.3, random_color());
-    }
 }
 "#;
 

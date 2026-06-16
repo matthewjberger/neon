@@ -289,6 +289,12 @@ pub fn EditorPane(
                                         dragging.set_value(None);
                                     }
                                     on:dragend=move |_| dragging.set_value(None)
+                                    on:mousedown=move |event: web_sys::MouseEvent| {
+                                        if event.button() == 1 {
+                                            event.prevent_default();
+                                            state.close_tab(pane_key, index);
+                                        }
+                                    }
                                     on:contextmenu=move |event: web_sys::MouseEvent| {
                                         event.prevent_default();
                                         event.stop_propagation();

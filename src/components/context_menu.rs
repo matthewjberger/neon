@@ -30,6 +30,11 @@ pub fn general_menu() -> Vec<(String, EditorCommand)> {
 /// The menu for the editing surface.
 pub fn editor_menu() -> Vec<(String, EditorCommand)> {
     vec![
+        ("Go to definition".into(), EditorCommand::GoToDefinition),
+        ("Find references".into(), EditorCommand::FindReferences),
+        ("Show hover".into(), EditorCommand::Hover),
+        ("Rename symbol".into(), EditorCommand::Rename),
+        ("Format document".into(), EditorCommand::FormatDocument),
         ("Find and replace".into(), EditorCommand::Find),
         ("Jump to word".into(), EditorCommand::JumpWord),
         ("Jump to line".into(), EditorCommand::JumpLine),
