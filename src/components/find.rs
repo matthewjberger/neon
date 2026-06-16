@@ -20,7 +20,8 @@ pub fn set_active(element: HtmlTextAreaElement) {
     ACTIVE.with(|slot| *slot.borrow_mut() = Some(element));
 }
 
-fn active() -> Option<HtmlTextAreaElement> {
+/// The textarea that last took focus, for the find bar and the LSP client.
+pub fn active() -> Option<HtmlTextAreaElement> {
     ACTIVE.with(|slot| slot.borrow().clone())
 }
 

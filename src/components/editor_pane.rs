@@ -31,6 +31,7 @@ pub fn EditorPane(
     let textarea = NodeRef::<html::Textarea>::new();
     let debounce = StoredValue::new(None::<i32>);
     let request_id = StoredValue::new(0_u32);
+    let hover_timer = StoredValue::new(None::<i32>);
 
     let command_set = Memo::new(move |_| {
         state
@@ -118,6 +119,24 @@ pub fn EditorPane(
         }
     };
 
+    let on_mousemove = move |event: web_sys::MouseEvent| {
+        let x = event.client_x() as f64;
+        let y = event.client_y() as f64;
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        if let Some(handle) = hover_timer.get_value() {
+            window.clear_timeout_with_handle(handle);
+        }
+        let callback = Closure::once_into_js(move || crate::lsp::request_hover_at(state, x, y));
+        let handle = window
+            .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 400)
+            .unwrap_or(0);
+        hover_timer.set_value(Some(handle));
+    };
+
+    let on_mouseleave = move |_| state.hover.set(None);
+
     let on_input = move |event: web_sys::Event| {
         let (id, kind) = current();
         if kind_readonly(kind) {
@@ -132,6 +151,39 @@ pub fn EditorPane(
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
+        if state.completion.get_untracked().is_some() {
+            let len = state
+                .completion
+                .with_untracked(|menu| menu.as_ref().map(|menu| menu.items.len()).unwrap_or(0))
+                .max(1);
+            match event.key().as_str() {
+                "ArrowDown" => {
+                    event.prevent_default();
+                    state
+                        .completion_index
+                        .update(|index| *index = (*index + 1) % len);
+                    return;
+                }
+                "ArrowUp" => {
+                    event.prevent_default();
+                    state
+                        .completion_index
+                        .update(|index| *index = (*index + len - 1) % len);
+                    return;
+                }
+                "Enter" | "Tab" => {
+                    event.prevent_default();
+                    crate::lsp::accept_completion(state, state.completion_index.get_untracked());
+                    return;
+                }
+                "Escape" => {
+                    event.prevent_default();
+                    state.completion.set(None);
+                    return;
+                }
+                _ => {}
+            }
+        }
         let (id, kind) = current();
         if kind_readonly(kind) {
             return;
@@ -250,6 +302,8 @@ pub fn EditorPane(
                         on:focus=on_focus
                         on:input=on_input
                         on:keydown=on_keydown
+                        on:mousemove=on_mousemove
+                        on:mouseleave=on_mouseleave
                         on:scroll=move |event| {
                             if let Some(target) = event.target()
                                 && let Ok(element) = target.dyn_into::<web_sys::HtmlElement>()
@@ -314,6 +368,7 @@ fn commit(
         PluginKind::File => {
             if let Some(path) = buffer.id {
                 crate::lsp::did_change(state, &path);
+                crate::lsp::request_completion(state);
             }
         }
         _ => {}

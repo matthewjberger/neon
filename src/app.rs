@@ -21,6 +21,7 @@ use crate::components::loader::Loader;
 use crate::components::lsp_panel::{LspConsent, LspLog};
 use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
+use crate::components::popups::{CompletionPopup, HoverCardView};
 use crate::components::reference::Reference;
 use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
@@ -248,6 +249,8 @@ pub fn App() -> impl IntoView {
             </div>
             <StatusBar state />
             <FindBar state />
+            <CompletionPopup state />
+            <HoverCardView state />
             <Reference state />
             <WhichKey state />
             <LspConsent state />

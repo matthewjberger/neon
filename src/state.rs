@@ -72,6 +72,31 @@ pub struct BufferRef {
     pub id: Option<String>,
 }
 
+/// One completion candidate: its display label and the text to insert.
+#[derive(Clone, PartialEq)]
+pub struct CompletionEntry {
+    pub label: String,
+    pub insert: String,
+}
+
+/// The completion popup: the candidates, the caret pixel anchor, and the typed
+/// prefix the accepted item replaces.
+#[derive(Clone, PartialEq)]
+pub struct CompletionMenu {
+    pub items: Vec<CompletionEntry>,
+    pub x: f64,
+    pub y: f64,
+    pub prefix: String,
+}
+
+/// A hover card: its text and pixel anchor.
+#[derive(Clone, PartialEq)]
+pub struct HoverCard {
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+}
+
 /// One editor pane: a stable key, its open buffers as tabs with an active index,
 /// and its flex-grow weight in the split. Plain data, held in a `Vec`, so any
 /// number of panes can stack and each can hold any number of tabs.
@@ -157,6 +182,12 @@ pub struct EditorState {
     pub palette_open: RwSignal<bool>,
     /// Whether the find and replace bar is open.
     pub find_open: RwSignal<bool>,
+    /// The LSP completion popup, when open.
+    pub completion: RwSignal<Option<CompletionMenu>>,
+    /// The highlighted completion candidate.
+    pub completion_index: RwSignal<usize>,
+    /// The LSP hover card, when shown.
+    pub hover: RwSignal<Option<HoverCard>>,
     /// Whether the help and keybindings overlay is open.
     pub help_open: RwSignal<bool>,
     /// The leader menu an editor plugin published for the pending prefix, shown
@@ -218,6 +249,9 @@ impl EditorState {
             theme: RwSignal::new(crate::theme::stored_theme()),
             palette_open: RwSignal::new(false),
             find_open: RwSignal::new(false),
+            completion: RwSignal::new(None),
+            completion_index: RwSignal::new(0),
+            hover: RwSignal::new(None),
             help_open: RwSignal::new(false),
             leader: RwSignal::new(None),
             split_vertical: RwSignal::new(true),
