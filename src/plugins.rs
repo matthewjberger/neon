@@ -1,4 +1,4 @@
-//! The plugin model and its persistence. A plugin is a [`PluginSource`]: an id,
+﻿//! The plugin model and its persistence. A plugin is a [`PluginSource`]: an id,
 //! a name, rhai source, and an enabled flag. The page owns the set, persists it
 //! to local storage, and syncs it to the worker. Theme selection persists here
 //! too, since it is the other piece of page-local preference.
@@ -110,8 +110,17 @@ fn on_tick() {\n\
         PluginSource {
             id: "example-ring".to_string(),
             name: "Pulse Ring".to_string(),
-            source: "fn on_start() {\n\
-\u{20}   commands.ring(24, 4.0, [0.3, 0.7, 1.0, 1.0]);\n}\n"
+            source: "// Animated with immediate-mode draw: redrawn every frame so the ring\n\
+// breathes with time. draw_ shapes need no entity tracking.\n\
+fn on_tick() {\n\
+\u{20}   let count = 24;\n\
+\u{20}   let radius = 4.0 + sin(time * 2.0) * 0.7;\n\
+\u{20}   let step = 6.2831853 / count.to_float();\n\
+\u{20}   for index in 0..count {\n\
+\u{20}       let angle = index.to_float() * step;\n\
+\u{20}       let hue = index.to_float() / count.to_float();\n\
+\u{20}       commands.draw_sphere([cos(angle) * radius, 1.0, sin(angle) * radius], 0.3, hsv(hue, 0.7, 1.0));\n\
+\u{20}   }\n}\n"
                 .to_string(),
             enabled: false,
         },
@@ -157,72 +166,6 @@ pub fn default_editor_plugins() -> Vec<PluginSource> {
     ]
 }
 
-const VIM_SOURCE: &str = r#"// Vim keybindings, as an editor plugin. on_key() runs for every keystroke.
-// In scope: key, mode, ctrl, shift, alt, ops (push actions), state (persists).
-// Edit this live to change the bindings.
+const VIM_SOURCE: &str = include_str!("../editor_stdlib/vim.rhai");
 
-fn on_key() {
-    if mode == "insert" {
-        if key == "Escape" {
-            ops.push("Consume");
-            ops.push(#{ SetMode: "normal" });
-            ops.push(#{ Move: -1 });
-        }
-        return;
-    }
-
-    // Normal mode consumes every key so it never types into the buffer.
-    ops.push("Consume");
-
-    let pending = if "pending" in state { state.pending } else { "" };
-    if pending == "d" {
-        state.pending = "";
-        if key == "d" { ops.push("DeleteLine"); }
-        return;
-    }
-
-    if key == "i" { ops.push(#{ SetMode: "insert" }); }
-    else if key == "a" { ops.push(#{ Move: 1 }); ops.push(#{ SetMode: "insert" }); }
-    else if key == "A" { ops.push("LineEnd"); ops.push(#{ SetMode: "insert" }); }
-    else if key == "o" { ops.push("LineEnd"); ops.push(#{ Insert: "\n" }); ops.push(#{ SetMode: "insert" }); }
-    else if key == "h" || key == "ArrowLeft" { ops.push(#{ Move: -1 }); }
-    else if key == "l" || key == "ArrowRight" { ops.push(#{ Move: 1 }); }
-    else if key == "j" || key == "ArrowDown" { ops.push(#{ MoveLine: 1 }); }
-    else if key == "k" || key == "ArrowUp" { ops.push(#{ MoveLine: -1 }); }
-    else if key == "0" { ops.push("LineStart"); }
-    else if key == "$" { ops.push("LineEnd"); }
-    else if key == "w" { ops.push("NextWord"); }
-    else if key == "b" { ops.push("PrevWord"); }
-    else if key == "x" { ops.push(#{ DeleteForward: 1 }); }
-    else if key == "d" { state.pending = "d"; ops.push(#{ SetStatus: "d-" }); }
-}
-"#;
-
-const EDITOR_TEMPLATE: &str = r#"// TEMPLATE editor plugin: handle keystrokes in the code editor.
-//
-// on_key() runs for every keystroke. In scope:
-//   key                  the key name ("a", "Enter", "Escape", "ArrowLeft", ...)
-//   mode                 the current editor mode label
-//   ctrl, shift, alt     modifier booleans
-//   ops                  push actions here
-//   state                a map that persists across keystrokes
-//
-// Push to ops:
-//   "Consume"                       stop the key from typing normally
-//   #{ SetMode: "insert" }          set the mode label
-//   #{ Insert: "text" }             insert text at the cursor
-//   #{ Move: 1 } / #{ MoveLine: 1 } move the cursor (negative reverses)
-//   "LineStart" "LineEnd" "NextWord" "PrevWord"
-//   #{ DeleteForward: 1 } #{ DeleteBackward: 1 } "DeleteLine"
-//   #{ SetStatus: "..." }
-//
-// This example inserts a divider comment on Ctrl-/ and otherwise stays out of
-// the way, so normal typing is unaffected.
-
-fn on_key() {
-    if ctrl && key == "/" {
-        ops.push("Consume");
-        ops.push(#{ Insert: "// ----------------\n" });
-    }
-}
-"#;
+const EDITOR_TEMPLATE: &str = include_str!("../editor_stdlib/editor_template.rhai");

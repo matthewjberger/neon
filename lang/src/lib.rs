@@ -71,8 +71,17 @@ fn seed(commands: &[CommandInfo], stdlib: &[StdModule]) {
     });
 }
 
+/// A rhai engine matching the runtime's lifted limits, so a valid but complex
+/// script (a long key dispatch, deep loops) is not falsely flagged.
+fn make_engine() -> Engine {
+    let mut engine = Engine::new();
+    engine.set_max_expr_depths(0, 0);
+    engine.set_max_operations(0);
+    engine
+}
+
 fn check(source: &str) -> Vec<Diagnostic> {
-    let engine = Engine::new();
+    let engine = make_engine();
     if let Err(error) = engine.compile(source) {
         let position = error.position();
         return vec![Diagnostic {
@@ -153,5 +162,96 @@ fn post(response: &LangResponse) {
         if js_sys::Reflect::set(&envelope, &JsValue::from_str(MESSAGE_KEY), &value).is_ok() {
             drop(scope.post_message(&envelope));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rhai::Engine;
+
+    const STDLIB: &[&str] = &[
+        include_str!("../../worker/stdlib/shapes.rhai"),
+        include_str!("../../worker/stdlib/color.rhai"),
+        include_str!("../../worker/stdlib/motion.rhai"),
+        include_str!("../../worker/stdlib/events.rhai"),
+        include_str!("../../worker/stdlib/input.rhai"),
+        include_str!("../../worker/stdlib/random.rhai"),
+    ];
+
+    #[test]
+    fn prelude_compiles() {
+        let prelude = STDLIB.join("\n\n");
+        let engine = super::make_engine();
+        if let Err(error) = engine.compile(&prelude) {
+            panic!("prelude does not compile: {error}");
+        }
+    }
+
+    const VIM: &str = include_str!("../../editor_stdlib/vim.rhai");
+    const EDITOR_TEMPLATE: &str = include_str!("../../editor_stdlib/editor_template.rhai");
+
+    #[test]
+    fn editor_plugins_compile() {
+        let engine = super::make_engine();
+        if let Err(error) = engine.compile(VIM) {
+            panic!("vim does not compile: {error}");
+        }
+        if let Err(error) = engine.compile(EDITOR_TEMPLATE) {
+            panic!("editor template does not compile: {error}");
+        }
+    }
+
+    #[test]
+    fn vim_normal_i_enters_insert() {
+        use rhai::{Array, Map, Scope};
+        let engine = super::make_engine();
+        let ast = engine.compile(VIM).unwrap();
+        let mut scope = Scope::new();
+        scope.push("key", "i".to_string());
+        scope.push("mode", "normal".to_string());
+        scope.push("ctrl", false);
+        scope.push("shift", false);
+        scope.push("alt", false);
+        scope.push("ops", Array::new());
+        scope.push("state", Map::new());
+        if let Err(error) = engine.call_fn::<()>(&mut scope, &ast, "on_key", ()) {
+            panic!("vim on_key failed: {error}");
+        }
+        let ops = scope.get_value::<Array>("ops").unwrap();
+        assert!(ops.len() >= 2, "vim normal 'i' produced {} ops", ops.len());
+    }
+
+    #[test]
+    fn this_method_helper() {
+        use rhai::{Array, Scope};
+        let engine = super::make_engine();
+        let ast = engine
+            .compile("fn cube(value) { this.push(value); }\nfn on_start() { commands.cube(7); commands.cube(8); }")
+            .unwrap();
+        let mut scope = Scope::new();
+        scope.push("commands", Array::new());
+        if let Err(error) = engine.call_fn::<()>(&mut scope, &ast, "on_start", ()) {
+            panic!("on_start failed: {error}");
+        }
+        let commands = scope.get_value::<Array>("commands").unwrap();
+        assert_eq!(
+            commands.len(),
+            2,
+            "this-method helper produced {} commands",
+            commands.len()
+        );
+    }
+
+    #[test]
+    fn call_fn_sees_scope() {
+        let engine = super::make_engine();
+        let ast = engine.compile("fn handler() { ops.push(42); }").unwrap();
+        let mut scope = rhai::Scope::new();
+        scope.push("ops", rhai::Array::new());
+        if let Err(error) = engine.call_fn::<()>(&mut scope, &ast, "handler", ()) {
+            panic!("call_fn error: {error}");
+        }
+        let ops = scope.get_value::<rhai::Array>("ops").unwrap();
+        assert_eq!(ops.len(), 1, "function could not reach the scope's ops");
     }
 }

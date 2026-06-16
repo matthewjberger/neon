@@ -16,9 +16,19 @@ use web_sys::HtmlTextAreaElement;
 use crate::state::{EditorState, PluginKind};
 
 thread_local! {
-    static ENGINE: Engine = Engine::new();
+    static ENGINE: Engine = make_engine();
     static CACHE: RefCell<HashMap<u64, AST>> = RefCell::new(HashMap::new());
     static STATES: RefCell<HashMap<String, Map>> = RefCell::new(HashMap::new());
+}
+
+/// A rhai engine with the depth and operation limits lifted, so a plugin with a
+/// long key dispatch (like vim) compiles. A bare `Engine::new()` rejects it as
+/// exceeding the default expression complexity.
+fn make_engine() -> Engine {
+    let mut engine = Engine::new();
+    engine.set_max_expr_depths(0, 0);
+    engine.set_max_operations(0);
+    engine
 }
 
 /// One editor action a plugin emits.

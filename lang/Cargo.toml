@@ -17,7 +17,7 @@ console_error_panic_hook = "0.1"
 web-sys = { version = "0.3", features = ["DedicatedWorkerGlobalScope", "MessageEvent"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-rhai = { version = "1.23", default-features = false, features = ["std", "sync", "wasm-bindgen"] }
+rhai = { version = "1.23", features = ["sync", "wasm-bindgen"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rhai = { version = "1.23", default-features = false, features = ["std", "sync"] }
+rhai = { version = "1.23", features = ["sync"] }
