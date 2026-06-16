@@ -7,6 +7,10 @@
 mod agent;
 #[cfg(feature = "agent")]
 mod chat;
+#[cfg(feature = "agent")]
+mod fs;
+#[cfg(feature = "agent")]
+mod lsp;
 
 use rust_embed::RustEmbed;
 use winit::application::ApplicationHandler;
@@ -98,6 +102,8 @@ impl ApplicationHandler for App {
                 agent::start();
                 chat::start();
             }
+            "enable-fs" => fs::start(),
+            "enable-lsp" => lsp::start(),
             _ => {}
         });
         #[cfg(target_os = "windows")]

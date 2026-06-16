@@ -19,6 +19,7 @@ agent = [
     "dep:futures-util",
     "dep:serde_json",
     "dep:protocol",
+    "dep:rfd",
 ]
 
 [dependencies]
@@ -34,7 +35,9 @@ tokio = { version = "1", features = [
     "time",
     "process",
     "io-util",
+    "fs",
 ], optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 futures-util = { version = "0.3", optional = true }
 serde_json = { version = "1", optional = true }
+rfd = { version = "0.15", optional = true }

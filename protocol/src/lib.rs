@@ -234,6 +234,88 @@ pub enum LangResponse {
     },
 }
 
+/// One entry in a directory listing, for the file tree.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// Page to the desktop filesystem bridge. The page has no disk access, so every
+/// file operation crosses this seam to the native shell.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum FsRequest {
+    /// Open the native folder picker and list its root.
+    OpenFolder { request_id: u64 },
+    /// List one directory's immediate children.
+    ListDir { request_id: u64, path: String },
+    /// Read a file's full text.
+    ReadFile { request_id: u64, path: String },
+    /// Write a file's full text.
+    WriteFile {
+        request_id: u64,
+        path: String,
+        text: String,
+    },
+}
+
+/// Desktop filesystem bridge to the page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum FsResponse {
+    Folder {
+        request_id: u64,
+        root: Option<String>,
+        entries: Vec<DirEntry>,
+    },
+    Dir {
+        request_id: u64,
+        path: String,
+        entries: Vec<DirEntry>,
+    },
+    File {
+        request_id: u64,
+        path: String,
+        text: String,
+    },
+    Wrote {
+        request_id: u64,
+        path: String,
+    },
+    Error {
+        request_id: u64,
+        message: String,
+    },
+}
+
+/// Page to the desktop language-server bridge. The page is the LSP client; the
+/// desktop spawns and frames the server (rust-analyzer) over stdio.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum LspClientMessage {
+    /// Discover (via rustup) and spawn the server for a workspace root uri.
+    Start { root_uri: String },
+    /// Forward one JSON-RPC message to the server's stdin.
+    Rpc { json: String },
+    /// Stop the server.
+    Stop,
+}
+
+/// Desktop language-server bridge to the page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum LspServerMessage {
+    /// The server spawned and its stdio is bridged.
+    Started,
+    /// One JSON-RPC message from the server's stdout.
+    Rpc { json: String },
+    /// A log line from the server's stderr or the bridge itself, for the LSP
+    /// log panel.
+    Log { line: String },
+    /// Discovery, spawn, or relay failed.
+    Error { message: String },
+    /// The server process exited.
+    Exited { code: Option<i32> },
+}
+
 /// Correlation id matching an [`AgentResponse`] to its [`AgentRequest`].
 pub type CorrelationId = u64;
 
