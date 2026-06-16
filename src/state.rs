@@ -236,8 +236,6 @@ pub struct EditorState {
     /// The document symbols offered in the fuzzy symbol picker. Empty means
     /// closed; selecting one jumps to it.
     pub symbol_picker: RwSignal<Vec<SearchHit>>,
-    /// The interactive tour's current step, when it is running.
-    pub tour: RwSignal<Option<usize>>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -309,7 +307,6 @@ impl EditorState {
             rename: RwSignal::new(None),
             code_actions: RwSignal::new(Vec::new()),
             symbol_picker: RwSignal::new(Vec::new()),
-            tour: RwSignal::new(None),
         }
     }
 

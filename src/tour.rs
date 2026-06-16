@@ -1,114 +1,129 @@
-//! The interactive tour: a guided sequence that teaches the core keys by having
-//! you do each one. Most steps name the command they expect, so the tour
-//! advances when you actually perform the action, watched through the command
-//! registry. Steps without a command advance with the Next button.
+//! The tour: a vimtutor-style lesson. It opens a throwaway buffer whose text
+//! teaches the keys and asks you to practice on the buffer itself. You learn by
+//! doing the motions and edits right here, not by reading tips.
 
 use leptos::prelude::*;
 
-use crate::state::EditorState;
+use crate::state::{EditorState, FileBuffer, PluginKind};
 
-/// One tour step: a title, the instruction, and the command id that advances it.
-pub struct Step {
-    pub title: &'static str,
-    pub body: &'static str,
-    pub expected: Option<&'static str>,
-}
+const TOUR_PATH: &str = "neon-tour.txt";
 
-pub const STEPS: &[Step] = &[
-    Step {
-        title: "Welcome to Neon",
-        body: "A quick tour of the keys. Do each step, or press Next. You can press Skip anytime.",
-        expected: None,
-    },
-    Step {
-        title: "Modes",
-        body: "Neon is modal. Press i to insert text, then Esc to return to normal mode.",
-        expected: None,
-    },
-    Step {
-        title: "Move around",
-        body: "In normal mode, h j k l move left, down, up, and right. The arrow keys work too.",
-        expected: None,
-    },
-    Step {
-        title: "The leader",
-        body: "Press SPC in normal mode to open the which-key menu. Every command hangs off it.",
-        expected: None,
-    },
-    Step {
-        title: "Command palette",
-        body: "Press SPC SPC to open the palette and run any command by name.",
-        expected: Some("open-palette"),
-    },
-    Step {
-        title: "Open a folder",
-        body: "Press SPC f f to open a project folder in the file tree.",
-        expected: Some("open-folder"),
-    },
-    Step {
-        title: "Search the project",
-        body: "Press SPC / to search the whole project. The query is a smart-case regex.",
-        expected: Some("show-search"),
-    },
-    Step {
-        title: "Jump to a word",
-        body: "Press SPC j w, then type the label on the word you want. The caret jumps there.",
-        expected: Some("jump-word"),
-    },
-    Step {
-        title: "Go to definition",
-        body: "On a Rust symbol, press gd (or SPC g g) to jump to where it is defined.",
-        expected: Some("go-to-definition"),
-    },
-    Step {
-        title: "Save",
-        body: "Press SPC f s to save the current file.",
-        expected: Some("save-file"),
-    },
-    Step {
-        title: "The full reference",
-        body: "Press SPC ? anytime for the complete keybinding reference and every command.",
-        expected: Some("open-help"),
-    },
-    Step {
-        title: "You are ready",
-        body: "That is the core. Walk the leader menus to find the rest. Press Finish to close.",
-        expected: None,
-    },
-];
-
-/// Starts the tour at the first step.
+/// Opens the tour buffer, replacing its text with a fresh lesson, and focuses it.
 pub fn start(state: EditorState) {
-    state.tour.set(Some(0));
-}
-
-/// Closes the tour.
-pub fn close(state: EditorState) {
-    state.tour.set(None);
-}
-
-/// Advances to the next step, closing the tour after the last.
-pub fn next(state: EditorState) {
-    state.tour.update(|step| {
-        if let Some(index) = *step {
-            *step = if index + 1 < STEPS.len() {
-                Some(index + 1)
-            } else {
-                None
-            };
+    state.files.update(|files| {
+        if let Some(file) = files.iter_mut().find(|file| file.path == TOUR_PATH) {
+            file.text = LESSON.to_string();
+            file.dirty = false;
+        } else {
+            files.push(FileBuffer {
+                path: TOUR_PATH.to_string(),
+                text: LESSON.to_string(),
+                dirty: false,
+            });
         }
     });
+    state.open_in_focused(PluginKind::File, Some(TOUR_PATH.to_string()));
 }
 
-/// Advances the tour if the command just run is the one the current step waits
-/// for. Called for every command the registry dispatches.
-pub fn observe(state: EditorState, id: &str) {
-    let waiting_for = state
-        .tour
-        .get_untracked()
-        .and_then(|index| STEPS.get(index))
-        .and_then(|step| step.expected);
-    if waiting_for == Some(id) {
-        next(state);
-    }
-}
+const LESSON: &str = r#"=====================================================================
+  The Neon Tour
+=====================================================================
+
+This is a throwaway buffer. Edit it freely. Nothing here is saved
+unless you ask. Work top to bottom. Lines that begin with DO are
+exercises: do them right here, on this text.
+
+If you ever feel lost, press Escape to return to normal mode, then
+keep reading. The mode shows in the top bar.
+
+
+---------------------------------------------------------------------
+  1. Modes
+---------------------------------------------------------------------
+
+Neon starts in normal mode, where keys are commands, not text.
+Press  i  to enter insert mode, type, then press  Esc  to go back.
+
+DO: move to the empty line below, press i, type your name, press Esc.
+
+
+
+---------------------------------------------------------------------
+  2. Moving around
+---------------------------------------------------------------------
+
+In normal mode the keys  h j k l  move left, down, up, and right.
+The arrow keys work too. For words,  w  goes forward and  b  back.
+For line ends,  0  goes to the start and  $  to the end.
+
+DO: travel along the next line and stop on the word you want.
+The word you are looking for is over .............. here.
+
+
+---------------------------------------------------------------------
+  3. Deleting
+---------------------------------------------------------------------
+
+x  deletes the character under the cursor.
+dw  deletes a word.  dd  deletes the whole line.
+
+DO: this line has has a doubled word. Land on the second has, press dw.
+DO: delete this entire practice line with dd.
+
+
+---------------------------------------------------------------------
+  4. Inserting
+---------------------------------------------------------------------
+
+i  inserts before the cursor and  a  after it.
+A  inserts at the end of the line and  o  opens a line below.
+I  inserts at the first non-blank character.
+
+DO: press A at the end of the next line and finish the sentence.
+The best editor is
+
+
+---------------------------------------------------------------------
+  5. Undo and redo
+---------------------------------------------------------------------
+
+u  undoes the last change.  Ctrl-r  redoes it.
+
+DO: delete the next line with dd, then press u to bring it back.
+Keep me. I should still be here after you undo.
+
+
+---------------------------------------------------------------------
+  6. The leader
+---------------------------------------------------------------------
+
+Press  SPC  in normal mode to open the which-key menu. Every command
+lives under it. A few to try:
+
+  SPC f f   open a folder         SPC f s   save
+  SPC /     search the project    SPC j w   jump to a word
+  SPC ;     toggle a comment      SPC g g   go to definition
+
+DO: press SPC, read the menu, then a letter to dive in or Esc to back out.
+
+
+---------------------------------------------------------------------
+  7. Search
+---------------------------------------------------------------------
+
+In normal mode  /  searches inside this buffer.
+SPC /  searches across the whole project with ripgrep.
+
+DO: press / then type  leader  and press Enter to find the word above.
+
+
+---------------------------------------------------------------------
+  8. Where to go next
+---------------------------------------------------------------------
+
+Press  SPC ?  anytime for the full keybinding reference.
+Open the plugin manager to read the keymaps. They are rhai you can
+edit live, so every binding here is yours to change.
+
+You are ready. Close this buffer whenever you like.
+"#;

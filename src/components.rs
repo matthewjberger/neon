@@ -19,6 +19,5 @@ pub mod reference;
 pub mod search;
 pub mod status_bar;
 pub mod toolbar;
-pub mod tour;
 pub mod viewport;
 pub mod which_key;
