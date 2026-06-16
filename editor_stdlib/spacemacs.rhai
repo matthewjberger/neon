@@ -13,7 +13,9 @@
 //          h/l/j/k   focus previous / next / next / previous
 //          w/W/=/x   focus other / previous / balance / close split
 //   SPC s  s/p///j   search: find buffer / project / project / jump word
-//   SPC j  j/l/w     jump: char / line / word
+//   SPC j  j/l/w/+/= jump: char / line / word / format / format
+//   SPC g  g/d       goto: definition (also "gd" in normal mode)
+//   SPC e  n/p/l     errors: next / previous / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
 //          J/>/<     join lines / indent / outdent
 //   SPC t  p/c/r/a/o/l  toggles: preview / console / reference / Claude /
@@ -39,6 +41,7 @@ fn leader_menu() {
         #{ key: "w", label: "+Windows" },
         #{ key: "s", label: "+Search" },
         #{ key: "j", label: "+Jump" },
+        #{ key: "g", label: "+Goto" },
         #{ key: "x", label: "+Text" },
         #{ key: "t", label: "+Toggles" },
         #{ key: "e", label: "+Errors" },
@@ -100,6 +103,15 @@ fn jump_menu() {
         #{ key: "j", label: "Jump to char" },
         #{ key: "l", label: "Jump to line" },
         #{ key: "w", label: "Jump to word" },
+        #{ key: "+", label: "Format buffer" },
+        #{ key: "=", label: "Format buffer" },
+    ] };
+}
+
+fn goto_menu() {
+    #{ title: "+Goto", items: [
+        #{ key: "g", label: "Go to definition" },
+        #{ key: "d", label: "Go to definition" },
     ] };
 }
 
@@ -129,6 +141,8 @@ fn toggle_menu() {
 
 fn error_menu() {
     #{ title: "+Errors", items: [
+        #{ key: "n", label: "Next error" },
+        #{ key: "p", label: "Previous error" },
         #{ key: "l", label: "rust-analyzer log" },
     ] };
 }
@@ -180,6 +194,7 @@ fn on_key() {
         else if key == "w" { state.pending = "SPC w"; ops.push(#{ ShowMenu: window_menu() }); }
         else if key == "s" { state.pending = "SPC s"; ops.push(#{ ShowMenu: search_menu() }); }
         else if key == "j" { state.pending = "SPC j"; ops.push(#{ ShowMenu: jump_menu() }); }
+        else if key == "g" { state.pending = "SPC g"; ops.push(#{ ShowMenu: goto_menu() }); }
         else if key == "x" { state.pending = "SPC x"; ops.push(#{ ShowMenu: text_menu() }); }
         else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
         else if key == "e" { state.pending = "SPC e"; ops.push(#{ ShowMenu: error_menu() }); }
@@ -238,6 +253,14 @@ fn on_key() {
         if key == "j" { ops.push(#{ RunCommand: "jump-char" }); }
         else if key == "l" { ops.push(#{ RunCommand: "jump-line" }); }
         else if key == "w" { ops.push(#{ RunCommand: "jump-word" }); }
+        else if key == "+" || key == "=" { ops.push(#{ RunCommand: "format-document" }); }
+        return;
+    }
+    if pending == "SPC g" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "g" || key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
         return;
     }
     if pending == "SPC x" {
@@ -270,7 +293,9 @@ fn on_key() {
         ops.push("Consume");
         ops.push("HideMenu");
         state.pending = "";
-        if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
+        if key == "n" { ops.push(#{ RunCommand: "next-error" }); }
+        else if key == "p" { ops.push(#{ RunCommand: "prev-error" }); }
+        else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
         return;
     }
     if pending == "SPC p" {
@@ -296,6 +321,12 @@ fn on_key() {
         if key == "d" { ops.push("DeleteLine"); }
         return;
     }
+    if pending == "g" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
+        return;
+    }
 
     ops.push("Consume");
     if key == " " { state.pending = "SPC"; ops.push(#{ ShowMenu: leader_menu() }); }
@@ -314,6 +345,7 @@ fn on_key() {
     else if key == "$" { ops.push("LineEnd"); }
     else if key == "w" { ops.push("NextWord"); }
     else if key == "b" { ops.push("PrevWord"); }
+    else if key == "g" { state.pending = "g"; }
     else if key == "x" { ops.push(#{ DeleteForward: 1 }); }
     else if key == "X" { ops.push(#{ DeleteBackward: 1 }); }
     else if key == "D" { ops.push("DeleteToLineEnd"); }

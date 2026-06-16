@@ -22,6 +22,8 @@ use crate::state::{
 enum Pending {
     Completion { prefix: String, x: f64, y: f64 },
     Hover { x: f64, y: f64 },
+    Definition,
+    Format { path: String },
 }
 
 const LSP_URL: &str = "ws://127.0.0.1:8793";
@@ -177,6 +179,111 @@ pub fn request_completion(state: EditorState) {
     );
 }
 
+/// Requests the definition of the symbol at the caret and jumps to it.
+pub fn request_definition(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client.pending.insert(id, Pending::Definition);
+    });
+    send_request_id(
+        id,
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+        }),
+    );
+}
+
+/// Requests a whole-document format from the server and applies the edits.
+pub fn format_document(state: EditorState) {
+    let Some((path, _, _)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    client(|client| {
+        client
+            .pending
+            .insert(id, Pending::Format { path: path.clone() });
+    });
+    send_request_id(
+        id,
+        "textDocument/formatting",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "options": { "tabSize": 4, "insertSpaces": true },
+        }),
+    );
+}
+
+/// Moves the caret to the next or previous diagnostic in the focused file.
+pub fn goto_diagnostic(state: EditorState, forward: bool) {
+    let buffer = state.focused_buffer();
+    if buffer.kind != PluginKind::File {
+        return;
+    }
+    let Some(path) = buffer.id else {
+        return;
+    };
+    let diagnostics = client(|client| client.diagnostics.get(&path).cloned().unwrap_or_default());
+    if diagnostics.is_empty() {
+        return;
+    }
+    let Some(element) = crate::components::find::active() else {
+        return;
+    };
+    let value = element.value();
+    let caret = element.selection_start().ok().flatten().unwrap_or(0);
+    let (line, _) = line_character(&value, caret);
+    let current = line + 1;
+    let mut lines: Vec<u32> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.line)
+        .collect();
+    lines.sort_unstable();
+    lines.dedup();
+    let target = if forward {
+        lines
+            .iter()
+            .find(|candidate| **candidate > current)
+            .copied()
+            .or_else(|| lines.first().copied())
+    } else {
+        lines
+            .iter()
+            .rev()
+            .find(|candidate| **candidate < current)
+            .copied()
+            .or_else(|| lines.last().copied())
+    };
+    if let Some(line) = target {
+        state.goto.set(Some((path, line)));
+    }
+}
+
+/// The focused Rust file and the caret's zero-based line and character.
+fn caret_position(state: EditorState) -> Option<(String, u32, u32)> {
+    if !ready() {
+        return None;
+    }
+    let buffer = state.focused_buffer();
+    if buffer.kind != PluginKind::File {
+        return None;
+    }
+    let path = buffer.id?;
+    if language_for_path(&path) != "rust" {
+        return None;
+    }
+    let element = crate::components::find::active()?;
+    let value = element.value();
+    let caret = element.selection_start().ok().flatten().unwrap_or(0);
+    let (line, character) = line_character(&value, caret);
+    Some((path, line, character))
+}
+
 /// Requests hover for the document position under a client pixel point.
 pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     if !ready() {
@@ -273,6 +380,82 @@ fn to_entry(item: &Value) -> Option<CompletionEntry> {
         .unwrap_or(&label)
         .to_string();
     Some(CompletionEntry { label, insert })
+}
+
+fn apply_definition(state: EditorState, value: &Value) {
+    let result = value.get("result");
+    let location = match result {
+        Some(Value::Array(items)) => items.first(),
+        Some(object) if object.is_object() => Some(object),
+        _ => None,
+    };
+    let Some(location) = location else {
+        return;
+    };
+    let uri = location
+        .get("uri")
+        .or_else(|| location.get("targetUri"))
+        .and_then(Value::as_str);
+    let line = location
+        .pointer("/range/start/line")
+        .or_else(|| location.pointer("/targetSelectionRange/start/line"))
+        .and_then(Value::as_u64);
+    if let (Some(uri), Some(line)) = (uri, line) {
+        let path = path_from_uri(uri);
+        crate::fs::read_file(&path);
+        state.goto.set(Some((path, line as u32 + 1)));
+    }
+}
+
+fn apply_format(state: EditorState, value: &Value, path: &str) {
+    let Some(raw) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    if raw.is_empty() {
+        return;
+    }
+    let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
+    let mut edits: Vec<(u32, u32, String)> = raw
+        .iter()
+        .filter_map(|edit| {
+            let new_text = edit.get("newText").and_then(Value::as_str)?.to_string();
+            let start_line = edit.pointer("/range/start/line").and_then(Value::as_u64)? as u32;
+            let start_character = edit
+                .pointer("/range/start/character")
+                .and_then(Value::as_u64)? as u32;
+            let end_line = edit.pointer("/range/end/line").and_then(Value::as_u64)? as u32;
+            let end_character = edit
+                .pointer("/range/end/character")
+                .and_then(Value::as_u64)? as u32;
+            Some((
+                offset_of(&text, start_line, start_character),
+                offset_of(&text, end_line, end_character),
+                new_text,
+            ))
+        })
+        .collect();
+    edits.sort_by_key(|edit| std::cmp::Reverse(edit.0));
+    let mut result = text;
+    for (start, end, new_text) in edits {
+        result = splice_utf16(&result, start, end, &new_text);
+    }
+    state.set_buffer_text(PluginKind::File, &Some(path.to_string()), result);
+    did_change(state, path);
+}
+
+fn offset_of(value: &str, line: u32, character: u32) -> u32 {
+    let mut current_line = 0;
+    let mut offset = 0;
+    for unit in value.chars() {
+        if current_line == line {
+            break;
+        }
+        if unit == '\n' {
+            current_line += 1;
+        }
+        offset += unit.len_utf16() as u32;
+    }
+    offset + character
 }
 
 fn apply_hover(state: EditorState, value: &Value, x: f64, y: f64) {
@@ -459,6 +642,8 @@ fn handle_rpc(state: EditorState, value: Value) {
         match pending {
             Pending::Completion { prefix, x, y } => apply_completion(state, &value, prefix, x, y),
             Pending::Hover { x, y } => apply_hover(state, &value, x, y),
+            Pending::Definition => apply_definition(state, &value),
+            Pending::Format { path } => apply_format(state, &value, &path),
         }
         return;
     }
