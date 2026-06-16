@@ -1,9 +1,11 @@
 # Neon architecture
 
-Neon is a plugin-first 3D editor. The UI is Leptos in Rust, the nightshade
-engine runs in a web worker, and plugins are rhai scripts that produce `Command`
-and consume `Event`. The whole stack is Rust plus a few lines of wasm bootstrap
-JavaScript. No npm, no bundler, no JavaScript framework.
+Neon is a code editor written in Rust. The UI is Leptos, it edits files from disk
+with rust-analyzer for Rust projects, and it is extensible through rhai plugins:
+editor plugins add editor functionality (keybindings, modal editing, commands),
+and scene plugins drive a live 3D view rendered by the nightshade engine in a web
+worker. The whole stack is Rust plus a few lines of wasm bootstrap JavaScript. No
+npm, no bundler, no JavaScript framework.
 
 ## Contexts
 
@@ -55,6 +57,10 @@ Everything that crosses a context boundary is serde, defined once in
   vocabulary seeding and compile-check requests with keyed diagnostics.
 - `AgentRequest` / `AgentResponse`: the agent surface, split editor-domain
   (answered by the page) and scene-domain (answered by the worker).
+- `FsRequest` / `FsResponse`: page to and from the desktop filesystem bridge:
+  open folder, list directory, read and write files, project search.
+- `LspClientMessage` / `LspServerMessage`: page to and from the language-server
+  bridge, carrying framed LSP JSON-RPC plus server log lines.
 
 ## Data flow: a frame and an edit
 
@@ -107,18 +113,27 @@ free functions:
 The library is sent to the page on `Ready` so the editor shows its source and the
 language service offers its helpers.
 
-## The editor and language service
+## The editor surface
 
-The code editor (`components/editor_pane.rs`) is a native textarea for editing
-with a Rust highlight `<pre>` layer behind it sharing the same box. Highlighting
-is a hand-written rhai scanner (`highlight.rs`). Command tokens are colored from
-the manifest, so the color set never drifts from what a script can call.
+The code editor (`components/editor_pane.rs`) is a native textarea with a Rust
+highlight `<pre>` layer behind it sharing the same box, a line-number gutter, and
+a tab strip. A pane holds many buffers as tabs; panes split (right or below) and
+resize, each editing independently. Highlighting is a hand-written multi-language
+scanner (`highlight.rs`): per-language keyword and comment rules for rust, toml,
+json, javascript, and rhai, with rhai command tokens colored from the manifest.
 
-The language service is reflective. The worker derives the command vocabulary
-from `command_manifest` and `command_schema`, and the highlighter, the reference
-overlay, and the language worker all read from it. Add a free function to
-`nightshade-api` and it becomes a `Command`, then it lights up across the editor
-with no editor changes.
+Edits funnel through `state.set_buffer_text`, which records the pre-edit text into
+a per-buffer undo stack (`undo.rs`) before writing, so `Ctrl+Z`/`Ctrl+Y` undo
+every edit path (typing, plugin ops, find, completion) even though native
+textarea undo is bypassed by programmatic edits. Find and replace (`find.rs`,
+`Ctrl+F`) act on the focused textarea. Project-wide search runs on the desktop
+and jumps to a line.
+
+The rhai language service is reflective. The worker derives the command
+vocabulary from `command_manifest` and `command_schema`, and the highlighter, the
+reference overlay, and the language worker all read from it. Add a free function
+to `nightshade-api` and it becomes a `Command`, then it lights up across the
+editor with no editor changes.
 
 ## Theming
 
@@ -165,24 +180,36 @@ toggleable in the plugin panel, so the bindings and the menus are tuned by
 editing rhai, live. nightshade's `Command`/`Event` bus is closed, so this is a
 neon layer on top, sharing the rhai authoring experience.
 
-The buffer, cursor, command, and split-pane surface is implemented. Tile,
-terminal, and richer multi-buffer manipulation extend the same op and command
-vocabulary as that UI infrastructure grows.
+The buffer, cursor, command, tab, split-pane, and undo surface is implemented on
+the textarea. A custom-rendered surface (multi-cursor) and integrated terminals
+extend the same op and command vocabulary as that UI grows.
 
 ## Files and rust-analyzer
 
 Buffers are not only plugins. A pane can show a file opened from disk through the
 filesystem bridge: open a folder, browse the lazily loaded tree, edit, and save.
 A file buffer carries its path, text, and dirty flag in `state.files`, and the
-status bar shows its language by extension.
+status bar shows its language by extension. The opened folder and files are saved
+to local storage and reopened on launch (`session.rs`).
 
-For a Rust file the page acts as an LSP client (`src/lsp.rs`). After a consent
-prompt (spawning a process), it asks the desktop to start rust-analyzer, runs the
-initialize handshake, syncs open files with `didOpen` and `didChange` (the
-overlay model, so the server sees unsaved edits), and turns `publishDiagnostics`
-into the editor's diagnostics strip. The LSP log panel shows the server's output.
-The rhai language worker still drives plugin diagnostics; rust-analyzer is the
-parallel path for file buffers.
+For a Rust file the page acts as an LSP client (`src/lsp.rs`), whose state lives
+in one `Client` struct. After a consent prompt (spawning a process), it asks the
+desktop to start rust-analyzer, runs the initialize handshake, syncs open files
+with `didOpen` and `didChange` (the overlay model, so the server sees unsaved
+edits), and turns `publishDiagnostics` into the diagnostics strip. It also
+requests completion at the caret (a popup anchored with a canvas-measured font
+advance) and hover under the pointer. The LSP log panel shows the server's
+output. The rhai language worker still drives plugin diagnostics; rust-analyzer
+is the parallel path for file buffers.
+
+## Project search and the filesystem bridge
+
+The page has no disk access, so the filesystem bridge (`desktop/src/fs.rs`, a
+websocket relay) runs every file operation natively: the folder picker, directory
+listing, file read and write, and a project search that walks the workspace with
+the `ignore` crate so it respects gitignore. The page client (`src/fs.rs`) sends
+`FsRequest`s and applies each `FsResponse` to the tree, the open file buffers, and
+the search results.
 
 ## Build
 

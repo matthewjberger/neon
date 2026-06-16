@@ -1,22 +1,23 @@
 # Neon design
 
-Neon is a plugin-first 3D editor. The UI is Leptos in Rust, the nightshade
-engine runs in a web worker, and you author plugins in rhai that produce
-`Command` and consume `Event`. The whole stack is Rust plus a few lines of wasm
-bootstrap JavaScript. No npm, no bundler, no JavaScript framework.
+Neon is a code editor written in Rust. The UI is Leptos, it edits files from disk
+with rust-analyzer for Rust projects, and it is extensible through rhai plugins:
+editor plugins add editor functionality (keybindings, modal editing, commands),
+and scene plugins drive a live 3D view rendered by the nightshade engine in a web
+worker. The whole stack is Rust plus a few lines of wasm bootstrap JavaScript. No
+npm, no bundler, no JavaScript framework.
 
-This document is the architecture and the decisions, including the layers that
-are designed and scaffolded but not yet fully built. It is the source of truth
-as the product grows.
+This document is the architecture and the decisions. It is the source of truth as
+the product grows.
 
 ## Principles
 
 - **All Rust, no npm.** Every dependency is a Rust crate. The only JavaScript is
   the per-worker bootstrap (`runtime/worker.js`, `runtime/lang_worker.js`), a few
   lines each, with no packages. This rules out CodeMirror and tree-sitter (npm
-  and C respectively). Highlighting is a hand-written rhai scanner in Rust plus
-  the command manifest, which for a single language is more accurate than a
-  generic grammar and adds no dependency.
+  and C respectively). Highlighting is a hand-written multi-language scanner in
+  Rust (rust, toml, json, javascript, rhai), with rhai commands colored from the
+  manifest; richer language intelligence comes from LSP, not a bundled grammar.
 - **Data-oriented, not OOP.** State is a `Copy` struct of signals, behavior is
   free functions, components are plain functions. Nothing is an object that owns
   the app, the engine, or the workers.
@@ -40,7 +41,9 @@ Four isolated contexts, each doing what it is best at.
 - **Language worker (`lang/`):** links only `rhai`. Compile-checks plugin source
   and flags unknown command calls, off the render thread.
 - **Desktop shell (`desktop/`):** a `wry` webview that serves and embeds the web
-  bundle, and hosts the Claude MCP bridge and chat relay.
+  bundle, and hosts the bridges the page cannot run itself: the Claude MCP bridge
+  and chat relay, a filesystem bridge (disk access plus project search), and a
+  language-server bridge that spawns rust-analyzer and frames LSP over stdio.
 
 ## The plugin model
 
@@ -76,17 +79,36 @@ the language service can offer its helpers.
 ## The editor surface
 
 A native textarea for editing (caret, IME, clipboard, accessibility all free)
-with a Rust highlight `<pre>` layer behind it sharing the same box
-(`src/components/editor_pane.rs`). Highlighting comes from `src/highlight.rs`, a
-hand-written rhai scanner. Command tokens are colored from the manifest, so the
-color set never drifts from what a script can call. Edits update the plugin
-source, persist, and after a short pause sync the scene and ask the language
-worker to compile-check. Diagnostics show in a strip under the editor.
+with a Rust highlight `<pre>` layer behind it sharing the same box, a line-number
+gutter, and a tab strip (`src/components/editor_pane.rs`). A pane holds many
+buffers as tabs; panes split right or below and resize. Highlighting comes from
+`src/highlight.rs`, a hand-written multi-language scanner (rust, toml, json,
+javascript, rhai), with rhai commands colored from the manifest.
 
-The language service is reflective: the worker derives the command vocabulary
-from `command_manifest`/`command_schema`, and the reference, highlighter, and
-language worker all read from it. Add a function to the facade and it becomes a
-`Command`, then it lights up across the editor with no editor changes.
+Every edit goes through `state.set_buffer_text`, which records the pre-edit text
+into a per-buffer undo stack (`src/undo.rs`) before writing, so `Ctrl+Z`/`Ctrl+Y`
+undo every path (typing, plugin ops, find, completion) even though native
+textarea undo is bypassed by programmatic edits. Find and replace (`src/find.rs`)
+act on the focused textarea; project-wide search runs on the desktop. Editing a
+scene plugin syncs the scene and asks the language worker to compile-check;
+diagnostics show in a strip under the editor.
+
+The rhai language service is reflective: the worker derives the command
+vocabulary from `command_manifest`/`command_schema`, and the reference,
+highlighter, and language worker all read from it. Add a function to the facade
+and it becomes a `Command`, then it lights up across the editor with no editor
+changes.
+
+## Files and rust-analyzer
+
+A pane buffer can be a file from disk, not only a plugin. The filesystem bridge
+opens a folder and a lazily loaded tree, reads and writes files, and searches the
+workspace (respecting gitignore); the open folder and files are restored on
+launch (`src/session.rs`). For Rust files the page is an LSP client
+(`src/lsp.rs`, one `Client` struct): after a consent prompt it starts
+rust-analyzer (discovered through rustup), runs the initialize handshake, syncs
+open files with `didOpen`/`didChange`, and surfaces diagnostics, completion, and
+hover. The LSP log panel shows the server output.
 
 ## Theming
 
@@ -105,16 +127,18 @@ The agent surface is in `protocol` as `AgentRequest`/`AgentResponse`. It spans
 two domains, because neon's state is split:
 
 - **Editor domain (answered by the page):** `GetEditorState`, `GetBuffer`,
-  `SetBuffer`, `ListPlugins`, `EditPlugin`. Reading and writing what the user
-  sees and edits.
+  `SetBuffer`, `ListPlugins`, `EditPlugin`, plus `GetApiReference` (the command
+  and helper vocabulary) and `GetConsole`, so the agent learns the API and sees
+  runtime errors instead of probing. Edits return compile diagnostics.
 - **Scene domain (answered by the engine worker):** `RunCommand`, `QueryScene`,
-  `Screenshot`. The worker handler is `worker/src/lib.rs::handle_agent`.
+  `Screenshot` (a real PNG capture of the viewport). The worker handler is
+  `worker/src/lib.rs::handle_agent`.
 
-The page side is in place: the relay client (`src/relay.rs`) connects the chat
-and routes each request to its owner, the page or the worker. The desktop shell
-(`desktop/`) hosts the MCP server that exposes these as tools to Claude and the
-relay that pipes a `claude` subprocess. That host process is the remaining piece.
-This mirrors the nightshade editor's relay and bridge pattern.
+This is fully wired: the page relay client (`src/relay.rs`) routes each request
+to its owner, and the desktop shell (`desktop/src/agent.rs`) hosts the MCP HTTP
+server that exposes these as tools and the chat relay that pipes a `claude`
+subprocess pointed at it. It mirrors the nightshade editor's relay and bridge
+pattern.
 
 ## The editor API and editor plugins
 
@@ -149,12 +173,15 @@ one experience.
 2. **Editor API and editor plugins.** The page-side editor-plugin runtime, the
    editor-command registry, the command palette, split panes, and the Spacemacs
    and Vim layers with the which-key leader menu. Built.
-3. **Claude / MCP.** The chat pane, the page relay client, and agent-request
-   routing across page and worker are in place. The desktop-hosted MCP server
-   that exposes the agent surface as tools and pipes the `claude` subprocess is
-   the remaining piece.
-4. **Deeper editor surface.** Tiling layout, integrated terminals, and richer
-   multi-buffer manipulation, extending the same op and command vocabulary.
+3. **Claude / MCP.** The chat pane, the page relay client, the agent-request
+   routing, and the desktop MCP server with viewport screenshot are all in place.
+   Built.
+4. **Files and rust-analyzer.** The filesystem bridge (tree, read/write, project
+   search), file buffers with tabs, session restore, and the rust-analyzer LSP
+   client (diagnostics, completion, hover) behind a consent prompt. Built.
+5. **Deeper editor surface.** A custom-rendered surface for multi-cursor,
+   integrated terminals, and richer multi-buffer manipulation, extending the same
+   op and command vocabulary. Undo, tabs, find, and project search are already in.
 
 ## Build
 
