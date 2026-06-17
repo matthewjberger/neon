@@ -120,8 +120,8 @@ fn open(
         })
         .ok()?;
     let mut command = CommandBuilder::new(shell());
-    if !cwd.is_empty() {
-        command.cwd(cwd);
+    if let Some(directory) = working_directory(cwd) {
+        command.cwd(directory);
     }
     let mut child = pair.slave.spawn_command(command).ok()?;
     drop(pair.slave);
@@ -269,10 +269,30 @@ fn palette(index: u8) -> String {
     format!("#{red:02x}{green:02x}{blue:02x}")
 }
 
-fn shell() -> String {
-    if cfg!(windows) {
-        "cmd.exe".to_string()
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string())
+/// The PTY's starting directory: the workspace if one is open, otherwise the
+/// user's home directory.
+fn working_directory(workspace: String) -> Option<std::path::PathBuf> {
+    if !workspace.is_empty() {
+        return Some(std::path::PathBuf::from(workspace));
     }
+    dirs::home_dir()
+}
+
+#[cfg(windows)]
+fn shell() -> String {
+    find_on_path("pwsh.exe").unwrap_or_else(|| "powershell.exe".to_string())
+}
+
+#[cfg(not(windows))]
+fn shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string())
+}
+
+#[cfg(windows)]
+fn find_on_path(executable: &str) -> Option<String> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|directory| directory.join(executable))
+        .find(|candidate| candidate.is_file())
+        .map(|candidate| candidate.to_string_lossy().into_owned())
 }

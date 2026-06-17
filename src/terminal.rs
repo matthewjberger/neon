@@ -38,7 +38,13 @@ fn connect(state: EditorState) {
     });
     websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
-    let onclose = Closure::<dyn FnMut()>::new(move || schedule_reconnect(state));
+    let onopen = Closure::<dyn FnMut()>::new(move || state.term_connected.set(true));
+    websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+    onopen.forget();
+    let onclose = Closure::<dyn FnMut()>::new(move || {
+        state.term_connected.set(false);
+        schedule_reconnect(state);
+    });
     websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
     onclose.forget();
     SOCKET.with(|slot| *slot.borrow_mut() = Some(websocket));

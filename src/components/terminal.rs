@@ -13,6 +13,7 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
     let grid_ref = NodeRef::<html::Div>::new();
     Effect::new(move |_| {
         if state.terminal_open.get()
+            && state.term_connected.get()
             && let Some(element) = grid_ref.get()
         {
             let _ = element.focus();
@@ -36,10 +37,10 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
     };
     view! {
         <Show when=move || state.terminal_open.get() fallback=|| ()>
-            <div class="task-panel">
-                <div class="task-header">
+            <div class="terminal-panel">
+                <div class="terminal-header">
                     <span>"Terminal"</span>
-                    <span class="task-actions">
+                    <span class="terminal-actions">
                         <button class="icon-button" on:click=move |_| crate::terminal::interrupt()>
                             "^C"
                         </button>

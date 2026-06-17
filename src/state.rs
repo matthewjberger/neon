@@ -253,6 +253,8 @@ pub struct EditorState {
     pub term_pending: RwSignal<Option<String>>,
     /// Whether the terminal panel is shown.
     pub terminal_open: RwSignal<bool>,
+    /// Whether the page is connected to the desktop terminal relay.
+    pub term_connected: RwSignal<bool>,
     /// Extra caret offsets (UTF-16) for multi-cursor editing, beyond the
     /// textarea's own caret. Empty when not in multi-cursor mode.
     pub cursors: RwSignal<Vec<u32>>,
@@ -353,6 +355,7 @@ impl EditorState {
             term_grid: RwSignal::new(None),
             term_pending: RwSignal::new(None),
             terminal_open: RwSignal::new(false),
+            term_connected: RwSignal::new(false),
             cursors: RwSignal::new(Vec::new()),
             editor_scroll: RwSignal::new(0),
         }
