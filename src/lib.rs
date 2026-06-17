@@ -20,6 +20,7 @@ mod bridge;
 mod caret;
 mod check;
 mod commands;
+mod complete;
 mod components;
 mod editor_plugins;
 mod fs;

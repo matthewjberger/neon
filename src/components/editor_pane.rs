@@ -173,6 +173,21 @@ pub fn EditorPane(
                 }
             }
         }
+        if matches!(kind, PluginKind::Scene | PluginKind::Editor)
+            && let Some(window) = web_sys::window()
+        {
+            if let Some(handle) = completion_timer.get_value() {
+                window.clear_timeout_with_handle(handle);
+            }
+            let callback = Closure::once_into_js(move || crate::complete::rhai_complete(state));
+            let handle = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    callback.unchecked_ref(),
+                    150,
+                )
+                .unwrap_or(0);
+            completion_timer.set_value(Some(handle));
+        }
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
