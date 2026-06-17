@@ -3,6 +3,7 @@
 // narrows it. The key letters follow VSpaceCode so the muscle memory carries over.
 //
 //   SPC SPC          command palette
+//   SPC '            toggle the terminal
 //   SPC TAB          last buffer (previous tab)
 //   SPC /            search the project
 //   SPC ;            toggle comment on the line
@@ -37,6 +38,7 @@
 fn leader_menu() {
     #{ title: "Leader", items: [
         #{ key: "SPC", label: "Commands" },
+        #{ key: "'", label: "Terminal" },
         #{ key: "TAB", label: "Last buffer" },
         #{ key: "/", label: "Search project" },
         #{ key: ";", label: "Toggle comment" },
@@ -237,6 +239,7 @@ fn on_key() {
         else if key == ";" { ops.push(#{ ToggleComment: "//" }); ops.push("HideMenu"); }
         else if key == "?" { ops.push(#{ RunCommand: "open-help" }); ops.push("HideMenu"); }
         else if key == "r" { ops.push(#{ RunCommand: "run-pause" }); ops.push("HideMenu"); }
+        else if key == "'" { ops.push(#{ RunCommand: "toggle-tasks" }); ops.push("HideMenu"); }
         else if key == "a" { ops.push(#{ RunCommand: "code-action" }); ops.push("HideMenu"); }
         else if key == "T" { ops.push(#{ RunCommand: "next-theme" }); ops.push("HideMenu"); }
         else if key == "f" { state.pending = "SPC f"; ops.push(#{ ShowMenu: file_menu() }); }

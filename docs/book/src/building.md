@@ -34,6 +34,10 @@ a panel:
 - `SPC c c` check, `SPC c b` build, `SPC c t` test, `SPC c r` run.
 - `SPC c k` cancels the running task, `SPC c o` toggles the output panel.
 
+The same panel is a terminal: toggle it with `SPC '`, type a command in the
+input, and it runs through the platform shell with its output streamed above.
+`Clear` empties the scrollback.
+
 rust-analyzer already surfaces check-on-save diagnostics; this is for running
 tests and the binary and watching the output live. The same commands are in the
 palette.

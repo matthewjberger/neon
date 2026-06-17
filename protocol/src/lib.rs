@@ -391,6 +391,12 @@ pub enum TaskRequest {
         args: Vec<String>,
         cwd: String,
     },
+    /// Run a command line through the platform shell, for the terminal.
+    Shell {
+        id: u64,
+        command: String,
+        cwd: String,
+    },
     Cancel {
         id: u64,
     },

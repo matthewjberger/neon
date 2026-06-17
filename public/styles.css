@@ -1608,6 +1608,17 @@ body {
   word-break: break-word;
 }
 
+.task-input {
+  margin: 6px 10px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
 .extra-caret {
   position: fixed;
   width: 2px;

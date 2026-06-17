@@ -73,9 +73,40 @@ fn send(request: &TaskRequest) {
 
 /// Runs a program in the workspace root, streaming its output to the panel.
 pub fn run(state: EditorState, program: &str, args: &[&str]) {
+    let Some((id, cwd)) = begin(state, &format!("{program} {}", args.join(" "))) else {
+        return;
+    };
+    send(&TaskRequest::Run {
+        id,
+        program: program.to_string(),
+        args: args.iter().map(|arg| arg.to_string()).collect(),
+        cwd,
+    });
+}
+
+/// Runs a command line through the platform shell, the terminal's input path.
+pub fn run_shell(state: EditorState, command: &str) {
+    let Some((id, cwd)) = begin(state, command) else {
+        return;
+    };
+    send(&TaskRequest::Shell {
+        id,
+        command: command.to_string(),
+        cwd,
+    });
+}
+
+/// Clears the terminal scrollback.
+pub fn clear_output(state: EditorState) {
+    state.task_output.set(Vec::new());
+}
+
+/// Starts a task: needs a workspace, allocates an id, opens the panel, and
+/// appends the prompt line. Returns the id and working directory.
+fn begin(state: EditorState, label: &str) -> Option<(u64, String)> {
     let Some(cwd) = state.workspace_root.get_untracked() else {
         state.status.set("Open a folder first".to_string());
-        return;
+        return None;
     };
     let id = NEXT_ID.with(|next| {
         let value = next.get();
@@ -83,17 +114,10 @@ pub fn run(state: EditorState, program: &str, args: &[&str]) {
         value
     });
     CURRENT.with(|current| current.set(id));
-    state
-        .task_output
-        .set(vec![format!("$ {program} {}", args.join(" "))]);
+    push(state, format!("$ {label}"));
     state.task_running.set(true);
     state.task_open.set(true);
-    send(&TaskRequest::Run {
-        id,
-        program: program.to_string(),
-        args: args.iter().map(|arg| arg.to_string()).collect(),
-        cwd,
-    });
+    Some((id, cwd))
 }
 
 /// Cancels the running task.

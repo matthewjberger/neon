@@ -86,6 +86,21 @@ async fn handle_page(stream: tokio::net::TcpStream) {
                     cancels.lock().await.remove(&id);
                 });
             }
+            TaskRequest::Shell { id, command, cwd } => {
+                let (program, args) = if cfg!(windows) {
+                    ("cmd".to_string(), vec!["/C".to_string(), command])
+                } else {
+                    ("sh".to_string(), vec!["-c".to_string(), command])
+                };
+                let (cancel_tx, cancel_rx) = oneshot::channel();
+                cancels.lock().await.insert(id, cancel_tx);
+                let out_tx = out_tx.clone();
+                let cancels = cancels.clone();
+                tokio::spawn(async move {
+                    run_task(id, program, args, cwd, out_tx, cancel_rx).await;
+                    cancels.lock().await.remove(&id);
+                });
+            }
             TaskRequest::Cancel { id } => {
                 if let Some(sender) = cancels.lock().await.remove(&id) {
                     let _ = sender.send(());

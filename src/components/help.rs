@@ -43,6 +43,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("SPC", "Open the leader menu (which-key)"),
             ("SPC SPC", "Command palette"),
+            ("SPC '", "Toggle the terminal"),
             ("SPC TAB", "Last buffer (previous tab)"),
             ("SPC /", "Search the project"),
             ("SPC ;", "Toggle comment on the line"),
