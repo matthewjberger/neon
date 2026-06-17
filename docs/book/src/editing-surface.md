@@ -30,6 +30,11 @@ comment rules for rust, toml, json, javascript, and rhai. For rhai it colors the
 scene command tokens straight from the live manifest, so the engine vocabulary
 stays in sync with no extra wiring.
 
+Highlighting is windowed to the lines scrolled into view plus a buffer, so the
+scanner runs over the visible range rather than the whole file. Off-screen lines
+render as plain text in the same positions, so the full text and the alignment
+stay exact and large files stay responsive.
+
 ## Undo
 
 Every edit goes through `state.set_buffer_text`, which records the pre-edit text

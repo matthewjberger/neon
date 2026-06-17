@@ -406,6 +406,7 @@ pub fn EditorPane(
                         {move || {
                             let text = source();
                             let set = command_set.get();
+                            state.editor_scroll.get();
                             let language = match active_kind() {
                                 PluginKind::File => active_id()
                                     .as_deref()
@@ -413,10 +414,22 @@ pub fn EditorPane(
                                     .unwrap_or("plaintext"),
                                 _ => "rhai",
                             };
-                            highlight(&text, language, &set)
-                                .into_iter()
-                                .map(|(class, run)| view! { <span class=class>{run}</span> })
-                                .collect_view()
+                            let segments: Vec<&str> = text.split_inclusive('\n').collect();
+                            let (first, last) = window_range(textarea.get(), segments.len());
+                            let before: String = segments[..first].concat();
+                            let window: String = segments[first..last].concat();
+                            let after: String = segments[last..].concat();
+                            let mut views = Vec::new();
+                            if !before.is_empty() {
+                                views.push(view! { <span>{before}</span> }.into_any());
+                            }
+                            for (class, run) in highlight(&window, language, &set) {
+                                views.push(view! { <span class=class>{run}</span> }.into_any());
+                            }
+                            if !after.is_empty() {
+                                views.push(view! { <span>{after}</span> }.into_any());
+                            }
+                            views.into_iter().collect_view()
                         }}
                     </pre>
                     <textarea
@@ -482,6 +495,24 @@ pub fn EditorPane(
 
 /// Persists the buffer and, for a scene plugin, schedules the worker sync and
 /// compile-check.
+/// The line range to highlight: the lines scrolled into view plus a buffer, so
+/// the highlighter scans the window instead of the whole buffer. Lines outside
+/// it render as plain text, keeping the full text and every line position exact.
+fn window_range(element: Option<web_sys::HtmlTextAreaElement>, total: usize) -> (usize, usize) {
+    const BUFFER: usize = 40;
+    let total = total.max(1);
+    let Some(element) = element else {
+        return (0, total.min(400));
+    };
+    let line_height = crate::caret::line_height(&element).max(1.0);
+    let scroll = element.scroll_top() as f64;
+    let view = (element.client_height() as f64).max(line_height);
+    let first = ((scroll / line_height) as usize).saturating_sub(BUFFER);
+    let count = (view / line_height) as usize + BUFFER * 2 + 1;
+    let last = (first + count).min(total);
+    (first, last)
+}
+
 /// Whether pressing Enter should insert a newline here: in insert mode, or when
 /// no modal layer is active (a modal layer consumes Enter in normal mode).
 fn inserts_newline(state: EditorState) -> bool {
