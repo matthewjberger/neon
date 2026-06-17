@@ -381,6 +381,30 @@ pub enum LspServerMessage {
     Exited { code: Option<i32> },
 }
 
+/// Page to the desktop task runner: spawn a process in the workspace and stream
+/// its output, the basis of the cargo run, build, test, and check loop.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TaskRequest {
+    Run {
+        id: u64,
+        program: String,
+        args: Vec<String>,
+        cwd: String,
+    },
+    Cancel {
+        id: u64,
+    },
+}
+
+/// Desktop task runner to the page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TaskResponse {
+    Started { id: u64, label: String },
+    Line { id: u64, text: String },
+    Exited { id: u64, code: Option<i32> },
+    Error { id: u64, message: String },
+}
+
 /// Correlation id matching an [`AgentResponse`] to its [`AgentRequest`].
 pub type CorrelationId = u64;
 

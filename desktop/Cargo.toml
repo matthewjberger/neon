@@ -45,6 +45,7 @@ tokio = { version = "1", features = [
     "process",
     "io-util",
     "fs",
+    "macros",
 ], optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 futures-util = { version = "0.3", optional = true }

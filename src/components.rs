@@ -20,6 +20,7 @@ pub mod prompt;
 pub mod reference;
 pub mod search;
 pub mod status_bar;
+pub mod tasks;
 pub mod toolbar;
 pub mod viewport;
 pub mod which_key;

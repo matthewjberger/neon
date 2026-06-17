@@ -33,6 +33,7 @@ mod plugins;
 mod relay;
 mod session;
 mod state;
+mod tasks;
 mod theme;
 mod tour;
 mod undo;

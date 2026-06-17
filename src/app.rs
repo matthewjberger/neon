@@ -31,6 +31,7 @@ use crate::components::prompt::PromptView;
 use crate::components::reference::Reference;
 use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
+use crate::components::tasks::TaskPanel;
 use crate::components::toolbar::Toolbar;
 use crate::components::viewport::Viewport;
 use crate::components::which_key::WhichKey;
@@ -51,6 +52,8 @@ pub fn App() -> impl IntoView {
     crate::session::capture();
     crate::ipc::notify_host("enable-fs");
     crate::fs::start(state);
+    crate::ipc::notify_host("enable-tasks");
+    crate::tasks::start(state);
 
     theme::apply_theme(&state.theme.get_untracked());
 
@@ -298,6 +301,7 @@ pub fn App() -> impl IntoView {
             <LspConsent state />
             <LspLog state />
             <ProblemsPanel state />
+            <TaskPanel state />
             <RenamePrompt state />
             <CodeActionMenu state />
             <SymbolPicker state />

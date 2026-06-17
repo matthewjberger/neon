@@ -246,6 +246,12 @@ pub struct EditorState {
     pub context_target: RwSignal<Option<(String, bool)>>,
     /// The open text prompt (new file, rename, delete), when one is showing.
     pub prompt: RwSignal<Option<Prompt>>,
+    /// The streamed output of the running or last task (cargo run, test, ...).
+    pub task_output: RwSignal<Vec<String>>,
+    /// Whether a task is currently running.
+    pub task_running: RwSignal<bool>,
+    /// Whether the task output panel is shown.
+    pub task_open: RwSignal<bool>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -338,6 +344,9 @@ impl EditorState {
             problems_open: RwSignal::new(false),
             context_target: RwSignal::new(None),
             prompt: RwSignal::new(None),
+            task_output: RwSignal::new(Vec::new()),
+            task_running: RwSignal::new(false),
+            task_open: RwSignal::new(false),
         }
     }
 

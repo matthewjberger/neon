@@ -25,6 +25,19 @@ just init       # install the pinned tools through mise
 Path dependencies point at a sibling `../nightshade` checkout for the live
 facade, so keep the two repos next to each other.
 
+## The Rust dev loop
+
+Run cargo from inside the editor. The `SPC c` menu drives a task runner in the
+desktop shell that spawns the command in the workspace and streams its output to
+a panel:
+
+- `SPC c c` check, `SPC c b` build, `SPC c t` test, `SPC c r` run.
+- `SPC c k` cancels the running task, `SPC c o` toggles the output panel.
+
+rust-analyzer already surfaces check-on-save diagnostics; this is for running
+tests and the binary and watching the output live. The same commands are in the
+palette.
+
 ## The book
 
 The book lives in `docs/book` and builds with mdBook:

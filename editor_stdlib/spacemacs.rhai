@@ -18,6 +18,7 @@
 //                         references / rename / symbol / workspace symbols
 //   SPC h  h/s/k/t   help: hover (also "K") / signature / keybindings / tour
 //   SPC a            code action (also SPC x .)
+//   SPC c  c/b/t/r/k/o  cargo: check / build / test / run / cancel / output
 //   SPC e  n/p/e/l   errors: next / previous / problems list / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
 //   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
@@ -46,6 +47,7 @@ fn leader_menu() {
         #{ key: "s", label: "+Search" },
         #{ key: "j", label: "+Jump" },
         #{ key: "g", label: "+Goto" },
+        #{ key: "c", label: "+Cargo" },
         #{ key: "h", label: "+Help" },
         #{ key: "a", label: "Code action" },
         #{ key: "x", label: "+Text" },
@@ -113,6 +115,17 @@ fn jump_menu() {
         #{ key: "i", label: "Jump to symbol" },
         #{ key: "+", label: "Format buffer" },
         #{ key: "=", label: "Format buffer" },
+    ] };
+}
+
+fn cargo_menu() {
+    #{ title: "+Cargo", items: [
+        #{ key: "c", label: "Check" },
+        #{ key: "b", label: "Build" },
+        #{ key: "t", label: "Test" },
+        #{ key: "r", label: "Run" },
+        #{ key: "k", label: "Cancel" },
+        #{ key: "o", label: "Output panel" },
     ] };
 }
 
@@ -232,6 +245,7 @@ fn on_key() {
         else if key == "s" { state.pending = "SPC s"; ops.push(#{ ShowMenu: search_menu() }); }
         else if key == "j" { state.pending = "SPC j"; ops.push(#{ ShowMenu: jump_menu() }); }
         else if key == "g" { state.pending = "SPC g"; ops.push(#{ ShowMenu: goto_menu() }); }
+        else if key == "c" { state.pending = "SPC c"; ops.push(#{ ShowMenu: cargo_menu() }); }
         else if key == "h" { state.pending = "SPC h"; ops.push(#{ ShowMenu: help_menu() }); }
         else if key == "x" { state.pending = "SPC x"; ops.push(#{ ShowMenu: text_menu() }); }
         else if key == "t" { state.pending = "SPC t"; ops.push(#{ ShowMenu: toggle_menu() }); }
@@ -307,6 +321,18 @@ fn on_key() {
         else if key == "R" { ops.push(#{ RunCommand: "rename-symbol" }); }
         else if key == "s" { ops.push(#{ RunCommand: "jump-symbol" }); }
         else if key == "S" { ops.push(#{ RunCommand: "workspace-symbols" }); }
+        return;
+    }
+    if pending == "SPC c" {
+        ops.push("Consume");
+        ops.push("HideMenu");
+        state.pending = "";
+        if key == "c" { ops.push(#{ RunCommand: "cargo-check" }); }
+        else if key == "b" { ops.push(#{ RunCommand: "cargo-build" }); }
+        else if key == "t" { ops.push(#{ RunCommand: "cargo-test" }); }
+        else if key == "r" { ops.push(#{ RunCommand: "cargo-run" }); }
+        else if key == "k" { ops.push(#{ RunCommand: "cancel-task" }); }
+        else if key == "o" { ops.push(#{ RunCommand: "toggle-tasks" }); }
         return;
     }
     if pending == "SPC h" {
