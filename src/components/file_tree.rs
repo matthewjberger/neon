@@ -44,6 +44,7 @@ fn render_nodes(state: EditorState, nodes: Vec<TreeNode>, depth: usize) -> AnyVi
 
 fn render_node(state: EditorState, node: TreeNode, depth: usize) -> AnyView {
     let path = node.path.clone();
+    let menu_path = node.path.clone();
     let is_dir = node.is_dir;
     let expanded = node.expanded;
     let indent = format!("padding-left: {}px", 8 + depth * 12);
@@ -67,11 +68,12 @@ fn render_node(state: EditorState, node: TreeNode, depth: usize) -> AnyView {
             on:contextmenu=move |event: web_sys::MouseEvent| {
                 event.prevent_default();
                 event.stop_propagation();
+                state.context_target.set(Some((menu_path.clone(), is_dir)));
                 crate::components::context_menu::open(
                     state,
                     event.client_x() as f64,
                     event.client_y() as f64,
-                    crate::components::context_menu::file_menu(),
+                    crate::components::context_menu::tree_menu(),
                 );
             }
         >

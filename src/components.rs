@@ -16,6 +16,7 @@ pub mod palette;
 pub mod plugin_panel;
 pub mod popups;
 pub mod problems;
+pub mod prompt;
 pub mod reference;
 pub mod search;
 pub mod status_bar;

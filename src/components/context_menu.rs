@@ -64,13 +64,14 @@ pub fn tab_menu() -> Vec<(String, EditorCommand)> {
     ]
 }
 
-/// The menu for the file tree and search panel.
-pub fn file_menu() -> Vec<(String, EditorCommand)> {
+/// The menu for a file-tree node: file operations plus the folder actions.
+pub fn tree_menu() -> Vec<(String, EditorCommand)> {
     vec![
+        ("New file".into(), EditorCommand::NewFile),
+        ("Rename".into(), EditorCommand::RenameEntry),
+        ("Delete".into(), EditorCommand::DeleteEntry),
         ("Open folder".into(), EditorCommand::OpenFolder),
         ("Search project".into(), EditorCommand::ShowSearch),
-        ("Save all".into(), EditorCommand::SaveAll),
-        ("New plugin".into(), EditorCommand::NewPlugin),
     ]
 }
 

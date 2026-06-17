@@ -129,6 +129,31 @@ pub fn search(root: &str, query: &str) {
     });
 }
 
+/// Creates an empty file and opens it.
+pub fn create_path(path: &str) {
+    send(&FsRequest::CreatePath {
+        request_id: 0,
+        path: path.to_string(),
+    });
+}
+
+/// Renames or moves a path.
+pub fn rename_path(from: &str, to: &str) {
+    send(&FsRequest::RenamePath {
+        request_id: 0,
+        from: from.to_string(),
+        to: to.to_string(),
+    });
+}
+
+/// Deletes a file.
+pub fn delete_path(path: &str) {
+    send(&FsRequest::DeletePath {
+        request_id: 0,
+        path: path.to_string(),
+    });
+}
+
 /// Toggles a tree directory, loading its children on first expand.
 pub fn toggle_dir(state: EditorState, path: &str) {
     let mut needs_load = false;
@@ -184,6 +209,54 @@ fn dispatch(state: EditorState, response: FsResponse) {
         FsResponse::SearchResults { hits, .. } => {
             state.search_results.set(hits);
         }
+        FsResponse::Created {
+            path, dir, entries, ..
+        } => {
+            refresh_dir(state, &dir, entries);
+            read_file(&path);
+        }
+        FsResponse::Renamed {
+            from,
+            to,
+            dir,
+            entries,
+            ..
+        } => {
+            refresh_dir(state, &dir, entries);
+            state.files.update(|files| {
+                if let Some(file) = files.iter_mut().find(|file| file.path == from) {
+                    file.path = to.clone();
+                }
+            });
+            state.panes.update(|panes| {
+                for pane in panes.iter_mut() {
+                    for tab in pane.tabs.iter_mut() {
+                        if tab.kind == PluginKind::File && tab.id.as_deref() == Some(from.as_str())
+                        {
+                            tab.id = Some(to.clone());
+                        }
+                    }
+                }
+            });
+        }
+        FsResponse::Deleted {
+            path, dir, entries, ..
+        } => {
+            refresh_dir(state, &dir, entries);
+            state
+                .files
+                .update(|files| files.retain(|file| file.path != path));
+            state.panes.update(|panes| {
+                for pane in panes.iter_mut() {
+                    pane.tabs.retain(|tab| {
+                        !(tab.kind == PluginKind::File && tab.id.as_deref() == Some(path.as_str()))
+                    });
+                    if pane.active >= pane.tabs.len() {
+                        pane.active = pane.tabs.len().saturating_sub(1);
+                    }
+                }
+            });
+        }
         FsResponse::Error { message, .. } => {
             state.log.update(|log| {
                 log.push(protocol::LogEntry {
@@ -194,6 +267,21 @@ fn dispatch(state: EditorState, response: FsResponse) {
             });
         }
     }
+}
+
+/// Replaces a directory's children in the tree, or the whole tree when the
+/// directory is the workspace root.
+fn refresh_dir(state: EditorState, dir: &str, entries: Vec<DirEntry>) {
+    if state.workspace_root.get_untracked().as_deref() == Some(dir) {
+        state.tree.set(entries.into_iter().map(to_node).collect());
+        return;
+    }
+    state.tree.update(|nodes| {
+        if let Some(node) = find_node(nodes, dir) {
+            node.children = entries.into_iter().map(to_node).collect();
+            node.expanded = true;
+        }
+    });
 }
 
 fn to_node(entry: DirEntry) -> TreeNode {

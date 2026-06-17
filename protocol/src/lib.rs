@@ -275,6 +275,16 @@ pub enum FsRequest {
         root: String,
         query: String,
     },
+    /// Create an empty file at a path.
+    CreatePath { request_id: u64, path: String },
+    /// Rename or move a path.
+    RenamePath {
+        request_id: u64,
+        from: String,
+        to: String,
+    },
+    /// Delete a file.
+    DeletePath { request_id: u64, path: String },
 }
 
 /// Desktop filesystem bridge to the page.
@@ -302,6 +312,28 @@ pub enum FsResponse {
     SearchResults {
         request_id: u64,
         hits: Vec<SearchHit>,
+    },
+    /// A path was created. `dir` and `entries` refresh the parent in the tree.
+    Created {
+        request_id: u64,
+        path: String,
+        dir: String,
+        entries: Vec<DirEntry>,
+    },
+    /// A path was renamed. `dir` and `entries` refresh the parent in the tree.
+    Renamed {
+        request_id: u64,
+        from: String,
+        to: String,
+        dir: String,
+        entries: Vec<DirEntry>,
+    },
+    /// A path was deleted. `dir` and `entries` refresh the parent in the tree.
+    Deleted {
+        request_id: u64,
+        path: String,
+        dir: String,
+        entries: Vec<DirEntry>,
     },
     Error {
         request_id: u64,

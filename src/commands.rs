@@ -7,7 +7,7 @@ use leptos::prelude::*;
 
 use crate::bridge::{self, Bridge};
 use crate::plugins;
-use crate::state::{EditorState, PluginKind, SidebarView};
+use crate::state::{EditorState, PluginKind, Prompt, PromptAction, SidebarView};
 use crate::theme::THEMES;
 
 /// One editor operation.
@@ -26,6 +26,9 @@ pub enum EditorCommand {
     ShowFiles,
     ShowSearch,
     OpenFolder,
+    NewFile,
+    RenameEntry,
+    DeleteEntry,
     SaveFile,
     SaveAll,
     CloseTab,
@@ -84,6 +87,9 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "show-files" => EditorCommand::ShowFiles,
         "show-search" => EditorCommand::ShowSearch,
         "open-folder" => EditorCommand::OpenFolder,
+        "new-file" => EditorCommand::NewFile,
+        "rename-entry" => EditorCommand::RenameEntry,
+        "delete-entry" => EditorCommand::DeleteEntry,
         "save-file" => EditorCommand::SaveFile,
         "save-all" => EditorCommand::SaveAll,
         "close-tab" => EditorCommand::CloseTab,
@@ -164,6 +170,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("View: files".to_string(), EditorCommand::ShowFiles),
         ("View: search".to_string(), EditorCommand::ShowSearch),
         ("Open folder".to_string(), EditorCommand::OpenFolder),
+        ("New file".to_string(), EditorCommand::NewFile),
         ("Save file".to_string(), EditorCommand::SaveFile),
         ("Save all".to_string(), EditorCommand::SaveAll),
         ("Close tab".to_string(), EditorCommand::CloseTab),
@@ -253,6 +260,14 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
     items
 }
 
+/// The parent directory of a path, splitting on either separator.
+fn parent_of(path: &str) -> String {
+    match path.rfind(['\\', '/']) {
+        Some(index) => path[..index].to_string(),
+        None => String::new(),
+    }
+}
+
 /// A short human label for an editor command, for the api log.
 fn command_label(command: &EditorCommand) -> String {
     match command {
@@ -287,6 +302,40 @@ pub fn run(
         EditorCommand::ShowFiles => state.sidebar_view.set(SidebarView::Files),
         EditorCommand::ShowSearch => state.sidebar_view.set(SidebarView::Search),
         EditorCommand::OpenFolder => crate::fs::open_folder(),
+        EditorCommand::NewFile => {
+            let dir = match state.context_target.get_untracked() {
+                Some((path, true)) => path,
+                Some((path, false)) => parent_of(&path),
+                None => state.workspace_root.get_untracked().unwrap_or_default(),
+            };
+            if !dir.is_empty() {
+                state.prompt.set(Some(Prompt {
+                    title: "New file".to_string(),
+                    value: String::new(),
+                    action: PromptAction::CreateFile { dir },
+                }));
+            }
+        }
+        EditorCommand::RenameEntry => {
+            if let Some((from, _)) = state.context_target.get_untracked() {
+                let value = crate::state::basename(&from).to_string();
+                state.prompt.set(Some(Prompt {
+                    title: "Rename".to_string(),
+                    value,
+                    action: PromptAction::RenameEntry { from },
+                }));
+            }
+        }
+        EditorCommand::DeleteEntry => {
+            if let Some((path, _)) = state.context_target.get_untracked() {
+                let title = format!("Delete {}? Enter to confirm", crate::state::basename(&path));
+                state.prompt.set(Some(Prompt {
+                    title,
+                    value: String::new(),
+                    action: PromptAction::DeleteEntry { path },
+                }));
+            }
+        }
         EditorCommand::SaveFile => {
             let buffer = state.focused_buffer();
             if buffer.kind == PluginKind::File

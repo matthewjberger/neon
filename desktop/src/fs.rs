@@ -156,7 +156,67 @@ async fn handle(request: FsRequest) -> FsResponse {
                 .unwrap_or_default();
             FsResponse::SearchResults { request_id, hits }
         }
+        FsRequest::CreatePath { request_id, path } => match tokio::fs::File::create(&path).await {
+            Ok(_) => {
+                let (dir, entries) = parent_listing(&path).await;
+                FsResponse::Created {
+                    request_id,
+                    path,
+                    dir,
+                    entries,
+                }
+            }
+            Err(error) => FsResponse::Error {
+                request_id,
+                message: error.to_string(),
+            },
+        },
+        FsRequest::RenamePath {
+            request_id,
+            from,
+            to,
+        } => match tokio::fs::rename(&from, &to).await {
+            Ok(()) => {
+                let (dir, entries) = parent_listing(&to).await;
+                FsResponse::Renamed {
+                    request_id,
+                    from,
+                    to,
+                    dir,
+                    entries,
+                }
+            }
+            Err(error) => FsResponse::Error {
+                request_id,
+                message: error.to_string(),
+            },
+        },
+        FsRequest::DeletePath { request_id, path } => match tokio::fs::remove_file(&path).await {
+            Ok(()) => {
+                let (dir, entries) = parent_listing(&path).await;
+                FsResponse::Deleted {
+                    request_id,
+                    path,
+                    dir,
+                    entries,
+                }
+            }
+            Err(error) => FsResponse::Error {
+                request_id,
+                message: error.to_string(),
+            },
+        },
     }
+}
+
+/// The parent directory of a path and its listing, for refreshing the tree.
+async fn parent_listing(path: &str) -> (String, Vec<DirEntry>) {
+    let parent = Path::new(path)
+        .parent()
+        .map(|parent| parent.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let entries = list_dir(Path::new(&parent)).await.unwrap_or_default();
+    (parent, entries)
 }
 
 const SEARCH_LIMIT: usize = 1000;

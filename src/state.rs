@@ -242,6 +242,10 @@ pub struct EditorState {
     pub problems: RwSignal<Vec<(String, Diagnostic)>>,
     /// Whether the problems panel is shown.
     pub problems_open: RwSignal<bool>,
+    /// The tree path a right-click targeted, with whether it is a directory.
+    pub context_target: RwSignal<Option<(String, bool)>>,
+    /// The open text prompt (new file, rename, delete), when one is showing.
+    pub prompt: RwSignal<Option<Prompt>>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -250,6 +254,22 @@ pub struct ContextMenu {
     pub x: f64,
     pub y: f64,
     pub items: Vec<(String, crate::commands::EditorCommand)>,
+}
+
+/// What a text prompt does when confirmed.
+#[derive(Clone)]
+pub enum PromptAction {
+    CreateFile { dir: String },
+    RenameEntry { from: String },
+    DeleteEntry { path: String },
+}
+
+/// A small text prompt: a title, the editable value, and the action to run.
+#[derive(Clone)]
+pub struct Prompt {
+    pub title: String,
+    pub value: String,
+    pub action: PromptAction,
 }
 
 impl EditorState {
@@ -316,6 +336,8 @@ impl EditorState {
             format_on_save: RwSignal::new(true),
             problems: RwSignal::new(Vec::new()),
             problems_open: RwSignal::new(false),
+            context_target: RwSignal::new(None),
+            prompt: RwSignal::new(None),
         }
     }
 
