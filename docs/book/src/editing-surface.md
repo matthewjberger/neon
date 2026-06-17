@@ -11,6 +11,10 @@ scrolling for free, all proven and solid. A `<pre>` highlight layer sits exactly
 behind it, scrolled in lockstep, so the text you edit and the colored text you
 see line up.
 
+Pressing Enter auto-indents: the new line carries the previous line's leading
+whitespace and gains a level after a line that opens a block, so code stays
+lined up as you type.
+
 ## Highlighting
 
 `highlight.rs` is a hand-written multi-language scanner: per-language keyword and

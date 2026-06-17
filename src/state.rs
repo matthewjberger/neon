@@ -238,6 +238,10 @@ pub struct EditorState {
     pub symbol_picker: RwSignal<Vec<SearchHit>>,
     /// Whether saving a Rust file formats it first through rust-analyzer.
     pub format_on_save: RwSignal<bool>,
+    /// Every diagnostic across open files, by path, for the problems panel.
+    pub problems: RwSignal<Vec<(String, Diagnostic)>>,
+    /// Whether the problems panel is shown.
+    pub problems_open: RwSignal<bool>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -310,6 +314,8 @@ impl EditorState {
             code_actions: RwSignal::new(Vec::new()),
             symbol_picker: RwSignal::new(Vec::new()),
             format_on_save: RwSignal::new(true),
+            problems: RwSignal::new(Vec::new()),
+            problems_open: RwSignal::new(false),
         }
     }
 

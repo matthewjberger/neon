@@ -83,8 +83,8 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
                 "Toggle preview / console / reference / Claude / control panel / LSP log",
             ),
             (
-                "SPC e n / p / l",
-                "Next / previous error / rust-analyzer log",
+                "SPC e n / p / e / l",
+                "Next / previous error / problems list / rust-analyzer log",
             ),
             ("SPC p f / t", "Search project / file tree"),
             ("SPC P n / m / i", "New plugin / manager / installed"),

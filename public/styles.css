@@ -1519,6 +1519,40 @@ body {
   word-break: break-word;
 }
 
+.problem-row {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.problem-row:hover {
+  color: var(--text);
+}
+
+.problem-loc {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.problem-error .problem-loc {
+  color: #f48771;
+}
+
+.problem-warning .problem-loc {
+  color: #cca700;
+}
+
+.problem-message {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
 .control-panel {
   position: fixed;
   right: 0;

@@ -1092,6 +1092,20 @@ fn apply_diagnostics(state: EditorState, params: &Value) {
         client.diagnostics.insert(path.clone(), diagnostics);
         client.raw_diagnostics.insert(path.clone(), raw);
     });
+    let problems = client(|client| {
+        let mut problems: Vec<(String, Diagnostic)> = client
+            .diagnostics
+            .iter()
+            .flat_map(|(path, items)| {
+                items
+                    .iter()
+                    .map(|diagnostic| (path.clone(), diagnostic.clone()))
+            })
+            .collect();
+        problems.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.line.cmp(&right.1.line)));
+        problems
+    });
+    state.problems.set(problems);
     let focused = state.focused_buffer();
     if focused.kind == PluginKind::File && focused.id.as_deref() == Some(path.as_str()) {
         refresh_diagnostics(state);

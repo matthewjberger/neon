@@ -53,6 +53,7 @@ pub enum EditorCommand {
     FormatDocument,
     NextError,
     PrevError,
+    ToggleProblems,
     ToggleLspLog,
     NewPlugin,
     RunPause,
@@ -110,6 +111,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "format-document" => EditorCommand::FormatDocument,
         "next-error" => EditorCommand::NextError,
         "prev-error" => EditorCommand::PrevError,
+        "toggle-problems" => EditorCommand::ToggleProblems,
         "toggle-lsp-log" => EditorCommand::ToggleLspLog,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
@@ -199,6 +201,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Format document".to_string(), EditorCommand::FormatDocument),
         ("Next error".to_string(), EditorCommand::NextError),
         ("Previous error".to_string(), EditorCommand::PrevError),
+        ("Toggle problems".to_string(), EditorCommand::ToggleProblems),
         (
             "Toggle rust-analyzer log".to_string(),
             EditorCommand::ToggleLspLog,
@@ -339,6 +342,7 @@ pub fn run(
         EditorCommand::FormatDocument => crate::lsp::format_document(state),
         EditorCommand::NextError => crate::lsp::goto_diagnostic(state, true),
         EditorCommand::PrevError => crate::lsp::goto_diagnostic(state, false),
+        EditorCommand::ToggleProblems => state.problems_open.update(|open| *open = !*open),
         EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");

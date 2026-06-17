@@ -18,7 +18,7 @@
 //                         references / rename / symbol / workspace symbols
 //   SPC h  h/s/k/t   help: hover (also "K") / signature / keybindings / tour
 //   SPC a            code action (also SPC x .)
-//   SPC e  n/p/l     errors: next / previous / rust-analyzer log
+//   SPC e  n/p/e/l   errors: next / previous / problems list / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
 //   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
 //          J/>/<     join lines / indent / outdent
@@ -172,6 +172,7 @@ fn error_menu() {
     #{ title: "+Errors", items: [
         #{ key: "n", label: "Next error" },
         #{ key: "p", label: "Previous error" },
+        #{ key: "e", label: "List problems" },
         #{ key: "l", label: "rust-analyzer log" },
     ] };
 }
@@ -356,6 +357,7 @@ fn on_key() {
         state.pending = "";
         if key == "n" { ops.push(#{ RunCommand: "next-error" }); }
         else if key == "p" { ops.push(#{ RunCommand: "prev-error" }); }
+        else if key == "e" { ops.push(#{ RunCommand: "toggle-problems" }); }
         else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
         return;
     }

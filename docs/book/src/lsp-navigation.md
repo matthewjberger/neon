@@ -32,8 +32,16 @@ plugins.
 
 - **Next and previous error** (`SPC e n`, `SPC e p`). Steps the caret to the next
   or previous diagnostic line in the focused file.
+- **Problems** (`SPC e e`). Lists every diagnostic across open files in one
+  panel; click a row to open the file and jump to the line.
 - **The rust-analyzer log** (`SPC e l`, `SPC t l`). Toggles the panel that shows
   the server's output.
+
+## Format on save
+
+Saving a Rust file (`SPC f s`) formats it through rust-analyzer first and writes
+the result. It is on by default, toggleable from the palette, and falls back to a
+plain write when the server is not running.
 
 ## One vocabulary
 
