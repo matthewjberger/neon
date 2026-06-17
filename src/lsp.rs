@@ -6,7 +6,7 @@
 //! consent toast, since it spawns a process.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use leptos::prelude::*;
 use protocol::{Diagnostic, LspServerMessage, SearchHit, Severity};
@@ -56,6 +56,7 @@ struct Client {
     code_actions: Vec<Value>,
     pending_edits: HashMap<String, Vec<RangeEdit>>,
     raw_diagnostics: HashMap<String, Vec<Value>>,
+    save_after_format: HashSet<String>,
 }
 
 impl Client {
@@ -72,6 +73,7 @@ impl Client {
             code_actions: Vec::new(),
             pending_edits: HashMap::new(),
             raw_diagnostics: HashMap::new(),
+            save_after_format: HashSet::new(),
         }
     }
 }
@@ -217,6 +219,20 @@ pub fn request_locations(state: EditorState, method: &str) {
             "position": { "line": line, "character": character },
         }),
     );
+}
+
+/// Formats the focused Rust file and writes it once the edits land. Returns
+/// false when there is no ready Rust file to format, so the caller can save
+/// directly instead.
+pub fn format_and_save(state: EditorState, path: &str) -> bool {
+    if caret_position(state).is_none() {
+        return false;
+    }
+    client(|client| {
+        client.save_after_format.insert(path.to_string());
+    });
+    format_document(state);
+    true
 }
 
 /// Requests a whole-document format from the server and applies the edits.
@@ -730,11 +746,13 @@ fn apply_locations(state: EditorState, value: &Value) {
 }
 
 fn apply_format(state: EditorState, value: &Value, path: &str) {
-    let Some(raw) = value.get("result").and_then(Value::as_array) else {
-        return;
-    };
-    let edits = parse_edits(raw);
-    apply_edits_to_file(state, path, &edits);
+    if let Some(raw) = value.get("result").and_then(Value::as_array) {
+        apply_edits_to_file(state, path, &parse_edits(raw));
+    }
+    if client(|client| client.save_after_format.remove(path)) {
+        let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
+        crate::fs::write_file(path, text);
+    }
 }
 
 fn apply_references(state: EditorState, value: &Value) {

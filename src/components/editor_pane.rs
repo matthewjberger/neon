@@ -216,6 +216,16 @@ pub fn EditorPane(
         if kind_readonly(kind) {
             return;
         }
+        if event.key() == "Enter" && inserts_newline(state) {
+            if let Some(element) = textarea.get() {
+                event.prevent_default();
+                let caret = element.selection_start().ok().flatten().unwrap_or(0);
+                let text = newline_indent(&element.value(), caret);
+                editor_plugins::insert_text(state, id, kind, &element, &text);
+                commit(bridge, lang, state, pane_key, debounce, request_id);
+            }
+            return;
+        }
         if event.key() == "Tab" {
             event.prevent_default();
             if let Some(element) = textarea.get() {
@@ -414,6 +424,39 @@ pub fn EditorPane(
 
 /// Persists the buffer and, for a scene plugin, schedules the worker sync and
 /// compile-check.
+/// Whether pressing Enter should insert a newline here: in insert mode, or when
+/// no modal layer is active (a modal layer consumes Enter in normal mode).
+fn inserts_newline(state: EditorState) -> bool {
+    if state.editor_mode.get_untracked() == "insert" {
+        return true;
+    }
+    !state
+        .editor_plugins
+        .get_untracked()
+        .iter()
+        .any(|plugin| plugin.enabled && crate::plugins::is_modal(&plugin.id))
+}
+
+/// The text to insert for an auto-indented newline: a line break, the current
+/// line's leading whitespace, and one more level when the line opens a block.
+fn newline_indent(value: &str, caret: u32) -> String {
+    let units: Vec<u16> = value.encode_utf16().collect();
+    let end = (caret as usize).min(units.len());
+    let before = String::from_utf16_lossy(&units[..end]);
+    let line_start = before.rfind('\n').map(|index| index + 1).unwrap_or(0);
+    let line = &before[line_start..];
+    let indent: String = line
+        .chars()
+        .take_while(|character| *character == ' ' || *character == '\t')
+        .collect();
+    let mut result = String::from("\n");
+    result.push_str(&indent);
+    if line.trim_end().ends_with('{') {
+        result.push_str("    ");
+    }
+    result
+}
+
 /// The character immediately before a UTF-16 caret offset, resolved by walking
 /// code points so it stays correct across multibyte characters.
 fn char_before(value: &str, caret: u32) -> Option<char> {

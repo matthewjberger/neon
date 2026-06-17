@@ -58,6 +58,7 @@ pub enum EditorCommand {
     RunPause,
     ResetScene,
     NextTheme,
+    ToggleFormatOnSave,
     OpenPalette,
     OpenHelp,
     Tour,
@@ -114,6 +115,7 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "run-pause" => EditorCommand::RunPause,
         "reset-scene" => EditorCommand::ResetScene,
         "next-theme" => EditorCommand::NextTheme,
+        "toggle-format-on-save" => EditorCommand::ToggleFormatOnSave,
         "open-palette" => EditorCommand::OpenPalette,
         "open-help" => EditorCommand::OpenHelp,
         "tour" => EditorCommand::Tour,
@@ -205,6 +207,10 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Run or pause plugins".to_string(), EditorCommand::RunPause),
         ("Reset scene".to_string(), EditorCommand::ResetScene),
         ("Next theme".to_string(), EditorCommand::NextTheme),
+        (
+            "Toggle format on save".to_string(),
+            EditorCommand::ToggleFormatOnSave,
+        ),
         ("Help: keybindings".to_string(), EditorCommand::OpenHelp),
         ("Tour: learn the keys".to_string(), EditorCommand::Tour),
     ];
@@ -283,8 +289,13 @@ pub fn run(
             if buffer.kind == PluginKind::File
                 && let Some(path) = buffer.id
             {
-                let text = state.buffer_source(PluginKind::File, &Some(path.clone()));
-                crate::fs::write_file(&path, text);
+                let formatted = state.format_on_save.get_untracked()
+                    && crate::state::language_for_path(&path) == "rust"
+                    && crate::lsp::format_and_save(state, &path);
+                if !formatted {
+                    let text = state.buffer_source(PluginKind::File, &Some(path.clone()));
+                    crate::fs::write_file(&path, text);
+                }
             }
         }
         EditorCommand::SaveAll => {
@@ -358,6 +369,9 @@ pub fn run(
                 .unwrap_or(0);
             let next = THEMES[(index + 1) % THEMES.len()].0;
             state.theme.set(next.to_string());
+        }
+        EditorCommand::ToggleFormatOnSave => {
+            state.format_on_save.update(|enabled| *enabled = !*enabled)
         }
         EditorCommand::OpenPalette => state.palette_open.set(true),
         EditorCommand::OpenHelp => state.help_open.set(true),

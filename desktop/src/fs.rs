@@ -171,8 +171,8 @@ fn search(root: &str, query: &str) -> Vec<protocol::SearchHit> {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use grep::regex::RegexMatcherBuilder;
-    use grep::searcher::Searcher;
     use grep::searcher::sinks::UTF8;
+    use grep::searcher::{BinaryDetection, SearcherBuilder};
     use ignore::WalkState;
 
     if query.is_empty() {
@@ -227,7 +227,10 @@ fn search(root: &str, query: &str) -> Vec<protocol::SearchHit> {
                     });
                     Ok(true)
                 });
-                let _ = Searcher::new().search_path(&matcher, &path, sink);
+                let mut searcher = SearcherBuilder::new()
+                    .binary_detection(BinaryDetection::quit(0))
+                    .build();
+                let _ = searcher.search_path(&matcher, &path, sink);
                 WalkState::Continue
             })
         });

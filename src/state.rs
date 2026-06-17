@@ -236,6 +236,8 @@ pub struct EditorState {
     /// The document symbols offered in the fuzzy symbol picker. Empty means
     /// closed; selecting one jumps to it.
     pub symbol_picker: RwSignal<Vec<SearchHit>>,
+    /// Whether saving a Rust file formats it first through rust-analyzer.
+    pub format_on_save: RwSignal<bool>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -307,6 +309,7 @@ impl EditorState {
             rename: RwSignal::new(None),
             code_actions: RwSignal::new(Vec::new()),
             symbol_picker: RwSignal::new(Vec::new()),
+            format_on_save: RwSignal::new(true),
         }
     }
 
