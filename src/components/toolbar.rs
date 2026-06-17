@@ -42,6 +42,7 @@ fn menus() -> Vec<(&'static str, Vec<MenuItem>)> {
                 ("Toggle console", EditorCommand::ToggleConsole),
                 ("Toggle reference", EditorCommand::ToggleReference),
                 ("Toggle control panel", EditorCommand::ToggleControlPanel),
+                ("Toggle terminal", EditorCommand::ToggleTasks),
             ],
         ),
         (

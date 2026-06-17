@@ -232,7 +232,7 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Cargo test".to_string(), EditorCommand::CargoTest),
         ("Cargo run".to_string(), EditorCommand::CargoRun),
         ("Cancel task".to_string(), EditorCommand::CancelTask),
-        ("Toggle task output".to_string(), EditorCommand::ToggleTasks),
+        ("Toggle terminal".to_string(), EditorCommand::ToggleTasks),
         (
             "Add cursor below".to_string(),
             EditorCommand::AddCursorBelow,
