@@ -381,34 +381,46 @@ pub enum LspServerMessage {
     Exited { code: Option<i32> },
 }
 
-/// Page to the desktop task runner: spawn a process in the workspace and stream
-/// its output, the basis of the cargo run, build, test, and check loop.
+/// Page to the desktop terminal: open a real PTY, send keystrokes, and resize.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TaskRequest {
-    Run {
-        id: u64,
-        program: String,
-        args: Vec<String>,
-        cwd: String,
-    },
-    /// Run a command line through the platform shell, for the terminal.
-    Shell {
-        id: u64,
-        command: String,
-        cwd: String,
-    },
-    Cancel {
-        id: u64,
-    },
+pub enum TerminalClientMessage {
+    /// Open a PTY of the given size in a working directory.
+    Open { cols: u16, rows: u16, cwd: String },
+    /// Raw bytes to write to the PTY (encoded keystrokes).
+    Input { bytes: Vec<u8> },
+    /// Resize the PTY and the emulator.
+    Resize { cols: u16, rows: u16 },
 }
 
-/// Desktop task runner to the page.
+/// One run of cells sharing a style on a terminal row.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TermSpan {
+    pub text: String,
+    /// CSS color, or empty for the theme default.
+    pub fg: String,
+    pub bg: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub inverse: bool,
+}
+
+/// The emulator's rendered screen: rows of styled spans plus the cursor.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TaskResponse {
-    Started { id: u64, label: String },
-    Line { id: u64, text: String },
-    Exited { id: u64, code: Option<i32> },
-    Error { id: u64, message: String },
+pub struct TermGrid {
+    pub cols: u16,
+    pub rows: u16,
+    pub cursor_row: u16,
+    pub cursor_col: u16,
+    pub cursor_visible: bool,
+    pub lines: Vec<Vec<TermSpan>>,
+}
+
+/// Desktop terminal to the page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TerminalServerMessage {
+    Grid(TermGrid),
+    Exited,
 }
 
 /// Correlation id matching an [`AgentResponse`] to its [`AgentRequest`].

@@ -76,7 +76,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
             ("SPC a", "Code action (also SPC x .)"),
             (
                 "SPC c c / b / t / r / k / o",
-                "Cargo check / build / test / run / cancel / output",
+                "Cargo check / build / test / run / interrupt / terminal",
             ),
             (
                 "SPC x ; / d / j / k / J",

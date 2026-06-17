@@ -12,7 +12,7 @@ mod fs;
 #[cfg(feature = "agent")]
 mod lsp;
 #[cfg(feature = "agent")]
-mod tasks;
+mod pty;
 
 use rust_embed::RustEmbed;
 use winit::application::ApplicationHandler;
@@ -106,7 +106,7 @@ impl ApplicationHandler for App {
             }
             "enable-fs" => fs::start(),
             "enable-lsp" => lsp::start(),
-            "enable-tasks" => tasks::start(),
+            "enable-terminal" => pty::start(),
             _ => {}
         });
         #[cfg(target_os = "windows")]

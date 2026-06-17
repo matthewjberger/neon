@@ -27,16 +27,15 @@ facade, so keep the two repos next to each other.
 
 ## The Rust dev loop
 
-Run cargo from inside the editor. The `SPC c` menu drives a task runner in the
-desktop shell that spawns the command in the workspace and streams its output to
-a panel:
+Neon runs a real terminal inside the editor. The desktop shell opens a
+pseudo-terminal on the platform shell, parses its output into a screen grid, and
+renders it live so full-screen programs, colors, and prompts all work. Toggle it
+with `SPC '` and type into it like any terminal.
+
+The `SPC c` menu runs cargo straight into that terminal:
 
 - `SPC c c` check, `SPC c b` build, `SPC c t` test, `SPC c r` run.
-- `SPC c k` cancels the running task, `SPC c o` toggles the output panel.
-
-The same panel is a terminal: toggle it with `SPC '`, type a command in the
-input, and it runs through the platform shell with its output streamed above.
-`Clear` empties the scrollback.
+- `SPC c k` sends an interrupt, `SPC c o` toggles the terminal.
 
 rust-analyzer already surfaces check-on-save diagnostics; this is for running
 tests and the binary and watching the output live. The same commands are in the

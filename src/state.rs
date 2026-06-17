@@ -5,6 +5,7 @@
 use leptos::prelude::*;
 use protocol::{
     CommandInfo, Diagnostic, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity, StdModule,
+    TermGrid,
 };
 
 /// Which set the open buffer belongs to: scene plugins run in the engine worker,
@@ -246,12 +247,12 @@ pub struct EditorState {
     pub context_target: RwSignal<Option<(String, bool)>>,
     /// The open text prompt (new file, rename, delete), when one is showing.
     pub prompt: RwSignal<Option<Prompt>>,
-    /// The streamed output of the running or last task (cargo run, test, ...).
-    pub task_output: RwSignal<Vec<String>>,
-    /// Whether a task is currently running.
-    pub task_running: RwSignal<bool>,
-    /// Whether the task output panel is shown.
-    pub task_open: RwSignal<bool>,
+    /// The terminal emulator's current screen, when a PTY is open.
+    pub term_grid: RwSignal<Option<TermGrid>>,
+    /// A command queued to run once the PTY's shell is ready.
+    pub term_pending: RwSignal<Option<String>>,
+    /// Whether the terminal panel is shown.
+    pub terminal_open: RwSignal<bool>,
     /// Extra caret offsets (UTF-16) for multi-cursor editing, beyond the
     /// textarea's own caret. Empty when not in multi-cursor mode.
     pub cursors: RwSignal<Vec<u32>>,
@@ -349,9 +350,9 @@ impl EditorState {
             problems_open: RwSignal::new(false),
             context_target: RwSignal::new(None),
             prompt: RwSignal::new(None),
-            task_output: RwSignal::new(Vec::new()),
-            task_running: RwSignal::new(false),
-            task_open: RwSignal::new(false),
+            term_grid: RwSignal::new(None),
+            term_pending: RwSignal::new(None),
+            terminal_open: RwSignal::new(false),
             cursors: RwSignal::new(Vec::new()),
             editor_scroll: RwSignal::new(0),
         }

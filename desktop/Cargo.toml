@@ -29,6 +29,8 @@ agent = [
     "dep:ignore",
     "dep:grep",
     "dep:regex",
+    "dep:portable-pty",
+    "dep:vt100",
 ]
 
 [dependencies]
@@ -54,3 +56,5 @@ rfd = { version = "0.15", optional = true }
 ignore = { version = "0.4", optional = true }
 grep = { version = "0.3", optional = true }
 regex = { version = "1", optional = true }
+portable-pty = { version = "0.8", optional = true }
+vt100 = { version = "0.15", optional = true }

@@ -19,7 +19,7 @@
 //                         references / rename / symbol / workspace symbols
 //   SPC h  h/s/k/t   help: hover (also "K") / signature / keybindings / tour
 //   SPC a            code action (also SPC x .)
-//   SPC c  c/b/t/r/k/o  cargo: check / build / test / run / cancel / output
+//   SPC c  c/b/t/r/k/o  cargo: check / build / test / run / interrupt / terminal
 //   SPC e  n/p/e/l   errors: next / previous / problems list / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
 //   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
@@ -126,8 +126,8 @@ fn cargo_menu() {
         #{ key: "b", label: "Build" },
         #{ key: "t", label: "Test" },
         #{ key: "r", label: "Run" },
-        #{ key: "k", label: "Cancel" },
-        #{ key: "o", label: "Output panel" },
+        #{ key: "k", label: "Interrupt" },
+        #{ key: "o", label: "Terminal" },
     ] };
 }
 
@@ -239,7 +239,7 @@ fn on_key() {
         else if key == ";" { ops.push(#{ ToggleComment: "//" }); ops.push("HideMenu"); }
         else if key == "?" { ops.push(#{ RunCommand: "open-help" }); ops.push("HideMenu"); }
         else if key == "r" { ops.push(#{ RunCommand: "run-pause" }); ops.push("HideMenu"); }
-        else if key == "'" { ops.push(#{ RunCommand: "toggle-tasks" }); ops.push("HideMenu"); }
+        else if key == "'" { ops.push(#{ RunCommand: "toggle-terminal" }); ops.push("HideMenu"); }
         else if key == "a" { ops.push(#{ RunCommand: "code-action" }); ops.push("HideMenu"); }
         else if key == "T" { ops.push(#{ RunCommand: "next-theme" }); ops.push("HideMenu"); }
         else if key == "f" { state.pending = "SPC f"; ops.push(#{ ShowMenu: file_menu() }); }
@@ -334,8 +334,8 @@ fn on_key() {
         else if key == "b" { ops.push(#{ RunCommand: "cargo-build" }); }
         else if key == "t" { ops.push(#{ RunCommand: "cargo-test" }); }
         else if key == "r" { ops.push(#{ RunCommand: "cargo-run" }); }
-        else if key == "k" { ops.push(#{ RunCommand: "cancel-task" }); }
-        else if key == "o" { ops.push(#{ RunCommand: "toggle-tasks" }); }
+        else if key == "k" { ops.push(#{ RunCommand: "interrupt" }); }
+        else if key == "o" { ops.push(#{ RunCommand: "toggle-terminal" }); }
         return;
     }
     if pending == "SPC h" {
