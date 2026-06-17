@@ -1608,6 +1608,21 @@ body {
   word-break: break-word;
 }
 
+.extra-caret {
+  position: fixed;
+  width: 2px;
+  z-index: 58;
+  background: var(--accent);
+  pointer-events: none;
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .control-panel {
   position: fixed;
   right: 0;

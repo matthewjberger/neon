@@ -231,6 +231,47 @@ pub fn EditorPane(
         if kind_readonly(kind) {
             return;
         }
+        if crate::multicursor::active(state) {
+            match event.key().as_str() {
+                "Escape" => {
+                    event.prevent_default();
+                    crate::multicursor::clear(state);
+                    return;
+                }
+                "Backspace" => {
+                    event.prevent_default();
+                    crate::multicursor::delete_back(state);
+                    return;
+                }
+                "Delete" => {
+                    event.prevent_default();
+                    crate::multicursor::delete_forward(state);
+                    return;
+                }
+                "Enter" => {
+                    event.prevent_default();
+                    crate::multicursor::insert(state, "\n");
+                    return;
+                }
+                "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End"
+                | "PageUp" | "PageDown" => {
+                    if !event.ctrl_key() && !event.alt_key() && !event.meta_key() {
+                        crate::multicursor::clear(state);
+                    }
+                }
+                key => {
+                    if !event.ctrl_key()
+                        && !event.alt_key()
+                        && !event.meta_key()
+                        && key.chars().count() == 1
+                    {
+                        event.prevent_default();
+                        crate::multicursor::insert(state, key);
+                        return;
+                    }
+                }
+            }
+        }
         if event.key() == "Enter" && inserts_newline(state) {
             if let Some(element) = textarea.get() {
                 event.prevent_default();
@@ -411,7 +452,9 @@ pub fn EditorPane(
                                     gutter.set_scroll_top(element.scroll_top());
                                 }
                             }
+                            state.editor_scroll.update(|tick| *tick = tick.wrapping_add(1));
                         }
+                        on:mousedown=move |_| crate::multicursor::clear(state)
                     />
                 </div>
                 <Show when=move || state.focused_key.get() == pane_key fallback=|| ()>

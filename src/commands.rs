@@ -64,6 +64,9 @@ pub enum EditorCommand {
     CargoRun,
     CancelTask,
     ToggleTasks,
+    AddCursorBelow,
+    AddCursorAbove,
+    ClearCursors,
     NewPlugin,
     RunPause,
     ResetScene,
@@ -131,6 +134,9 @@ pub fn command_from_id(id: &str) -> Option<EditorCommand> {
         "cargo-run" => EditorCommand::CargoRun,
         "cancel-task" => EditorCommand::CancelTask,
         "toggle-tasks" => EditorCommand::ToggleTasks,
+        "add-cursor-below" => EditorCommand::AddCursorBelow,
+        "add-cursor-above" => EditorCommand::AddCursorAbove,
+        "clear-cursors" => EditorCommand::ClearCursors,
         "new-plugin" => EditorCommand::NewPlugin,
         "run-pause" => EditorCommand::RunPause,
         "reset-scene" => EditorCommand::ResetScene,
@@ -227,6 +233,18 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
         ("Cargo run".to_string(), EditorCommand::CargoRun),
         ("Cancel task".to_string(), EditorCommand::CancelTask),
         ("Toggle task output".to_string(), EditorCommand::ToggleTasks),
+        (
+            "Add cursor below".to_string(),
+            EditorCommand::AddCursorBelow,
+        ),
+        (
+            "Add cursor above".to_string(),
+            EditorCommand::AddCursorAbove,
+        ),
+        (
+            "Clear extra cursors".to_string(),
+            EditorCommand::ClearCursors,
+        ),
         (
             "Toggle rust-analyzer log".to_string(),
             EditorCommand::ToggleLspLog,
@@ -417,6 +435,9 @@ pub fn run(
         EditorCommand::CargoRun => crate::tasks::run(state, "cargo", &["run"]),
         EditorCommand::CancelTask => crate::tasks::cancel(state),
         EditorCommand::ToggleTasks => state.task_open.update(|open| *open = !*open),
+        EditorCommand::AddCursorBelow => crate::multicursor::add_below(state),
+        EditorCommand::AddCursorAbove => crate::multicursor::add_above(state),
+        EditorCommand::ClearCursors => crate::multicursor::clear(state),
         EditorCommand::NewPlugin => {
             let plugin = plugins::new_plugin("Untitled");
             let id = plugin.id.clone();

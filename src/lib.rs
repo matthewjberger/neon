@@ -29,6 +29,7 @@ mod ipc;
 mod jump;
 mod lang;
 mod lsp;
+mod multicursor;
 mod plugins;
 mod relay;
 mod session;

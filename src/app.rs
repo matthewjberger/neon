@@ -23,6 +23,7 @@ use crate::components::jump_overlay::JumpOverlay;
 use crate::components::loader::Loader;
 use crate::components::lsp_menus::{CodeActionMenu, RenamePrompt, SymbolPicker};
 use crate::components::lsp_panel::{LspConsent, LspLog};
+use crate::components::multicursor::MultiCursorOverlay;
 use crate::components::palette::Palette;
 use crate::components::plugin_panel::PluginPanel;
 use crate::components::popups::{CompletionPopup, HoverCardView};
@@ -135,6 +136,16 @@ pub fn App() -> impl IntoView {
         {
             event.prevent_default();
             state.find_open.set(true);
+            return;
+        }
+        if event.ctrl_key() && event.alt_key() && event.key() == "ArrowDown" {
+            event.prevent_default();
+            crate::multicursor::add_below(state);
+            return;
+        }
+        if event.ctrl_key() && event.alt_key() && event.key() == "ArrowUp" {
+            event.prevent_default();
+            crate::multicursor::add_above(state);
             return;
         }
         if event.ctrl_key()
@@ -302,6 +313,7 @@ pub fn App() -> impl IntoView {
             <LspLog state />
             <ProblemsPanel state />
             <TaskPanel state />
+            <MultiCursorOverlay state />
             <RenamePrompt state />
             <CodeActionMenu state />
             <SymbolPicker state />

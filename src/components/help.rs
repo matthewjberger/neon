@@ -13,6 +13,10 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl+Shift+P", "Command palette"),
             ("F1", "This help"),
             ("Tab", "Indent"),
+            (
+                "Ctrl+Alt+Up / Down",
+                "Add cursor above / below (Esc clears)",
+            ),
         ],
     ),
     (

@@ -252,6 +252,11 @@ pub struct EditorState {
     pub task_running: RwSignal<bool>,
     /// Whether the task output panel is shown.
     pub task_open: RwSignal<bool>,
+    /// Extra caret offsets (UTF-16) for multi-cursor editing, beyond the
+    /// textarea's own caret. Empty when not in multi-cursor mode.
+    pub cursors: RwSignal<Vec<u32>>,
+    /// A tick bumped when the editor scrolls, so caret overlays reposition.
+    pub editor_scroll: RwSignal<u32>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -347,6 +352,8 @@ impl EditorState {
             task_output: RwSignal::new(Vec::new()),
             task_running: RwSignal::new(false),
             task_open: RwSignal::new(false),
+            cursors: RwSignal::new(Vec::new()),
+            editor_scroll: RwSignal::new(0),
         }
     }
 

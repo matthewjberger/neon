@@ -15,6 +15,14 @@ Pressing Enter auto-indents: the new line carries the previous line's leading
 whitespace and gains a level after a line that opens a block, so code stays
 lined up as you type.
 
+## Multi-cursor
+
+Add carets with `Ctrl+Alt+Up` and `Ctrl+Alt+Down`, then type, backspace, or
+delete and the edit lands at every caret at once, the column-editing workflow.
+The extra carets render as blinking overlays at their offsets. A plain arrow
+key, a click, or `Esc` collapses back to a single caret. The add-cursor and
+clear actions are in the palette too.
+
 ## Highlighting
 
 `highlight.rs` is a hand-written multi-language scanner: per-language keyword and
