@@ -191,6 +191,18 @@ async fn handle(request: FsRequest) -> FsResponse {
                 message: error.to_string(),
             },
         },
+        FsRequest::ReplaceAll {
+            request_id,
+            root,
+            query,
+            replacement,
+        } => {
+            let count =
+                tokio::task::spawn_blocking(move || replace_all(&root, &query, &replacement))
+                    .await
+                    .unwrap_or(0);
+            FsResponse::Replaced { request_id, count }
+        }
         FsRequest::DeletePath { request_id, path } => match tokio::fs::remove_file(&path).await {
             Ok(()) => {
                 let (dir, entries) = parent_listing(&path).await;
@@ -207,6 +219,51 @@ async fn handle(request: FsRequest) -> FsResponse {
             },
         },
     }
+}
+
+/// Replaces every regex match across the workspace and writes changed files,
+/// returning how many files changed. Smart-case like the search, with a literal
+/// fallback for an invalid pattern.
+fn replace_all(root: &str, query: &str, replacement: &str) -> usize {
+    use regex::RegexBuilder;
+
+    if query.is_empty() {
+        return 0;
+    }
+    let smart_case = !query.chars().any(|character| character.is_uppercase());
+    let build = |pattern: &str| {
+        RegexBuilder::new(pattern)
+            .case_insensitive(smart_case)
+            .build()
+    };
+    let Ok(regex) = build(query).or_else(|_| build(&regex::escape(query))) else {
+        return 0;
+    };
+    let mut count = 0;
+    for entry in ignore::WalkBuilder::new(root)
+        .hidden(true)
+        .build()
+        .flatten()
+    {
+        if !entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_file())
+        {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        if !regex.is_match(&content) {
+            continue;
+        }
+        let replaced = regex.replace_all(&content, replacement);
+        if replaced != content && std::fs::write(path, replaced.as_bytes()).is_ok() {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// The parent directory of a path and its listing, for refreshing the tree.

@@ -285,6 +285,13 @@ pub enum FsRequest {
     },
     /// Delete a file.
     DeletePath { request_id: u64, path: String },
+    /// Replace every match of a regex across the workspace, respecting gitignore.
+    ReplaceAll {
+        request_id: u64,
+        root: String,
+        query: String,
+        replacement: String,
+    },
 }
 
 /// Desktop filesystem bridge to the page.
@@ -334,6 +341,11 @@ pub enum FsResponse {
         path: String,
         dir: String,
         entries: Vec<DirEntry>,
+    },
+    /// A project-wide replace finished, touching `count` files.
+    Replaced {
+        request_id: u64,
+        count: usize,
     },
     Error {
         request_id: u64,

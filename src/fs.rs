@@ -154,6 +154,16 @@ pub fn delete_path(path: &str) {
     });
 }
 
+/// Replaces every regex match across the workspace.
+pub fn replace_all(root: &str, query: &str, replacement: &str) {
+    send(&FsRequest::ReplaceAll {
+        request_id: 0,
+        root: root.to_string(),
+        query: query.to_string(),
+        replacement: replacement.to_string(),
+    });
+}
+
 /// Toggles a tree directory, loading its children on first expand.
 pub fn toggle_dir(state: EditorState, path: &str) {
     let mut needs_load = false;
@@ -183,6 +193,9 @@ fn dispatch(state: EditorState, response: FsResponse) {
             });
         }
         FsResponse::File { path, text, .. } => {
+            let already = state
+                .files
+                .with_untracked(|files| files.iter().any(|file| file.path == path));
             state.files.update(|files| {
                 if let Some(file) = files.iter_mut().find(|file| file.path == path) {
                     file.text = text.clone();
@@ -195,9 +208,13 @@ fn dispatch(state: EditorState, response: FsResponse) {
                     });
                 }
             });
-            state.open_in_focused(PluginKind::File, Some(path.clone()));
-            crate::lsp::did_open(state, &path);
-            crate::lsp::apply_pending_edits(state, &path);
+            if already {
+                crate::lsp::did_change(state, &path);
+            } else {
+                state.open_in_focused(PluginKind::File, Some(path.clone()));
+                crate::lsp::did_open(state, &path);
+                crate::lsp::apply_pending_edits(state, &path);
+            }
         }
         FsResponse::Wrote { path, .. } => {
             state.files.update(|files| {
@@ -208,6 +225,15 @@ fn dispatch(state: EditorState, response: FsResponse) {
         }
         FsResponse::SearchResults { hits, .. } => {
             state.search_results.set(hits);
+        }
+        FsResponse::Replaced { count, .. } => {
+            let paths: Vec<String> = state
+                .files
+                .with_untracked(|files| files.iter().map(|file| file.path.clone()).collect());
+            for path in paths {
+                read_file(&path);
+            }
+            state.status.set(format!("Replaced across {count} files"));
         }
         FsResponse::Created {
             path, dir, entries, ..

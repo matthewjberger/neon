@@ -1369,6 +1369,18 @@ body {
   margin: 8px;
 }
 
+.search-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 8px;
+}
+
+.search-replace-row .search-input {
+  flex: 1;
+  margin: 0;
+}
+
 .search-results {
   flex: 1;
   overflow-y: auto;

@@ -26,7 +26,9 @@ parallel walk that respects `.gitignore`. The query is a smart-case regex,
 case-insensitive until you type an uppercase letter, and a query that is not
 valid regex matches literally. Each hit is a file and line. Click it to open the
 file and jump to the line. References and multi-location go-to results land in
-this same panel.
+this same panel. The panel also replaces across the project: a replacement field
+and Replace all rewrite every match (with `$1` for capture groups), then reload
+the open buffers so they stay in sync.
 
 ## The filesystem bridge
 

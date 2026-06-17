@@ -1438,6 +1438,7 @@ dependencies = [
  "grep",
  "ignore",
  "protocol",
+ "regex",
  "rfd 0.15.4",
  "rust-embed",
  "serde_json",

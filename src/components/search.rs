@@ -10,9 +10,17 @@ use crate::state::{EditorState, basename};
 #[component]
 pub fn SearchPanel(state: EditorState) -> impl IntoView {
     let query = RwSignal::new(String::new());
+    let replacement = RwSignal::new(String::new());
     let run = move || {
         if let Some(root) = state.workspace_root.get_untracked() {
             fs::search(&root, &query.get_untracked());
+        }
+    };
+    let replace = move || {
+        if let Some(root) = state.workspace_root.get_untracked()
+            && !query.get_untracked().is_empty()
+        {
+            fs::replace_all(&root, &query.get_untracked(), &replacement.get_untracked());
         }
     };
 
@@ -32,6 +40,15 @@ pub fn SearchPanel(state: EditorState) -> impl IntoView {
                     }
                 }
             />
+            <div class="search-replace-row">
+                <input
+                    class="search-input"
+                    placeholder="Replace ($1 for groups)"
+                    prop:value=move || replacement.get()
+                    on:input=move |event| replacement.set(event_target_value(&event))
+                />
+                <button class="tool-button" on:click=move |_| replace()>"Replace all"</button>
+            </div>
             <div class="search-results">
                 {move || {
                     state
