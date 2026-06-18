@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use protocol::{AgentRequest, AgentResponse, CorrelationId, PluginSource};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc, oneshot};
@@ -20,7 +20,7 @@ const REQUEST_TIMEOUT_SECS: u64 = 30;
 struct Shared {
     next_correlation: AtomicU64,
     pending: Mutex<HashMap<CorrelationId, oneshot::Sender<AgentResponse>>>,
-    page_tx: Mutex<Option<mpsc::UnboundedSender<String>>>,
+    page_tx: Mutex<Option<mpsc::Sender<String>>>,
 }
 
 impl Shared {
@@ -94,18 +94,11 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
         }
     };
     log("editor page connected");
-    let (mut sink, mut source) = websocket.split();
+    let (sink, mut source) = websocket.split();
 
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (out_tx, out_rx) = mpsc::channel::<String>(crate::relay::PAGE_QUEUE);
     *shared.page_tx.lock().await = Some(out_tx);
-
-    let writer = tokio::spawn(async move {
-        while let Some(text) = out_rx.recv().await {
-            if sink.send(Message::Text(text)).await.is_err() {
-                break;
-            }
-        }
-    });
+    let writer = crate::relay::spawn_writer(sink, out_rx);
 
     while let Some(message) = source.next().await {
         let Ok(message) = message else {
@@ -129,25 +122,10 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
 }
 
 async fn route_response(shared: &Arc<Shared>, response: AgentResponse) {
-    let correlation_id = response_correlation(&response);
+    let correlation_id = protocol::response_correlation(&response);
     let sender = shared.pending.lock().await.remove(&correlation_id);
     if let Some(sender) = sender {
         let _ = sender.send(response);
-    }
-}
-
-fn response_correlation(response: &AgentResponse) -> CorrelationId {
-    match response {
-        AgentResponse::EditorState { correlation_id, .. }
-        | AgentResponse::Buffer { correlation_id, .. }
-        | AgentResponse::Plugins { correlation_id, .. }
-        | AgentResponse::Reference { correlation_id, .. }
-        | AgentResponse::Console { correlation_id, .. }
-        | AgentResponse::Diagnostics { correlation_id, .. }
-        | AgentResponse::Ok { correlation_id }
-        | AgentResponse::Scene { correlation_id, .. }
-        | AgentResponse::Screenshot { correlation_id, .. }
-        | AgentResponse::Error { correlation_id, .. } => *correlation_id,
     }
 }
 
@@ -155,21 +133,19 @@ async fn send_request(
     shared: &Arc<Shared>,
     request: AgentRequest,
 ) -> Result<AgentResponse, String> {
-    let correlation_id = request_correlation(&request);
+    let correlation_id = protocol::request_correlation(&request);
     let (tx, rx) = oneshot::channel();
     shared.pending.lock().await.insert(correlation_id, tx);
 
     let text = serde_json::to_string(&request).map_err(|error| error.to_string())?;
-    {
-        let guard = shared.page_tx.lock().await;
-        let Some(sender) = guard.as_ref() else {
-            shared.pending.lock().await.remove(&correlation_id);
-            return Err("editor page is not connected".to_string());
-        };
-        if sender.send(text).is_err() {
-            shared.pending.lock().await.remove(&correlation_id);
-            return Err("editor page relay is closed".to_string());
-        }
+    let sender = shared.page_tx.lock().await.clone();
+    let Some(sender) = sender else {
+        shared.pending.lock().await.remove(&correlation_id);
+        return Err("editor page is not connected".to_string());
+    };
+    if sender.send(text).await.is_err() {
+        shared.pending.lock().await.remove(&correlation_id);
+        return Err("editor page relay is closed".to_string());
     }
 
     let timeout = tokio::time::Duration::from_secs(REQUEST_TIMEOUT_SECS);
@@ -180,21 +156,6 @@ async fn send_request(
             shared.pending.lock().await.remove(&correlation_id);
             Err("timed out waiting for the editor".to_string())
         }
-    }
-}
-
-fn request_correlation(request: &AgentRequest) -> CorrelationId {
-    match request {
-        AgentRequest::GetEditorState { correlation_id }
-        | AgentRequest::GetBuffer { correlation_id, .. }
-        | AgentRequest::SetBuffer { correlation_id, .. }
-        | AgentRequest::ListPlugins { correlation_id }
-        | AgentRequest::GetApiReference { correlation_id }
-        | AgentRequest::GetConsole { correlation_id }
-        | AgentRequest::EditPlugin { correlation_id, .. }
-        | AgentRequest::RunCommand { correlation_id, .. }
-        | AgentRequest::QueryScene { correlation_id, .. }
-        | AgentRequest::Screenshot { correlation_id, .. } => *correlation_id,
     }
 }
 

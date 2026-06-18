@@ -33,7 +33,6 @@ pub fn EditorPane(
     let request_id = StoredValue::new(0_u32);
     let hover_timer = StoredValue::new(None::<i32>);
     let completion_timer = StoredValue::new(None::<i32>);
-    let dragging = StoredValue::new(None::<usize>);
 
     let command_set = Memo::new(move |_| {
         state
@@ -60,17 +59,6 @@ pub fn EditorPane(
     let readonly = move || kind_readonly(active_kind());
     let flex = move || pane().map(|pane| pane.flex as f64).unwrap_or(1.0);
     let focused = move || state.pane_count() > 1 && state.focused_key.get() == pane_key;
-
-    let current = move || {
-        state.panes.with_untracked(|panes| {
-            panes
-                .iter()
-                .find(|pane| pane.key == pane_key)
-                .and_then(|pane| pane.buffer().cloned())
-                .map(|buffer| (buffer.id, buffer.kind))
-                .unwrap_or((None, PluginKind::Scene))
-        })
-    };
 
     Effect::new(move |_| {
         if state.focused_key.get() == pane_key
@@ -124,23 +112,15 @@ pub fn EditorPane(
     let on_mousemove = move |event: web_sys::MouseEvent| {
         let x = event.client_x() as f64;
         let y = event.client_y() as f64;
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        if let Some(handle) = hover_timer.get_value() {
-            window.clear_timeout_with_handle(handle);
-        }
-        let callback = Closure::once_into_js(move || crate::lsp::request_hover_at(state, x, y));
-        let handle = window
-            .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 400)
-            .unwrap_or(0);
-        hover_timer.set_value(Some(handle));
+        debounce_timer(hover_timer, 400, move || {
+            crate::lsp::request_hover_at(state, x, y)
+        });
     };
 
     let on_mouseleave = move |_| state.hover.set(None);
 
     let on_input = move |event: web_sys::Event| {
-        let (id, kind) = current();
+        let (id, kind) = current_buffer(state, pane_key);
         if kind_readonly(kind) {
             return;
         }
@@ -150,20 +130,10 @@ pub fn EditorPane(
         }
         state.set_buffer_text(kind, &id, value);
         commit(bridge, lang, state, pane_key, debounce, request_id);
-        if kind == PluginKind::File
-            && let Some(window) = web_sys::window()
-        {
-            if let Some(handle) = completion_timer.get_value() {
-                window.clear_timeout_with_handle(handle);
-            }
-            let callback = Closure::once_into_js(move || crate::lsp::request_completion(state));
-            let handle = window
-                .set_timeout_with_callback_and_timeout_and_arguments_0(
-                    callback.unchecked_ref(),
-                    150,
-                )
-                .unwrap_or(0);
-            completion_timer.set_value(Some(handle));
+        if kind == PluginKind::File {
+            debounce_timer(completion_timer, 150, move || {
+                crate::lsp::request_completion(state)
+            });
             if let Some(element) = textarea.get() {
                 let caret = element.selection_start().ok().flatten().unwrap_or(0);
                 match char_before(&element.value(), caret) {
@@ -173,147 +143,24 @@ pub fn EditorPane(
                 }
             }
         }
-        if matches!(kind, PluginKind::Scene | PluginKind::Editor)
-            && let Some(window) = web_sys::window()
-        {
-            if let Some(handle) = completion_timer.get_value() {
-                window.clear_timeout_with_handle(handle);
-            }
-            let callback = Closure::once_into_js(move || crate::complete::rhai_complete(state));
-            let handle = window
-                .set_timeout_with_callback_and_timeout_and_arguments_0(
-                    callback.unchecked_ref(),
-                    150,
-                )
-                .unwrap_or(0);
-            completion_timer.set_value(Some(handle));
+        if matches!(kind, PluginKind::Scene | PluginKind::Editor) {
+            debounce_timer(completion_timer, 150, move || {
+                crate::complete::rhai_complete(state)
+            });
         }
     };
 
     let on_keydown = move |event: web_sys::KeyboardEvent| {
-        if state.jump.get_untracked().is_some() {
-            return;
-        }
-        if state.completion.get_untracked().is_some() {
-            let len = state
-                .completion
-                .with_untracked(|menu| menu.as_ref().map(|menu| menu.items.len()).unwrap_or(0))
-                .max(1);
-            match event.key().as_str() {
-                "ArrowDown" => {
-                    event.prevent_default();
-                    state
-                        .completion_index
-                        .update(|index| *index = (*index + 1) % len);
-                    return;
-                }
-                "ArrowUp" => {
-                    event.prevent_default();
-                    state
-                        .completion_index
-                        .update(|index| *index = (*index + len - 1) % len);
-                    return;
-                }
-                "Enter" | "Tab" => {
-                    event.prevent_default();
-                    crate::lsp::accept_completion(state, state.completion_index.get_untracked());
-                    return;
-                }
-                "Escape" => {
-                    event.prevent_default();
-                    state.completion.set(None);
-                    return;
-                }
-                _ => {}
-            }
-        }
-        let (id, kind) = current();
-        if kind_readonly(kind) {
-            return;
-        }
-        if crate::multicursor::active(state) {
-            match event.key().as_str() {
-                "Escape" => {
-                    event.prevent_default();
-                    crate::multicursor::clear(state);
-                    return;
-                }
-                "Backspace" => {
-                    event.prevent_default();
-                    crate::multicursor::delete_back(state);
-                    return;
-                }
-                "Delete" => {
-                    event.prevent_default();
-                    crate::multicursor::delete_forward(state);
-                    return;
-                }
-                "Enter" => {
-                    event.prevent_default();
-                    crate::multicursor::insert(state, "\n");
-                    return;
-                }
-                "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End"
-                | "PageUp" | "PageDown" => {
-                    if !event.ctrl_key() && !event.alt_key() && !event.meta_key() {
-                        crate::multicursor::clear(state);
-                    }
-                }
-                key => {
-                    if !event.ctrl_key()
-                        && !event.alt_key()
-                        && !event.meta_key()
-                        && key.chars().count() == 1
-                    {
-                        event.prevent_default();
-                        crate::multicursor::insert(state, key);
-                        return;
-                    }
-                }
-            }
-        }
-        if event.key() == "Enter" && inserts_newline(state) {
-            if let Some(element) = textarea.get() {
-                event.prevent_default();
-                let caret = element.selection_start().ok().flatten().unwrap_or(0);
-                let text = newline_indent(&element.value(), caret);
-                editor_plugins::insert_text(state, id, kind, &element, &text);
-                commit(bridge, lang, state, pane_key, debounce, request_id);
-            }
-            return;
-        }
-        if event.key() == "Tab" {
-            event.prevent_default();
-            if let Some(element) = textarea.get() {
-                editor_plugins::insert_text(state, id, kind, &element, "    ");
-                commit(bridge, lang, state, pane_key, debounce, request_id);
-            }
-            return;
-        }
-        if !editor_plugins::any_enabled(state) {
-            return;
-        }
-        let Some(element) = textarea.get() else {
-            return;
-        };
-        let outcome = editor_plugins::handle_key(
+        handle_keydown(KeyContext {
+            event,
             state,
-            id,
-            kind,
-            &element,
-            &editor_plugins::KeyEvent {
-                key: event.key(),
-                ctrl: event.ctrl_key(),
-                shift: event.shift_key(),
-                alt: event.alt_key(),
-            },
-        );
-        if outcome.consumed {
-            event.prevent_default();
-        }
-        if outcome.changed {
-            commit(bridge, lang, state, pane_key, debounce, request_id);
-        }
+            bridge,
+            lang,
+            pane_key,
+            textarea,
+            debounce,
+            request_id,
+        });
     };
 
     view! {
@@ -322,75 +169,7 @@ pub fn EditorPane(
             class:focused=focused
             style:flex-grow=move || flex().to_string()
         >
-            <div class="tab-bar">
-                {move || {
-                    let current_pane = pane();
-                    let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
-                    current_pane
-                        .map(|pane| pane.tabs)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, tab)| {
-                            let name = state.buffer_name(tab.kind, &tab.id);
-                            let dirty = state.is_dirty(tab.kind, &tab.id);
-                            view! {
-                                <div
-                                    class="tab"
-                                    class:active=index == active
-                                    draggable="true"
-                                    on:click=move |_| state.focus_tab(pane_key, index)
-                                    on:dragstart=move |_| dragging.set_value(Some(index))
-                                    on:dragover=move |event: web_sys::DragEvent| {
-                                        if dragging.get_value().is_some() {
-                                            event.prevent_default();
-                                        }
-                                    }
-                                    on:drop=move |event: web_sys::DragEvent| {
-                                        event.prevent_default();
-                                        if let Some(from) = dragging.get_value() {
-                                            state.move_tab(pane_key, from, index);
-                                        }
-                                        dragging.set_value(None);
-                                    }
-                                    on:dragend=move |_| dragging.set_value(None)
-                                    on:mousedown=move |event: web_sys::MouseEvent| {
-                                        if event.button() == 1 {
-                                            event.prevent_default();
-                                            state.close_tab(pane_key, index);
-                                        }
-                                    }
-                                    on:contextmenu=move |event: web_sys::MouseEvent| {
-                                        event.prevent_default();
-                                        event.stop_propagation();
-                                        state.focus_tab(pane_key, index);
-                                        crate::components::context_menu::open(
-                                            state,
-                                            event.client_x() as f64,
-                                            event.client_y() as f64,
-                                            crate::components::context_menu::tab_menu(),
-                                        );
-                                    }
-                                >
-                                    <span class="tab-name">{name}</span>
-                                    <Show when=move || dirty fallback=|| ()>
-                                        <span class="tab-dirty">"\u{2022}"</span>
-                                    </Show>
-                                    <button
-                                        class="tab-close"
-                                        on:click=move |event: web_sys::MouseEvent| {
-                                            event.stop_propagation();
-                                            state.close_tab(pane_key, index);
-                                        }
-                                    >
-                                        "\u{00d7}"
-                                    </button>
-                                </div>
-                            }
-                        })
-                        .collect_view()
-                }}
-            </div>
+            <TabBar state pane_key />
             <Show
                 when=move || active_id().is_some()
                 fallback=|| view! { <div class="editor-empty">"Open a buffer to edit"</div> }
@@ -470,31 +249,300 @@ pub fn EditorPane(
                         on:mousedown=move |_| crate::multicursor::clear(state)
                     />
                 </div>
-                <Show when=move || state.focused_key.get() == pane_key fallback=|| ()>
-                    <div class="diagnostics">
-                        <For
-                            each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
-                            key=|(index, _)| *index
-                            children=move |(_, diag)| {
-                                view! {
-                                    <div class="diagnostic">
-                                        <span class="diag-pos">
-                                            {format!("{}:{}", diag.line, diag.column)}
-                                        </span>
-                                        {diag.message}
-                                    </div>
-                                }
-                            }
-                        />
-                    </div>
-                </Show>
+                <DiagnosticStrip state pane_key />
             </Show>
         </div>
     }
 }
 
-/// Persists the buffer and, for a scene plugin, schedules the worker sync and
-/// compile-check.
+/// The tab strip for one pane: a draggable, closable tab per open buffer.
+#[component]
+fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
+    let dragging = StoredValue::new(None::<usize>);
+    let pane = move || {
+        state
+            .panes
+            .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
+    };
+    view! {
+        <div class="tab-bar">
+            {move || {
+                let current_pane = pane();
+                let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
+                current_pane
+                    .map(|pane| pane.tabs)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, tab)| {
+                        let name = state.buffer_name(tab.kind, &tab.id);
+                        let dirty = state.is_dirty(tab.kind, &tab.id);
+                        view! {
+                            <div
+                                class="tab"
+                                class:active=index == active
+                                draggable="true"
+                                on:click=move |_| state.focus_tab(pane_key, index)
+                                on:dragstart=move |_| dragging.set_value(Some(index))
+                                on:dragover=move |event: web_sys::DragEvent| {
+                                    if dragging.get_value().is_some() {
+                                        event.prevent_default();
+                                    }
+                                }
+                                on:drop=move |event: web_sys::DragEvent| {
+                                    event.prevent_default();
+                                    if let Some(from) = dragging.get_value() {
+                                        state.move_tab(pane_key, from, index);
+                                    }
+                                    dragging.set_value(None);
+                                }
+                                on:dragend=move |_| dragging.set_value(None)
+                                on:mousedown=move |event: web_sys::MouseEvent| {
+                                    if event.button() == 1 {
+                                        event.prevent_default();
+                                        state.close_tab(pane_key, index);
+                                    }
+                                }
+                                on:contextmenu=move |event: web_sys::MouseEvent| {
+                                    event.prevent_default();
+                                    event.stop_propagation();
+                                    state.focus_tab(pane_key, index);
+                                    crate::components::context_menu::open(
+                                        state,
+                                        event.client_x() as f64,
+                                        event.client_y() as f64,
+                                        crate::components::context_menu::tab_menu(),
+                                    );
+                                }
+                            >
+                                <span class="tab-name">{name}</span>
+                                <Show when=move || dirty fallback=|| ()>
+                                    <span class="tab-dirty">"\u{2022}"</span>
+                                </Show>
+                                <button
+                                    class="tab-close"
+                                    on:click=move |event: web_sys::MouseEvent| {
+                                        event.stop_propagation();
+                                        state.close_tab(pane_key, index);
+                                    }
+                                >
+                                    "\u{00d7}"
+                                </button>
+                            </div>
+                        }
+                    })
+                    .collect_view()
+            }}
+        </div>
+    }
+}
+
+/// The diagnostics strip under the editor, shown only for the focused pane so a
+/// split does not stack a strip per pane.
+#[component]
+fn DiagnosticStrip(state: EditorState, pane_key: usize) -> impl IntoView {
+    view! {
+        <Show when=move || state.focused_key.get() == pane_key fallback=|| ()>
+            <div class="diagnostics">
+                <For
+                    each=move || { state.diagnostics.get().into_iter().enumerate().collect::<Vec<_>>() }
+                    key=|(index, _)| *index
+                    children=move |(_, diag)| {
+                        view! {
+                            <div class="diagnostic">
+                                <span class="diag-pos">
+                                    {format!("{}:{}", diag.line, diag.column)}
+                                </span>
+                                {diag.message}
+                            </div>
+                        }
+                    }
+                />
+            </div>
+        </Show>
+    }
+}
+
+/// The handles a keystroke needs to read and edit the focused buffer, bundled so
+/// the router is a free function over plain data rather than a closure capturing
+/// the component scope.
+struct KeyContext {
+    event: web_sys::KeyboardEvent,
+    state: EditorState,
+    bridge: StoredValue<Option<Bridge>, LocalStorage>,
+    lang: StoredValue<Option<Lang>, LocalStorage>,
+    pane_key: usize,
+    textarea: NodeRef<html::Textarea>,
+    debounce: StoredValue<Option<i32>>,
+    request_id: StoredValue<u32>,
+}
+
+/// Routes one keydown: the completion popup first, then multi-cursor, then the
+/// built-in newline and tab handling, then the editor plugins.
+fn handle_keydown(ctx: KeyContext) {
+    let KeyContext {
+        event,
+        state,
+        bridge,
+        lang,
+        pane_key,
+        textarea,
+        debounce,
+        request_id,
+    } = ctx;
+    if state.jump.get_untracked().is_some() {
+        return;
+    }
+    if state.completion.get_untracked().is_some() {
+        let len = state
+            .completion
+            .with_untracked(|menu| menu.as_ref().map(|menu| menu.items.len()).unwrap_or(0))
+            .max(1);
+        match event.key().as_str() {
+            "ArrowDown" => {
+                event.prevent_default();
+                state
+                    .completion_index
+                    .update(|index| *index = (*index + 1) % len);
+                return;
+            }
+            "ArrowUp" => {
+                event.prevent_default();
+                state
+                    .completion_index
+                    .update(|index| *index = (*index + len - 1) % len);
+                return;
+            }
+            "Enter" | "Tab" => {
+                event.prevent_default();
+                crate::lsp::accept_completion(state, state.completion_index.get_untracked());
+                return;
+            }
+            "Escape" => {
+                event.prevent_default();
+                state.completion.set(None);
+                return;
+            }
+            _ => {}
+        }
+    }
+    let (id, kind) = current_buffer(state, pane_key);
+    if kind_readonly(kind) {
+        return;
+    }
+    if crate::multicursor::active(state) {
+        match event.key().as_str() {
+            "Escape" => {
+                event.prevent_default();
+                crate::multicursor::clear(state);
+                return;
+            }
+            "Backspace" => {
+                event.prevent_default();
+                crate::multicursor::delete_back(state);
+                return;
+            }
+            "Delete" => {
+                event.prevent_default();
+                crate::multicursor::delete_forward(state);
+                return;
+            }
+            "Enter" => {
+                event.prevent_default();
+                crate::multicursor::insert(state, "\n");
+                return;
+            }
+            "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "PageUp"
+            | "PageDown" => {
+                if !event.ctrl_key() && !event.alt_key() && !event.meta_key() {
+                    crate::multicursor::clear(state);
+                }
+            }
+            key => {
+                if !event.ctrl_key()
+                    && !event.alt_key()
+                    && !event.meta_key()
+                    && key.chars().count() == 1
+                {
+                    event.prevent_default();
+                    crate::multicursor::insert(state, key);
+                    return;
+                }
+            }
+        }
+    }
+    if event.key() == "Enter" && inserts_newline(state) {
+        if let Some(element) = textarea.get() {
+            event.prevent_default();
+            let caret = element.selection_start().ok().flatten().unwrap_or(0);
+            let text = newline_indent(&element.value(), caret);
+            editor_plugins::insert_text(state, id, kind, &element, &text);
+            commit(bridge, lang, state, pane_key, debounce, request_id);
+        }
+        return;
+    }
+    if event.key() == "Tab" {
+        event.prevent_default();
+        if let Some(element) = textarea.get() {
+            editor_plugins::insert_text(state, id, kind, &element, "    ");
+            commit(bridge, lang, state, pane_key, debounce, request_id);
+        }
+        return;
+    }
+    if !editor_plugins::any_enabled(state) {
+        return;
+    }
+    let Some(element) = textarea.get() else {
+        return;
+    };
+    let outcome = editor_plugins::handle_key(
+        state,
+        id,
+        kind,
+        &element,
+        &editor_plugins::KeyEvent {
+            key: event.key(),
+            ctrl: event.ctrl_key(),
+            shift: event.shift_key(),
+            alt: event.alt_key(),
+        },
+    );
+    if outcome.consumed {
+        event.prevent_default();
+    }
+    if outcome.changed {
+        commit(bridge, lang, state, pane_key, debounce, request_id);
+    }
+}
+
+/// The focused buffer's id and kind for a pane, or the scene default.
+fn current_buffer(state: EditorState, pane_key: usize) -> (Option<String>, PluginKind) {
+    state.panes.with_untracked(|panes| {
+        panes
+            .iter()
+            .find(|pane| pane.key == pane_key)
+            .and_then(|pane| pane.buffer().cloned())
+            .map(|buffer| (buffer.id, buffer.kind))
+            .unwrap_or((None, PluginKind::Scene))
+    })
+}
+
+/// Resets a timer to fire `action` once after `delay` ms, replacing any pending
+/// fire. The single scheduler the hover and completion debounces share.
+fn debounce_timer(timer: StoredValue<Option<i32>>, delay: i32, action: impl FnOnce() + 'static) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if let Some(handle) = timer.get_value() {
+        window.clear_timeout_with_handle(handle);
+    }
+    let callback = Closure::once_into_js(action);
+    let handle = window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), delay)
+        .unwrap_or(0);
+    timer.set_value(Some(handle));
+}
+
 /// The line range to highlight: the lines scrolled into view plus a buffer, so
 /// the highlighter scans the window instead of the whole buffer. Lines outside
 /// it render as plain text, keeping the full text and every line position exact.

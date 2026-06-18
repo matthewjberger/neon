@@ -527,3 +527,48 @@ pub enum AgentResponse {
         message: String,
     },
 }
+
+/// The correlation id of a request, so a relay can match its reply without
+/// restating the variant list at every routing site.
+pub fn request_correlation(request: &AgentRequest) -> CorrelationId {
+    match request {
+        AgentRequest::GetEditorState { correlation_id }
+        | AgentRequest::GetBuffer { correlation_id, .. }
+        | AgentRequest::SetBuffer { correlation_id, .. }
+        | AgentRequest::ListPlugins { correlation_id }
+        | AgentRequest::GetApiReference { correlation_id }
+        | AgentRequest::GetConsole { correlation_id }
+        | AgentRequest::EditPlugin { correlation_id, .. }
+        | AgentRequest::RunCommand { correlation_id, .. }
+        | AgentRequest::QueryScene { correlation_id, .. }
+        | AgentRequest::Screenshot { correlation_id, .. } => *correlation_id,
+    }
+}
+
+/// The correlation id of a response, the counterpart to [`request_correlation`].
+pub fn response_correlation(response: &AgentResponse) -> CorrelationId {
+    match response {
+        AgentResponse::EditorState { correlation_id, .. }
+        | AgentResponse::Buffer { correlation_id, .. }
+        | AgentResponse::Plugins { correlation_id, .. }
+        | AgentResponse::Reference { correlation_id, .. }
+        | AgentResponse::Console { correlation_id, .. }
+        | AgentResponse::Diagnostics { correlation_id, .. }
+        | AgentResponse::Ok { correlation_id }
+        | AgentResponse::Scene { correlation_id, .. }
+        | AgentResponse::Screenshot { correlation_id, .. }
+        | AgentResponse::Error { correlation_id, .. } => *correlation_id,
+    }
+}
+
+/// Whether a request is answered by the engine worker (the scene domain) rather
+/// than the page (the editor domain). The page routes on this, and the worker
+/// rejects anything that is not scene-domain.
+pub fn is_scene_request(request: &AgentRequest) -> bool {
+    matches!(
+        request,
+        AgentRequest::RunCommand { .. }
+            | AgentRequest::QueryScene { .. }
+            | AgentRequest::Screenshot { .. }
+    )
+}

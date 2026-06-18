@@ -13,6 +13,8 @@ mod fs;
 mod lsp;
 #[cfg(feature = "agent")]
 mod pty;
+#[cfg(feature = "agent")]
+mod relay;
 
 use rust_embed::RustEmbed;
 use winit::application::ApplicationHandler;

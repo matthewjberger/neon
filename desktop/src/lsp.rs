@@ -8,7 +8,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use protocol::{LspClientMessage, LspServerMessage};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, Command};
@@ -18,7 +18,7 @@ use tokio_tungstenite::tungstenite::Message;
 const WS_ADDR: &str = "127.0.0.1:8793";
 
 struct Shared {
-    page_tx: Mutex<Option<mpsc::UnboundedSender<String>>>,
+    page_tx: Mutex<Option<mpsc::Sender<String>>>,
     server_stdin: Mutex<Option<ChildStdin>>,
 }
 
@@ -75,18 +75,11 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
             return;
         }
     };
-    let (mut sink, mut source) = websocket.split();
+    let (sink, mut source) = websocket.split();
 
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (out_tx, out_rx) = mpsc::channel::<String>(crate::relay::PAGE_QUEUE);
     *shared.page_tx.lock().await = Some(out_tx);
-
-    let writer = tokio::spawn(async move {
-        while let Some(text) = out_rx.recv().await {
-            if sink.send(Message::Text(text)).await.is_err() {
-                break;
-            }
-        }
-    });
+    let writer = crate::relay::spawn_writer(sink, out_rx);
 
     while let Some(message) = source.next().await {
         let Ok(message) = message else {
@@ -258,9 +251,9 @@ async fn send_to_page(shared: &Arc<Shared>, message: &LspServerMessage) {
     let Ok(text) = serde_json::to_string(message) else {
         return;
     };
-    let guard = shared.page_tx.lock().await;
-    if let Some(sender) = guard.as_ref() {
-        let _ = sender.send(text);
+    let sender = shared.page_tx.lock().await.clone();
+    if let Some(sender) = sender {
+        let _ = sender.send(text).await;
     }
 }
 

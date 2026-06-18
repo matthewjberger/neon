@@ -79,187 +79,135 @@ pub enum EditorCommand {
     OpenBuffer { kind: PluginKind, id: String },
 }
 
-/// The id an editor plugin uses to invoke a static command.
-pub fn command_from_id(id: &str) -> Option<EditorCommand> {
-    Some(match id {
-        "split-right" => EditorCommand::SplitEditor { vertical: true },
-        "split-below" => EditorCommand::SplitEditor { vertical: false },
-        "close-split" => EditorCommand::CloseSplit,
-        "focus-other" => EditorCommand::FocusOther,
-        "toggle-preview" => EditorCommand::TogglePreview,
-        "toggle-console" => EditorCommand::ToggleConsole,
-        "toggle-reference" => EditorCommand::ToggleReference,
-        "toggle-control-panel" => EditorCommand::ToggleControlPanel,
-        "toggle-chat" => EditorCommand::ToggleChat,
-        "show-installed" => EditorCommand::ShowInstalled,
-        "show-manager" => EditorCommand::ShowManager,
-        "show-files" => EditorCommand::ShowFiles,
-        "show-search" => EditorCommand::ShowSearch,
-        "open-folder" => EditorCommand::OpenFolder,
-        "new-file" => EditorCommand::NewFile,
-        "rename-entry" => EditorCommand::RenameEntry,
-        "delete-entry" => EditorCommand::DeleteEntry,
-        "save-file" => EditorCommand::SaveFile,
-        "save-all" => EditorCommand::SaveAll,
-        "close-tab" => EditorCommand::CloseTab,
-        "next-tab" => EditorCommand::NextTab,
-        "prev-tab" => EditorCommand::PrevTab,
-        "focus-next" => EditorCommand::FocusNext,
-        "focus-prev" => EditorCommand::FocusPrev,
-        "balance-splits" => EditorCommand::BalanceSplits,
-        "undo" => EditorCommand::Undo,
-        "redo" => EditorCommand::Redo,
-        "find" => EditorCommand::Find,
-        "jump-word" => EditorCommand::JumpWord,
-        "jump-line" => EditorCommand::JumpLine,
-        "jump-char" => EditorCommand::JumpChar,
-        "go-to-definition" => EditorCommand::GoToDefinition,
-        "go-to-type-definition" => EditorCommand::GoToTypeDefinition,
-        "go-to-implementation" => EditorCommand::GoToImplementation,
-        "find-references" => EditorCommand::FindReferences,
-        "jump-symbol" => EditorCommand::JumpSymbol,
-        "workspace-symbols" => EditorCommand::WorkspaceSymbols,
-        "hover" => EditorCommand::Hover,
-        "signature-help" => EditorCommand::SignatureHelp,
-        "rename-symbol" => EditorCommand::Rename,
-        "code-action" => EditorCommand::CodeAction,
-        "format-document" => EditorCommand::FormatDocument,
-        "next-error" => EditorCommand::NextError,
-        "prev-error" => EditorCommand::PrevError,
-        "toggle-problems" => EditorCommand::ToggleProblems,
-        "toggle-lsp-log" => EditorCommand::ToggleLspLog,
-        "cargo-check" => EditorCommand::CargoCheck,
-        "cargo-build" => EditorCommand::CargoBuild,
-        "cargo-test" => EditorCommand::CargoTest,
-        "cargo-run" => EditorCommand::CargoRun,
-        "interrupt" => EditorCommand::Interrupt,
-        "toggle-terminal" => EditorCommand::ToggleTerminal,
-        "add-cursor-below" => EditorCommand::AddCursorBelow,
-        "add-cursor-above" => EditorCommand::AddCursorAbove,
-        "clear-cursors" => EditorCommand::ClearCursors,
-        "new-plugin" => EditorCommand::NewPlugin,
-        "run-pause" => EditorCommand::RunPause,
-        "reset-scene" => EditorCommand::ResetScene,
-        "next-theme" => EditorCommand::NextTheme,
-        "toggle-format-on-save" => EditorCommand::ToggleFormatOnSave,
-        "open-palette" => EditorCommand::OpenPalette,
-        "open-help" => EditorCommand::OpenHelp,
-        "tour" => EditorCommand::Tour,
-        _ => return None,
-    })
+/// Every static editor command in one place: its plugin-facing id, its palette
+/// label (`None` when the command is reachable by id and the menus but not
+/// listed in the palette), and the command itself. The id lookup and the
+/// palette both derive from this, so a new command is declared once.
+fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)> {
+    use EditorCommand::*;
+    vec![
+        (
+            "split-right",
+            Some("Split right"),
+            SplitEditor { vertical: true },
+        ),
+        (
+            "split-below",
+            Some("Split below"),
+            SplitEditor { vertical: false },
+        ),
+        ("close-split", Some("Close split"), CloseSplit),
+        ("focus-other", Some("Focus other pane"), FocusOther),
+        ("toggle-preview", Some("Toggle 3D preview"), TogglePreview),
+        ("toggle-console", Some("Toggle console"), ToggleConsole),
+        (
+            "toggle-reference",
+            Some("Toggle reference"),
+            ToggleReference,
+        ),
+        (
+            "toggle-control-panel",
+            Some("Toggle control panel"),
+            ToggleControlPanel,
+        ),
+        ("toggle-chat", Some("Toggle Claude"), ToggleChat),
+        (
+            "show-installed",
+            Some("View: installed plugins"),
+            ShowInstalled,
+        ),
+        ("show-manager", Some("View: plugin manager"), ShowManager),
+        ("show-files", Some("View: files"), ShowFiles),
+        ("show-search", Some("View: search"), ShowSearch),
+        ("open-folder", Some("Open folder"), OpenFolder),
+        ("new-file", Some("New file"), NewFile),
+        ("save-file", Some("Save file"), SaveFile),
+        ("save-all", Some("Save all"), SaveAll),
+        ("close-tab", Some("Close tab"), CloseTab),
+        ("next-tab", Some("Next tab"), NextTab),
+        ("prev-tab", Some("Previous tab"), PrevTab),
+        ("balance-splits", Some("Balance splits"), BalanceSplits),
+        ("undo", Some("Undo"), Undo),
+        ("redo", Some("Redo"), Redo),
+        ("find", Some("Find and replace"), Find),
+        ("jump-word", Some("Jump to word"), JumpWord),
+        ("jump-line", Some("Jump to line"), JumpLine),
+        ("jump-char", Some("Jump to char"), JumpChar),
+        ("go-to-definition", Some("Go to definition"), GoToDefinition),
+        (
+            "go-to-type-definition",
+            Some("Go to type definition"),
+            GoToTypeDefinition,
+        ),
+        (
+            "go-to-implementation",
+            Some("Go to implementation"),
+            GoToImplementation,
+        ),
+        ("find-references", Some("Find references"), FindReferences),
+        ("jump-symbol", Some("Jump to symbol"), JumpSymbol),
+        (
+            "workspace-symbols",
+            Some("Search workspace symbols"),
+            WorkspaceSymbols,
+        ),
+        ("hover", Some("Show hover"), Hover),
+        ("signature-help", Some("Signature help"), SignatureHelp),
+        ("rename-symbol", Some("Rename symbol"), Rename),
+        ("code-action", Some("Code action"), CodeAction),
+        ("format-document", Some("Format document"), FormatDocument),
+        ("next-error", Some("Next error"), NextError),
+        ("prev-error", Some("Previous error"), PrevError),
+        ("toggle-problems", Some("Toggle problems"), ToggleProblems),
+        ("cargo-check", Some("Cargo check"), CargoCheck),
+        ("cargo-build", Some("Cargo build"), CargoBuild),
+        ("cargo-test", Some("Cargo test"), CargoTest),
+        ("cargo-run", Some("Cargo run"), CargoRun),
+        ("interrupt", Some("Interrupt terminal"), Interrupt),
+        ("toggle-terminal", Some("Toggle terminal"), ToggleTerminal),
+        ("add-cursor-below", Some("Add cursor below"), AddCursorBelow),
+        ("add-cursor-above", Some("Add cursor above"), AddCursorAbove),
+        ("clear-cursors", Some("Clear extra cursors"), ClearCursors),
+        (
+            "toggle-lsp-log",
+            Some("Toggle rust-analyzer log"),
+            ToggleLspLog,
+        ),
+        ("new-plugin", Some("New plugin"), NewPlugin),
+        ("run-pause", Some("Run or pause plugins"), RunPause),
+        ("reset-scene", Some("Reset scene"), ResetScene),
+        ("next-theme", Some("Next theme"), NextTheme),
+        (
+            "toggle-format-on-save",
+            Some("Toggle format on save"),
+            ToggleFormatOnSave,
+        ),
+        ("open-help", Some("Help: keybindings"), OpenHelp),
+        ("tour", Some("Tour: learn the keys"), Tour),
+        ("rename-entry", None, RenameEntry),
+        ("delete-entry", None, DeleteEntry),
+        ("focus-next", None, FocusNext),
+        ("focus-prev", None, FocusPrev),
+        ("open-palette", None, OpenPalette),
+    ]
 }
 
-/// Every command the palette offers: the static operations, a theme per theme,
-/// and an open command per installed plugin and built-in module.
+/// The id an editor plugin uses to invoke a static command.
+pub fn command_from_id(id: &str) -> Option<EditorCommand> {
+    static_commands()
+        .into_iter()
+        .find(|(command_id, _, _)| *command_id == id)
+        .map(|(_, _, command)| command)
+}
+
+/// Every command the palette offers: the static operations that carry a label,
+/// a theme per theme, and an open command per installed plugin and built-in
+/// module.
 pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
-    let mut items = vec![
-        (
-            "Split right".to_string(),
-            EditorCommand::SplitEditor { vertical: true },
-        ),
-        (
-            "Split below".to_string(),
-            EditorCommand::SplitEditor { vertical: false },
-        ),
-        ("Close split".to_string(), EditorCommand::CloseSplit),
-        ("Focus other pane".to_string(), EditorCommand::FocusOther),
-        (
-            "Toggle 3D preview".to_string(),
-            EditorCommand::TogglePreview,
-        ),
-        ("Toggle console".to_string(), EditorCommand::ToggleConsole),
-        (
-            "Toggle reference".to_string(),
-            EditorCommand::ToggleReference,
-        ),
-        (
-            "Toggle control panel".to_string(),
-            EditorCommand::ToggleControlPanel,
-        ),
-        ("Toggle Claude".to_string(), EditorCommand::ToggleChat),
-        (
-            "View: installed plugins".to_string(),
-            EditorCommand::ShowInstalled,
-        ),
-        (
-            "View: plugin manager".to_string(),
-            EditorCommand::ShowManager,
-        ),
-        ("View: files".to_string(), EditorCommand::ShowFiles),
-        ("View: search".to_string(), EditorCommand::ShowSearch),
-        ("Open folder".to_string(), EditorCommand::OpenFolder),
-        ("New file".to_string(), EditorCommand::NewFile),
-        ("Save file".to_string(), EditorCommand::SaveFile),
-        ("Save all".to_string(), EditorCommand::SaveAll),
-        ("Close tab".to_string(), EditorCommand::CloseTab),
-        ("Next tab".to_string(), EditorCommand::NextTab),
-        ("Previous tab".to_string(), EditorCommand::PrevTab),
-        ("Balance splits".to_string(), EditorCommand::BalanceSplits),
-        ("Undo".to_string(), EditorCommand::Undo),
-        ("Redo".to_string(), EditorCommand::Redo),
-        ("Find and replace".to_string(), EditorCommand::Find),
-        ("Jump to word".to_string(), EditorCommand::JumpWord),
-        ("Jump to line".to_string(), EditorCommand::JumpLine),
-        ("Jump to char".to_string(), EditorCommand::JumpChar),
-        (
-            "Go to definition".to_string(),
-            EditorCommand::GoToDefinition,
-        ),
-        (
-            "Go to type definition".to_string(),
-            EditorCommand::GoToTypeDefinition,
-        ),
-        (
-            "Go to implementation".to_string(),
-            EditorCommand::GoToImplementation,
-        ),
-        ("Find references".to_string(), EditorCommand::FindReferences),
-        ("Jump to symbol".to_string(), EditorCommand::JumpSymbol),
-        (
-            "Search workspace symbols".to_string(),
-            EditorCommand::WorkspaceSymbols,
-        ),
-        ("Show hover".to_string(), EditorCommand::Hover),
-        ("Signature help".to_string(), EditorCommand::SignatureHelp),
-        ("Rename symbol".to_string(), EditorCommand::Rename),
-        ("Code action".to_string(), EditorCommand::CodeAction),
-        ("Format document".to_string(), EditorCommand::FormatDocument),
-        ("Next error".to_string(), EditorCommand::NextError),
-        ("Previous error".to_string(), EditorCommand::PrevError),
-        ("Toggle problems".to_string(), EditorCommand::ToggleProblems),
-        ("Cargo check".to_string(), EditorCommand::CargoCheck),
-        ("Cargo build".to_string(), EditorCommand::CargoBuild),
-        ("Cargo test".to_string(), EditorCommand::CargoTest),
-        ("Cargo run".to_string(), EditorCommand::CargoRun),
-        ("Interrupt terminal".to_string(), EditorCommand::Interrupt),
-        ("Toggle terminal".to_string(), EditorCommand::ToggleTerminal),
-        (
-            "Add cursor below".to_string(),
-            EditorCommand::AddCursorBelow,
-        ),
-        (
-            "Add cursor above".to_string(),
-            EditorCommand::AddCursorAbove,
-        ),
-        (
-            "Clear extra cursors".to_string(),
-            EditorCommand::ClearCursors,
-        ),
-        (
-            "Toggle rust-analyzer log".to_string(),
-            EditorCommand::ToggleLspLog,
-        ),
-        ("New plugin".to_string(), EditorCommand::NewPlugin),
-        ("Run or pause plugins".to_string(), EditorCommand::RunPause),
-        ("Reset scene".to_string(), EditorCommand::ResetScene),
-        ("Next theme".to_string(), EditorCommand::NextTheme),
-        (
-            "Toggle format on save".to_string(),
-            EditorCommand::ToggleFormatOnSave,
-        ),
-        ("Help: keybindings".to_string(), EditorCommand::OpenHelp),
-        ("Tour: learn the keys".to_string(), EditorCommand::Tour),
-    ];
+    let mut items: Vec<(String, EditorCommand)> = static_commands()
+        .into_iter()
+        .filter_map(|(_, label, command)| label.map(|label| (label.to_string(), command)))
+        .collect();
     for (id, label) in THEMES {
         items.push((
             format!("Theme: {label}"),

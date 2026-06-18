@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use leptos::prelude::*;
 use protocol::{Diagnostic, LspServerMessage, SearchHit, Severity};
 use serde_json::{Value, json};
-use web_sys::{HtmlTextAreaElement, WebSocket};
+use web_sys::WebSocket;
 
 use crate::state::{
     CompletionEntry, CompletionMenu, EditorState, HoverCard, PluginKind, SidebarView, basename,
@@ -19,10 +19,12 @@ use crate::state::{
 };
 
 mod edits;
+mod text;
 mod transport;
 
 pub use edits::apply_pending_edits;
 use edits::{RangeEdit, apply_edits_to_file, apply_workspace_edit, parse_edits, splice_utf16};
+use text::{caret_pixel, line_character, word_at, word_prefix};
 use transport::{
     connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
 };
@@ -96,6 +98,29 @@ fn next_id() -> i64 {
         client.next_id += 1;
         id
     })
+}
+
+/// The most requests left in flight at once before the oldest is dropped, a
+/// backstop so a request the server never answers cannot leak its entry.
+const MAX_PENDING: usize = 64;
+
+/// Records an in-flight request awaiting its reply. Supersedes any earlier
+/// request of the same kind, so when a stale reply arrives its id is gone and
+/// the outdated result never applies, and caps the map against a lost reply.
+fn track(id: i64, pending: Pending) {
+    client(|client| {
+        let kind = std::mem::discriminant(&pending);
+        client
+            .pending
+            .retain(|_, existing| std::mem::discriminant(existing) != kind);
+        client.pending.insert(id, pending);
+        while client.pending.len() > MAX_PENDING {
+            let Some(oldest) = client.pending.keys().copied().min() else {
+                break;
+            };
+            client.pending.remove(&oldest);
+        }
+    });
 }
 
 /// Shows the consent toast for a Rust file, unless the server is already running.
@@ -186,11 +211,7 @@ pub fn request_completion(state: EditorState) {
     let prefix = word_prefix(&value, caret);
     let (x, y) = caret_pixel(&element, line, character);
     let id = next_id();
-    client(|client| {
-        client
-            .pending
-            .insert(id, Pending::Completion { prefix, x, y });
-    });
+    track(id, Pending::Completion { prefix, x, y });
     send_request_id(
         id,
         "textDocument/completion",
@@ -208,9 +229,7 @@ pub fn request_locations(state: EditorState, method: &str) {
         return;
     };
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::Definition);
-    });
+    track(id, Pending::Definition);
     send_request_id(
         id,
         method,
@@ -241,11 +260,7 @@ pub fn format_document(state: EditorState) {
         return;
     };
     let id = next_id();
-    client(|client| {
-        client
-            .pending
-            .insert(id, Pending::Format { path: path.clone() });
-    });
+    track(id, Pending::Format { path: path.clone() });
     send_request_id(
         id,
         "textDocument/formatting",
@@ -266,9 +281,7 @@ pub fn request_hover_at_caret(state: EditorState) {
     };
     let (x, y) = caret_pixel(&element, line, character);
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::Hover { x, y });
-    });
+    track(id, Pending::Hover { x, y });
     send_request_id(
         id,
         "textDocument/hover",
@@ -289,9 +302,7 @@ pub fn request_signature_help(state: EditorState) {
     };
     let (x, y) = caret_pixel(&element, line, character);
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::Signature { x, y });
-    });
+    track(id, Pending::Signature { x, y });
     send_request_id(
         id,
         "textDocument/signatureHelp",
@@ -308,9 +319,7 @@ pub fn request_references(state: EditorState) {
         return;
     };
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::References);
-    });
+    track(id, Pending::References);
     send_request_id(
         id,
         "textDocument/references",
@@ -335,14 +344,12 @@ pub fn request_workspace_symbols() {
         })
         .unwrap_or_default();
     let id = next_id();
-    client(|client| {
-        client.pending.insert(
-            id,
-            Pending::Symbols {
-                path: String::new(),
-            },
-        );
-    });
+    track(
+        id,
+        Pending::Symbols {
+            path: String::new(),
+        },
+    );
     send_request_id(id, "workspace/symbol", json!({ "query": query }));
 }
 
@@ -352,11 +359,7 @@ pub fn request_symbols(state: EditorState) {
         return;
     };
     let id = next_id();
-    client(|client| {
-        client
-            .pending
-            .insert(id, Pending::Symbols { path: path.clone() });
-    });
+    track(id, Pending::Symbols { path: path.clone() });
     send_request_id(
         id,
         "textDocument/documentSymbol",
@@ -390,9 +393,7 @@ pub fn submit_rename(state: EditorState, new_name: &str) {
         return;
     };
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::Rename);
-    });
+    track(id, Pending::Rename);
     send_request_id(
         id,
         "textDocument/rename",
@@ -425,9 +426,7 @@ pub fn request_code_actions(state: EditorState) {
             .unwrap_or_default()
     });
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::CodeActions);
-    });
+    track(id, Pending::CodeActions);
     send_request_id(
         id,
         "textDocument/codeAction",
@@ -480,9 +479,7 @@ fn run_code_action(state: EditorState, action: Value) {
     }
     if !has_edit && command.is_none() && action.get("data").is_some() {
         let id = next_id();
-        client(|client| {
-            client.pending.insert(id, Pending::ResolveAction);
-        });
+        track(id, Pending::ResolveAction);
         send_request_id(id, "codeAction/resolve", action);
     }
 }
@@ -493,9 +490,7 @@ fn execute_command(command: &Value) {
     };
     let arguments = command.get("arguments").cloned().unwrap_or(json!([]));
     let id = next_id();
-    client(|client| {
-        client.pending.insert(id, Pending::Command);
-    });
+    track(id, Pending::Command);
     send_request_id(
         id,
         "workspace/executeCommand",
@@ -588,15 +583,13 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     };
     let (line, column) = crate::caret::locate(&element, client_x, client_y);
     let id = next_id();
-    client(|client| {
-        client.pending.insert(
-            id,
-            Pending::Hover {
-                x: client_x,
-                y: client_y,
-            },
-        );
-    });
+    track(
+        id,
+        Pending::Hover {
+            x: client_x,
+            y: client_y,
+        },
+    );
     send_request_id(
         id,
         "textDocument/hover",
@@ -834,31 +827,6 @@ fn apply_code_actions(state: EditorState, value: &Value) {
     state.code_actions.set(titles);
 }
 
-fn word_at(value: &str, caret: u32) -> String {
-    let mut offset = 0;
-    let mut current = String::new();
-    let mut current_start = 0;
-    for unit in value.chars() {
-        let width = unit.len_utf16() as u32;
-        if unit.is_alphanumeric() || unit == '_' {
-            if current.is_empty() {
-                current_start = offset;
-            }
-            current.push(unit);
-        } else {
-            if !current.is_empty() && caret >= current_start && caret <= offset {
-                return current;
-            }
-            current.clear();
-        }
-        offset += width;
-    }
-    if !current.is_empty() && caret >= current_start && caret <= offset {
-        return current;
-    }
-    String::new()
-}
-
 fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
     let result = value.get("result");
     let signatures = result
@@ -916,48 +884,6 @@ fn apply_hover(state: EditorState, value: &Value, x: f64, y: f64) {
     } else {
         state.hover.set(Some(HoverCard { text, x, y }));
     }
-}
-
-fn line_character(value: &str, caret: u32) -> (u32, u32) {
-    let mut line = 0;
-    let mut column = 0;
-    let mut seen = 0;
-    for character in value.chars() {
-        if seen >= caret {
-            break;
-        }
-        let width = character.len_utf16() as u32;
-        if character == '\n' {
-            line += 1;
-            column = 0;
-        } else {
-            column += width;
-        }
-        seen += width;
-    }
-    (line, column)
-}
-
-fn word_prefix(value: &str, caret: u32) -> String {
-    let mut seen = 0;
-    let mut word = String::new();
-    for character in value.chars() {
-        if seen >= caret {
-            break;
-        }
-        if character.is_alphanumeric() || character == '_' {
-            word.push(character);
-        } else {
-            word.clear();
-        }
-        seen += character.len_utf16() as u32;
-    }
-    word
-}
-
-fn caret_pixel(element: &HtmlTextAreaElement, line: u32, column: u32) -> (f64, f64) {
-    let (x, top) = crate::caret::cell(element, line, column);
-    (x, top + crate::caret::line_height(element))
 }
 
 fn handle(state: EditorState, message: LspServerMessage) {

@@ -80,13 +80,7 @@ fn handle_request(
     socket: &RelaySocket,
     request: AgentRequest,
 ) {
-    let is_scene = matches!(
-        request,
-        AgentRequest::RunCommand { .. }
-            | AgentRequest::QueryScene { .. }
-            | AgentRequest::Screenshot { .. }
-    );
-    if is_scene {
+    if protocol::is_scene_request(&request) {
         send(bridge, &ClientMessage::Agent(Box::new(request)));
         return;
     }

@@ -87,9 +87,7 @@ pub fn App() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(id) = state.command_request.get() {
             state.command_request.set(None);
-            if let Some(command) = commands::command_from_id(&id) {
-                commands::run(command, state, bridge);
-            }
+            run_command(&id, state, bridge);
         }
     });
 
@@ -116,36 +114,34 @@ pub fn App() -> impl IntoView {
         }
         if event.ctrl_key() && event.shift_key() && event.key().eq_ignore_ascii_case("p") {
             event.prevent_default();
-            state.palette_open.set(true);
+            run_command("open-palette", state, bridge);
             return;
         }
         if event.key() == "F1" {
             event.prevent_default();
-            state.help_open.set(true);
+            run_command("open-help", state, bridge);
             return;
         }
         if event.ctrl_key() && event.key().eq_ignore_ascii_case("s") {
             event.prevent_default();
-            if let Some(command) = commands::command_from_id("save-file") {
-                commands::run(command, state, bridge);
-            }
+            run_command("save-file", state, bridge);
             return;
         }
         if event.ctrl_key()
             && (event.key().eq_ignore_ascii_case("f") || event.key().eq_ignore_ascii_case("h"))
         {
             event.prevent_default();
-            state.find_open.set(true);
+            run_command("find", state, bridge);
             return;
         }
         if event.ctrl_key() && event.alt_key() && event.key() == "ArrowDown" {
             event.prevent_default();
-            crate::multicursor::add_below(state);
+            run_command("add-cursor-below", state, bridge);
             return;
         }
         if event.ctrl_key() && event.alt_key() && event.key() == "ArrowUp" {
             event.prevent_default();
-            crate::multicursor::add_above(state);
+            run_command("add-cursor-above", state, bridge);
             return;
         }
         if event.ctrl_key()
@@ -154,7 +150,7 @@ pub fn App() -> impl IntoView {
             && !target_is_input(&event)
         {
             event.prevent_default();
-            crate::undo::undo(state);
+            run_command("undo", state, bridge);
             return;
         }
         if event.ctrl_key()
@@ -163,7 +159,7 @@ pub fn App() -> impl IntoView {
             && !target_is_input(&event)
         {
             event.prevent_default();
-            crate::undo::redo(state);
+            run_command("redo", state, bridge);
             return;
         }
         if event.key() == "Escape" && state.help_open.get_untracked() {
@@ -327,6 +323,14 @@ pub fn App() -> impl IntoView {
         </div>
     }
     .into_any()
+}
+
+/// Looks up a command by id and runs it, the single path every global shortcut
+/// and plugin command request goes through.
+fn run_command(id: &str, state: EditorState, bridge: StoredValue<Option<Bridge>, LocalStorage>) {
+    if let Some(command) = commands::command_from_id(id) {
+        commands::run(command, state, bridge);
+    }
 }
 
 fn unsupported() -> impl IntoView {

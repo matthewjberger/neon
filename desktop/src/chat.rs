@@ -7,7 +7,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, Command};
@@ -19,7 +19,7 @@ const MCP_URL: &str = "http://127.0.0.1:8790/mcp";
 const SYSTEM_PROMPT: &str = "You are embedded in the Neon editor's chat panel. You drive the editor only through the neon MCP tools. You have no filesystem, shell, or web access, so do not try to read the source: call get_api_reference to learn the scripting API (every command and standard-library helper). A plugin is a rhai script with on_start and/or on_tick that pushes Commands to `commands` and reads this frame's Events from `events`. Author and edit plugins with edit_plugin and set_buffer; both return diagnostics, so check that ok is true and fix any errors or unknown-command warnings before moving on. After editing, call get_console to see runtime errors and the commands a plugin ran, and query_scene to confirm entities exist. Use get_editor_state for the open plugins and selection, and screenshot to see the viewport.";
 
 struct Shared {
-    page_tx: Mutex<Option<mpsc::UnboundedSender<String>>>,
+    page_tx: Mutex<Option<mpsc::Sender<String>>>,
     claude_stdin: Mutex<Option<ChildStdin>>,
     generation: AtomicU64,
 }
@@ -81,18 +81,11 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
         }
     };
     log("chat page connected");
-    let (mut sink, mut source) = websocket.split();
+    let (sink, mut source) = websocket.split();
 
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (out_tx, out_rx) = mpsc::channel::<String>(crate::relay::PAGE_QUEUE);
     *shared.page_tx.lock().await = Some(out_tx);
-
-    let writer = tokio::spawn(async move {
-        while let Some(text) = out_rx.recv().await {
-            if sink.send(Message::Text(text)).await.is_err() {
-                break;
-            }
-        }
-    });
+    let writer = crate::relay::spawn_writer(sink, out_rx);
 
     ensure_claude(&shared).await;
 
@@ -243,9 +236,9 @@ async fn forward_prompt(shared: &Arc<Shared>, prompt: &str) {
 }
 
 async fn send_to_page(shared: &Arc<Shared>, text: String) {
-    let guard = shared.page_tx.lock().await;
-    if let Some(sender) = guard.as_ref() {
-        let _ = sender.send(text);
+    let sender = shared.page_tx.lock().await.clone();
+    if let Some(sender) = sender {
+        let _ = sender.send(text).await;
     }
 }
 

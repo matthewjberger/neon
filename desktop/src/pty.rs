@@ -8,7 +8,7 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use protocol::{TermGrid, TermSpan, TerminalClientMessage, TerminalServerMessage};
 use tokio::sync::mpsc;
@@ -49,15 +49,9 @@ async fn handle_page(stream: tokio::net::TcpStream) {
     let Ok(websocket) = tokio_tungstenite::accept_async(stream).await else {
         return;
     };
-    let (mut sink, mut source) = websocket.split();
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
-    let writer = tokio::spawn(async move {
-        while let Some(text) = out_rx.recv().await {
-            if sink.send(Message::Text(text)).await.is_err() {
-                break;
-            }
-        }
-    });
+    let (sink, mut source) = websocket.split();
+    let (out_tx, out_rx) = mpsc::channel::<String>(crate::relay::PAGE_QUEUE);
+    let writer = crate::relay::spawn_writer(sink, out_rx);
 
     let mut session: Option<Session> = None;
     while let Some(Ok(message)) = source.next().await {
@@ -105,12 +99,7 @@ struct Session {
     input: std::sync::mpsc::Sender<Vec<u8>>,
 }
 
-fn open(
-    cols: u16,
-    rows: u16,
-    cwd: String,
-    out_tx: mpsc::UnboundedSender<String>,
-) -> Option<Session> {
+fn open(cols: u16, rows: u16, cwd: String, out_tx: mpsc::Sender<String>) -> Option<Session> {
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,
@@ -147,7 +136,7 @@ fn open(
     std::thread::spawn(move || {
         let _ = child.wait();
         if let Ok(text) = serde_json::to_string(&TerminalServerMessage::Exited) {
-            let _ = out_tx.send(text);
+            let _ = out_tx.blocking_send(text);
         }
     });
 
@@ -161,7 +150,7 @@ fn open(
 fn read_loop(
     mut reader: Box<dyn Read + Send>,
     parser: Arc<Mutex<vt100::Parser>>,
-    out_tx: mpsc::UnboundedSender<String>,
+    out_tx: mpsc::Sender<String>,
 ) {
     let mut buffer = [0_u8; 8192];
     loop {
@@ -176,7 +165,7 @@ fn read_loop(
                     build_grid(parser.screen())
                 };
                 if let Ok(text) = serde_json::to_string(&TerminalServerMessage::Grid(grid)) {
-                    if out_tx.send(text).is_err() {
+                    if out_tx.blocking_send(text).is_err() {
                         break;
                     }
                 }

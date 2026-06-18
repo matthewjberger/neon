@@ -235,24 +235,9 @@ fn handle_agent(world: &mut World, request: AgentRequest) -> AgentResponse {
             }
         }
         other => AgentResponse::Error {
-            correlation_id: correlation_of(&other),
+            correlation_id: protocol::request_correlation(&other),
             message: "request is editor-domain, not scene-domain".to_string(),
         },
-    }
-}
-
-fn correlation_of(request: &AgentRequest) -> protocol::CorrelationId {
-    match request {
-        AgentRequest::GetEditorState { correlation_id }
-        | AgentRequest::GetBuffer { correlation_id, .. }
-        | AgentRequest::SetBuffer { correlation_id, .. }
-        | AgentRequest::ListPlugins { correlation_id }
-        | AgentRequest::GetApiReference { correlation_id }
-        | AgentRequest::GetConsole { correlation_id }
-        | AgentRequest::EditPlugin { correlation_id, .. }
-        | AgentRequest::RunCommand { correlation_id, .. }
-        | AgentRequest::QueryScene { correlation_id, .. }
-        | AgentRequest::Screenshot { correlation_id, .. } => *correlation_id,
     }
 }
 
