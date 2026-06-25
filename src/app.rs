@@ -8,7 +8,7 @@ use protocol::ClientMessage;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::bridge::{self, Bridge};
-use crate::commands;
+use crate::commands::{self, EditorCommand};
 use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::console::Console;
@@ -114,34 +114,34 @@ pub fn App() -> impl IntoView {
         }
         if event.ctrl_key() && event.shift_key() && event.key().eq_ignore_ascii_case("p") {
             event.prevent_default();
-            run_command("open-palette", state, bridge);
+            commands::run(EditorCommand::OpenPalette, state, bridge);
             return;
         }
         if event.key() == "F1" {
             event.prevent_default();
-            run_command("open-help", state, bridge);
+            commands::run(EditorCommand::OpenHelp, state, bridge);
             return;
         }
         if event.ctrl_key() && event.key().eq_ignore_ascii_case("s") {
             event.prevent_default();
-            run_command("save-file", state, bridge);
+            commands::run(EditorCommand::SaveFile, state, bridge);
             return;
         }
         if event.ctrl_key()
             && (event.key().eq_ignore_ascii_case("f") || event.key().eq_ignore_ascii_case("h"))
         {
             event.prevent_default();
-            run_command("find", state, bridge);
+            commands::run(EditorCommand::Find, state, bridge);
             return;
         }
         if event.ctrl_key() && event.alt_key() && event.key() == "ArrowDown" {
             event.prevent_default();
-            run_command("add-cursor-below", state, bridge);
+            commands::run(EditorCommand::AddCursorBelow, state, bridge);
             return;
         }
         if event.ctrl_key() && event.alt_key() && event.key() == "ArrowUp" {
             event.prevent_default();
-            run_command("add-cursor-above", state, bridge);
+            commands::run(EditorCommand::AddCursorAbove, state, bridge);
             return;
         }
         if event.ctrl_key()
@@ -150,7 +150,7 @@ pub fn App() -> impl IntoView {
             && !target_is_input(&event)
         {
             event.prevent_default();
-            run_command("undo", state, bridge);
+            commands::run(EditorCommand::Undo, state, bridge);
             return;
         }
         if event.ctrl_key()
@@ -159,7 +159,7 @@ pub fn App() -> impl IntoView {
             && !target_is_input(&event)
         {
             event.prevent_default();
-            run_command("redo", state, bridge);
+            commands::run(EditorCommand::Redo, state, bridge);
             return;
         }
         if event.key() == "Escape" && state.panels.help.get_untracked() {
