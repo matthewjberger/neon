@@ -7,6 +7,7 @@ use protocol::{
     CommandInfo, Diagnostic, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity, StdModule,
     TermGrid,
 };
+use serde::{Deserialize, Serialize};
 
 mod panes;
 
@@ -18,7 +19,7 @@ const LOG_LIMIT: usize = 500;
 /// editor plugins run on the page and drive the editor through key dispatch,
 /// built-ins are the standard library (viewable but locked), and files are real
 /// files on disk opened through the desktop filesystem bridge.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginKind {
     Scene,
     Editor,
@@ -73,7 +74,7 @@ pub struct LeaderMenu {
 
 /// A reference to an open buffer: which set it belongs to and its id (a plugin
 /// id, a built-in module name, or a file path).
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct BufferRef {
     pub kind: PluginKind,
     pub id: Option<String>,
@@ -129,7 +130,7 @@ pub struct JumpState {
 /// What a tile holds: a text buffer, or one of the editor's panels. Any tile can
 /// hold any of these, so the 3D view, console, terminal, and reference are
 /// contents you open into a pane, not fixed chrome.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum TileContent {
     Buffer(BufferRef),
     Viewport,
@@ -160,7 +161,7 @@ impl TileContent {
 /// One editor pane: a stable key, its open tiles as tabs with an active index,
 /// and its flex-grow weight in the split. Plain data, held in a `Vec`, so any
 /// number of panes can stack and each can hold any number of tabs.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pane {
     pub key: usize,
     pub tabs: Vec<TileContent>,

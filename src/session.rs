@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::state::EditorState;
+use crate::state::{EditorState, Pane};
 
 const KEY: &str = "neon.session";
 
@@ -15,6 +15,10 @@ const KEY: &str = "neon.session";
 struct Session {
     root: Option<String>,
     files: Vec<String>,
+    #[serde(default)]
+    panes: Vec<Pane>,
+    #[serde(default)]
+    focused: usize,
 }
 
 thread_local! {
@@ -26,6 +30,20 @@ thread_local! {
 pub fn capture() {
     let session = crate::storage::get_json::<Session>(KEY);
     PENDING.with(|pending| *pending.borrow_mut() = session);
+}
+
+/// Restores the saved tile layout into the panes, before the filesystem socket
+/// opens. File tiles fill in once their content loads. Skipped when nothing was
+/// saved, so a first run keeps the default layout.
+pub fn restore_layout(state: EditorState) {
+    PENDING.with(|pending| {
+        if let Some(session) = pending.borrow().as_ref()
+            && !session.panes.is_empty()
+        {
+            state.panes.set(session.panes.clone());
+            state.focused_key.set(session.focused);
+        }
+    });
 }
 
 /// Reopens the captured folder and files. Called once the filesystem socket
@@ -49,6 +67,8 @@ pub fn save(state: EditorState) {
         files: state
             .files
             .with_untracked(|files| files.iter().map(|file| file.path.clone()).collect()),
+        panes: state.panes.get_untracked(),
+        focused: state.focused_key.get_untracked(),
     };
     crate::storage::set_json(KEY, &session);
 }

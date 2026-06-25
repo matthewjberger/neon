@@ -48,6 +48,7 @@ pub fn App() -> impl IntoView {
     let lang = StoredValue::new_local(Some(lang::connect(state)));
 
     crate::session::capture();
+    crate::session::restore_layout(state);
     crate::network::start();
     crate::ipc::notify_host("enable-fs");
     crate::fs::start(state);
@@ -73,6 +74,8 @@ pub fn App() -> impl IntoView {
     Effect::new(move |_| {
         state.explorer.root.get();
         state.files.get();
+        state.panes.get();
+        state.focused_key.get();
         crate::session::save(state);
     });
 
