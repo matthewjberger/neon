@@ -276,24 +276,26 @@ pub fn run(
         EditorCommand::SplitEditor { vertical } => state.split(vertical),
         EditorCommand::CloseSplit => state.close_focused(),
         EditorCommand::FocusOther => state.focus_next(),
-        EditorCommand::TogglePreview => state.viewport_open.update(|open| *open = !*open),
-        EditorCommand::ToggleConsole => state.console_open.update(|open| *open = !*open),
-        EditorCommand::ToggleReference => state.reference_open.update(|open| *open = !*open),
-        EditorCommand::ToggleControlPanel => state.control_panel_open.update(|open| *open = !*open),
-        EditorCommand::ToggleChat => state.chat_open.update(|open| *open = !*open),
+        EditorCommand::TogglePreview => state.panels.viewport.update(|open| *open = !*open),
+        EditorCommand::ToggleConsole => state.panels.console.update(|open| *open = !*open),
+        EditorCommand::ToggleReference => state.panels.reference.update(|open| *open = !*open),
+        EditorCommand::ToggleControlPanel => {
+            state.panels.control_panel.update(|open| *open = !*open)
+        }
+        EditorCommand::ToggleChat => state.panels.chat.update(|open| *open = !*open),
         EditorCommand::ShowInstalled => state.sidebar_view.set(SidebarView::Installed),
         EditorCommand::ShowManager => state.sidebar_view.set(SidebarView::Extensions),
         EditorCommand::ShowFiles => state.sidebar_view.set(SidebarView::Files),
         EditorCommand::ShowSearch => state.sidebar_view.set(SidebarView::Search),
         EditorCommand::OpenFolder => crate::fs::open_folder(),
         EditorCommand::NewFile => {
-            let dir = match state.context_target.get_untracked() {
+            let dir = match state.editing.context_target.get_untracked() {
                 Some((path, true)) => path,
                 Some((path, false)) => parent_of(&path),
-                None => state.workspace_root.get_untracked().unwrap_or_default(),
+                None => state.explorer.root.get_untracked().unwrap_or_default(),
             };
             if !dir.is_empty() {
-                state.prompt.set(Some(Prompt {
+                state.editing.prompt.set(Some(Prompt {
                     title: "New file".to_string(),
                     value: String::new(),
                     action: PromptAction::CreateFile { dir },
@@ -301,9 +303,9 @@ pub fn run(
             }
         }
         EditorCommand::RenameEntry => {
-            if let Some((from, _)) = state.context_target.get_untracked() {
+            if let Some((from, _)) = state.editing.context_target.get_untracked() {
                 let value = crate::state::basename(&from).to_string();
-                state.prompt.set(Some(Prompt {
+                state.editing.prompt.set(Some(Prompt {
                     title: "Rename".to_string(),
                     value,
                     action: PromptAction::RenameEntry { from },
@@ -311,9 +313,9 @@ pub fn run(
             }
         }
         EditorCommand::DeleteEntry => {
-            if let Some((path, _)) = state.context_target.get_untracked() {
+            if let Some((path, _)) = state.editing.context_target.get_untracked() {
                 let title = format!("Delete {}? Enter to confirm", crate::state::basename(&path));
-                state.prompt.set(Some(Prompt {
+                state.editing.prompt.set(Some(Prompt {
                     title,
                     value: String::new(),
                     action: PromptAction::DeleteEntry { path },
@@ -325,7 +327,7 @@ pub fn run(
             if buffer.kind == PluginKind::File
                 && let Some(path) = buffer.id
             {
-                let formatted = state.format_on_save.get_untracked()
+                let formatted = state.lsp.format_on_save.get_untracked()
                     && crate::state::language_for_path(&path) == "rust"
                     && crate::lsp::format_and_save(state, &path);
                 if !formatted {
@@ -352,7 +354,7 @@ pub fn run(
         EditorCommand::BalanceSplits => state.balance_splits(),
         EditorCommand::Undo => crate::undo::undo(state),
         EditorCommand::Redo => crate::undo::redo(state),
-        EditorCommand::Find => state.find_open.set(true),
+        EditorCommand::Find => state.editing.find_open.set(true),
         EditorCommand::JumpWord => crate::jump::start(state, crate::jump::JumpKind::Word),
         EditorCommand::JumpLine => crate::jump::start(state, crate::jump::JumpKind::Line),
         EditorCommand::JumpChar => crate::jump::start_char(state),
@@ -375,14 +377,14 @@ pub fn run(
         EditorCommand::FormatDocument => crate::lsp::format_document(state),
         EditorCommand::NextError => crate::lsp::goto_diagnostic(state, true),
         EditorCommand::PrevError => crate::lsp::goto_diagnostic(state, false),
-        EditorCommand::ToggleProblems => state.problems_open.update(|open| *open = !*open),
-        EditorCommand::ToggleLspLog => state.lsp_log_open.update(|open| *open = !*open),
+        EditorCommand::ToggleProblems => state.lsp.problems_open.update(|open| *open = !*open),
+        EditorCommand::ToggleLspLog => state.lsp.log_open.update(|open| *open = !*open),
         EditorCommand::CargoCheck => crate::terminal::run(state, "cargo check"),
         EditorCommand::CargoBuild => crate::terminal::run(state, "cargo build"),
         EditorCommand::CargoTest => crate::terminal::run(state, "cargo test"),
         EditorCommand::CargoRun => crate::terminal::run(state, "cargo run"),
         EditorCommand::Interrupt => crate::terminal::interrupt(),
-        EditorCommand::ToggleTerminal => state.terminal_open.update(|open| *open = !*open),
+        EditorCommand::ToggleTerminal => state.terminal.open.update(|open| *open = !*open),
         EditorCommand::AddCursorBelow => crate::multicursor::add_below(state),
         EditorCommand::AddCursorAbove => crate::multicursor::add_above(state),
         EditorCommand::ClearCursors => crate::multicursor::clear(state),
@@ -416,11 +418,12 @@ pub fn run(
             let next = THEMES[(index + 1) % THEMES.len()].0;
             state.theme.set(next.to_string());
         }
-        EditorCommand::ToggleFormatOnSave => {
-            state.format_on_save.update(|enabled| *enabled = !*enabled)
-        }
-        EditorCommand::OpenPalette => state.palette_open.set(true),
-        EditorCommand::OpenHelp => state.help_open.set(true),
+        EditorCommand::ToggleFormatOnSave => state
+            .lsp
+            .format_on_save
+            .update(|enabled| *enabled = !*enabled),
+        EditorCommand::OpenPalette => state.editing.palette_open.set(true),
+        EditorCommand::OpenHelp => state.panels.help.set(true),
         EditorCommand::Tour => crate::tour::start(state),
         EditorCommand::SetTheme(id) => state.theme.set(id),
         EditorCommand::OpenBuffer { kind, id } => state.open_in_focused(kind, Some(id)),

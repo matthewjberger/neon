@@ -93,7 +93,7 @@ pub fn handle_key(
     textarea: &HtmlTextAreaElement,
     event: &KeyEvent,
 ) -> KeyOutcome {
-    let mode = state.editor_mode.get_untracked();
+    let mode = state.editing.mode.get_untracked();
     let ops = dispatch(state, event, &mode);
     if ops.is_empty() {
         return KeyOutcome {
@@ -240,7 +240,7 @@ fn apply(
         match op {
             EditorOp::Consume => {}
             EditorOp::SetMode(mode) => new_mode = Some(mode),
-            EditorOp::SetStatus(status) => state.status.set(status),
+            EditorOp::SetStatus(status) => state.editing.status.set(status),
             EditorOp::Insert(value) => {
                 let inserted: Vec<char> = value.chars().collect();
                 let count = inserted.len();
@@ -490,10 +490,10 @@ fn apply(
                     }
                 }
             }
-            EditorOp::RunCommand(id) => state.command_request.set(Some(id)),
-            EditorOp::OpenPalette => state.palette_open.set(true),
-            EditorOp::ShowMenu(menu) => state.leader.set(Some(menu)),
-            EditorOp::HideMenu => state.leader.set(None),
+            EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
+            EditorOp::OpenPalette => state.editing.palette_open.set(true),
+            EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
+            EditorOp::HideMenu => state.editing.leader.set(None),
         }
     }
 
@@ -505,7 +505,7 @@ fn apply(
     let _ = textarea.set_selection_range(caret, caret);
 
     if let Some(mode) = new_mode {
-        state.editor_mode.set(mode);
+        state.editing.mode.set(mode);
     }
 
     if changed {
@@ -633,5 +633,5 @@ pub fn any_enabled(state: EditorState) -> bool {
 
 /// Resets the editor mode to normal when entering or leaving editor plugins.
 pub fn reset_mode(state: EditorState) {
-    state.editor_mode.set("normal".to_string());
+    state.editing.mode.set("normal".to_string());
 }

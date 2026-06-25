@@ -8,10 +8,10 @@ use crate::state::EditorState;
 #[component]
 pub fn MultiCursorOverlay(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || !state.cursors.get().is_empty() fallback=|| ()>
+        <Show when=move || !state.editing.cursors.get().is_empty() fallback=|| ()>
             {move || {
-                state.editor_scroll.get();
-                let cursors = state.cursors.get();
+                state.editing.scroll.get();
+                let cursors = state.editing.cursors.get();
                 let Some(element) = crate::components::find::active() else {
                     return ().into_any();
                 };

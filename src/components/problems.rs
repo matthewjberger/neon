@@ -9,19 +9,19 @@ use crate::state::{EditorState, basename};
 #[component]
 pub fn ProblemsPanel(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.problems_open.get() fallback=|| ()>
+        <Show when=move || state.lsp.problems_open.get() fallback=|| ()>
             <div class="lsp-log">
                 <div class="lsp-log-header">
                     <span>
-                        {move || format!("Problems ({})", state.problems.get().len())}
+                        {move || format!("Problems ({})", state.lsp.problems.get().len())}
                     </span>
-                    <button class="icon-button" on:click=move |_| state.problems_open.set(false)>
+                    <button class="icon-button" on:click=move |_| state.lsp.problems_open.set(false)>
                         "x"
                     </button>
                 </div>
                 <div class="lsp-log-body">
                     <For
-                        each=move || { state.problems.get().into_iter().enumerate().collect::<Vec<_>>() }
+                        each=move || { state.lsp.problems.get().into_iter().enumerate().collect::<Vec<_>>() }
                         key=|(index, _)| *index
                         children=move |(_, (path, diagnostic))| {
                             let target = path.clone();
@@ -36,7 +36,7 @@ pub fn ProblemsPanel(state: EditorState) -> impl IntoView {
                                     class=class
                                     on:click=move |_| {
                                         crate::fs::read_file(&target);
-                                        state.goto.set(Some((target.clone(), line)));
+                                        state.explorer.goto.set(Some((target.clone(), line)));
                                     }
                                 >
                                     <span class="problem-loc">{location}</span>

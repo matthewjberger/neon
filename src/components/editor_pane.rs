@@ -69,7 +69,7 @@ pub fn EditorPane(
     });
 
     Effect::new(move |_| {
-        let goto = state.goto.get();
+        let goto = state.explorer.goto.get();
         let current = buffer();
         let Some((path, line)) = goto else {
             return;
@@ -83,7 +83,7 @@ pub fn EditorPane(
         let Some(element) = textarea.get() else {
             return;
         };
-        state.goto.set(None);
+        state.explorer.goto.set(None);
         let callback = Closure::once_into_js(move || {
             let value = element.value();
             let mut offset = 0_u32;
@@ -117,7 +117,7 @@ pub fn EditorPane(
         });
     };
 
-    let on_mouseleave = move |_| state.hover.set(None);
+    let on_mouseleave = move |_| state.lsp.hover.set(None);
 
     let on_input = move |event: web_sys::Event| {
         let (id, kind) = current_buffer(state, pane_key);
@@ -138,7 +138,7 @@ pub fn EditorPane(
                 let caret = element.selection_start().ok().flatten().unwrap_or(0);
                 match char_before(&element.value(), caret) {
                     Some('(') | Some(',') => crate::lsp::request_signature_help(state),
-                    Some(')') => state.hover.set(None),
+                    Some(')') => state.lsp.hover.set(None),
                     _ => {}
                 }
             }
@@ -185,7 +185,7 @@ pub fn EditorPane(
                         {move || {
                             let text = source();
                             let set = command_set.get();
-                            state.editor_scroll.get();
+                            state.editing.scroll.get();
                             let language = match active_kind() {
                                 PluginKind::File => active_id()
                                     .as_deref()
@@ -244,7 +244,7 @@ pub fn EditorPane(
                                     gutter.set_scroll_top(element.scroll_top());
                                 }
                             }
-                            state.editor_scroll.update(|tick| *tick = tick.wrapping_add(1));
+                            state.editing.scroll.update(|tick| *tick = tick.wrapping_add(1));
                         }
                         on:mousedown=move |_| crate::multicursor::clear(state)
                     />
@@ -390,11 +390,12 @@ fn handle_keydown(ctx: KeyContext) {
         debounce,
         request_id,
     } = ctx;
-    if state.jump.get_untracked().is_some() {
+    if state.editing.jump.get_untracked().is_some() {
         return;
     }
-    if state.completion.get_untracked().is_some() {
+    if state.lsp.completion.get_untracked().is_some() {
         let len = state
+            .lsp
             .completion
             .with_untracked(|menu| menu.as_ref().map(|menu| menu.items.len()).unwrap_or(0))
             .max(1);
@@ -402,6 +403,7 @@ fn handle_keydown(ctx: KeyContext) {
             "ArrowDown" => {
                 event.prevent_default();
                 state
+                    .lsp
                     .completion_index
                     .update(|index| *index = (*index + 1) % len);
                 return;
@@ -409,18 +411,19 @@ fn handle_keydown(ctx: KeyContext) {
             "ArrowUp" => {
                 event.prevent_default();
                 state
+                    .lsp
                     .completion_index
                     .update(|index| *index = (*index + len - 1) % len);
                 return;
             }
             "Enter" | "Tab" => {
                 event.prevent_default();
-                crate::lsp::accept_completion(state, state.completion_index.get_untracked());
+                crate::lsp::accept_completion(state, state.lsp.completion_index.get_untracked());
                 return;
             }
             "Escape" => {
                 event.prevent_default();
-                state.completion.set(None);
+                state.lsp.completion.set(None);
                 return;
             }
             _ => {}
@@ -564,7 +567,7 @@ fn window_range(element: Option<web_sys::HtmlTextAreaElement>, total: usize) -> 
 /// Whether pressing Enter should insert a newline here: in insert mode, or when
 /// no modal layer is active (a modal layer consumes Enter in normal mode).
 fn inserts_newline(state: EditorState) -> bool {
-    if state.editor_mode.get_untracked() == "insert" {
+    if state.editing.mode.get_untracked() == "insert" {
         return true;
     }
     !state

@@ -144,15 +144,229 @@ impl Pane {
     }
 }
 
+/// The terminal panel's signals, owned as a group so only the terminal code
+/// touches them. Reached as `state.terminal`.
+#[derive(Clone, Copy)]
+pub struct TerminalState {
+    /// The terminal emulator's current screen, when a PTY is open.
+    pub grid: RwSignal<Option<TermGrid>>,
+    /// A command queued to run once the PTY's shell is ready.
+    pub pending: RwSignal<Option<String>>,
+    /// Whether the terminal panel is shown.
+    pub open: RwSignal<bool>,
+    /// Whether the page is connected to the desktop terminal relay.
+    pub connected: RwSignal<bool>,
+}
+
+impl TerminalState {
+    fn new() -> Self {
+        Self {
+            grid: RwSignal::new(None),
+            pending: RwSignal::new(None),
+            open: RwSignal::new(false),
+            connected: RwSignal::new(false),
+        }
+    }
+}
+
+/// Live scene and engine status, reported by the worker each tick. Reached as
+/// `state.scene`.
+#[derive(Clone, Copy)]
+pub struct SceneState {
+    /// The selected render adapter name, shown in the status bar.
+    pub adapter: RwSignal<String>,
+    pub fps: RwSignal<f32>,
+    pub entity_count: RwSignal<u32>,
+    /// The entity selected by a viewport pick.
+    pub selected: RwSignal<Option<SelectedEntity>>,
+    /// Whether a viewport drag is grabbing the pointer.
+    pub grabbing: RwSignal<bool>,
+}
+
+impl SceneState {
+    fn new() -> Self {
+        Self {
+            adapter: RwSignal::new(String::new()),
+            fps: RwSignal::new(0.0),
+            entity_count: RwSignal::new(0),
+            selected: RwSignal::new(None),
+            grabbing: RwSignal::new(false),
+        }
+    }
+}
+
+/// The rust-analyzer client surface as the UI sees it: server lifecycle plus
+/// the popups and panels driven by LSP replies. Reached as `state.lsp`.
+#[derive(Clone, Copy)]
+pub struct LspState {
+    /// Whether the language server has been started for this session.
+    pub started: RwSignal<bool>,
+    /// Whether the consent toast asking to start rust-analyzer is showing.
+    pub consent: RwSignal<bool>,
+    /// The language-server log lines, for the LSP log panel.
+    pub log: RwSignal<Vec<String>>,
+    /// Whether the LSP log panel is shown.
+    pub log_open: RwSignal<bool>,
+    /// The LSP completion popup, when open.
+    pub completion: RwSignal<Option<CompletionMenu>>,
+    /// The highlighted completion candidate.
+    pub completion_index: RwSignal<usize>,
+    /// The LSP hover card, when shown.
+    pub hover: RwSignal<Option<HoverCard>>,
+    /// The titles of the code actions offered for the caret, when the picker is
+    /// open. Empty means closed; the index selects the action.
+    pub code_actions: RwSignal<Vec<String>>,
+    /// The document symbols offered in the fuzzy symbol picker. Empty means
+    /// closed; selecting one jumps to it.
+    pub symbol_picker: RwSignal<Vec<SearchHit>>,
+    /// The rename prompt's current text, when the rename box is open.
+    pub rename: RwSignal<Option<String>>,
+    /// Every diagnostic across open files, by path, for the problems panel.
+    pub problems: RwSignal<Vec<(String, Diagnostic)>>,
+    /// Whether the problems panel is shown.
+    pub problems_open: RwSignal<bool>,
+    /// Whether saving a Rust file formats it first through rust-analyzer.
+    pub format_on_save: RwSignal<bool>,
+}
+
+impl LspState {
+    fn new() -> Self {
+        Self {
+            started: RwSignal::new(false),
+            consent: RwSignal::new(false),
+            log: RwSignal::new(Vec::new()),
+            log_open: RwSignal::new(false),
+            completion: RwSignal::new(None),
+            completion_index: RwSignal::new(0),
+            hover: RwSignal::new(None),
+            code_actions: RwSignal::new(Vec::new()),
+            symbol_picker: RwSignal::new(Vec::new()),
+            rename: RwSignal::new(None),
+            problems: RwSignal::new(Vec::new()),
+            problems_open: RwSignal::new(false),
+            format_on_save: RwSignal::new(true),
+        }
+    }
+}
+
+/// The workspace explorer: the open folder, its lazily loaded tree, project
+/// search results, and a pending file jump. Reached as `state.explorer`.
+#[derive(Clone, Copy)]
+pub struct ExplorerState {
+    /// The opened workspace folder, the LSP root, if any.
+    pub root: RwSignal<Option<String>>,
+    /// The file tree under the workspace root.
+    pub tree: RwSignal<Vec<TreeNode>>,
+    /// Project search results.
+    pub search_results: RwSignal<Vec<SearchHit>>,
+    /// A pending jump to a file and 1-based line, applied when the file opens.
+    pub goto: RwSignal<Option<(String, u32)>>,
+}
+
+impl ExplorerState {
+    fn new() -> Self {
+        Self {
+            root: RwSignal::new(None),
+            tree: RwSignal::new(Vec::new()),
+            search_results: RwSignal::new(Vec::new()),
+            goto: RwSignal::new(None),
+        }
+    }
+}
+
+/// Editor input state and the transient overlays it drives: the modal mode, the
+/// status line, multi-cursor offsets, the jump and which-key overlays, the find
+/// and palette bars, and the right-click and prompt popups. Reached as
+/// `state.editing`.
+#[derive(Clone, Copy)]
+pub struct EditingState {
+    /// The current editor input mode an editor plugin owns (e.g. vim's normal or
+    /// insert), shown in the toolbar.
+    pub mode: RwSignal<String>,
+    /// A transient status line an editor plugin can set.
+    pub status: RwSignal<String>,
+    /// Extra caret offsets (UTF-16) for multi-cursor editing, beyond the
+    /// textarea's own caret. Empty when not in multi-cursor mode.
+    pub cursors: RwSignal<Vec<u32>>,
+    /// A tick bumped when the editor scrolls, so caret overlays reposition.
+    pub scroll: RwSignal<u32>,
+    /// Active jump mode (avy-style labeled motion), when on.
+    pub jump: RwSignal<Option<JumpState>>,
+    /// The leader menu an editor plugin published for the pending prefix, shown
+    /// as the which-key panel. `None` when no leader sequence is active.
+    pub leader: RwSignal<Option<LeaderMenu>>,
+    /// Whether the find and replace bar is open.
+    pub find_open: RwSignal<bool>,
+    /// Whether the command palette is open.
+    pub palette_open: RwSignal<bool>,
+    /// A command id an editor plugin asked the editor to run, applied by the
+    /// shell. This is how plugins dictate editor actions.
+    pub command_request: RwSignal<Option<String>>,
+    /// The custom right-click menu, when open, with its anchor and items.
+    pub context_menu: RwSignal<Option<ContextMenu>>,
+    /// The tree path a right-click targeted, with whether it is a directory.
+    pub context_target: RwSignal<Option<(String, bool)>>,
+    /// The open text prompt (new file, rename, delete), when one is showing.
+    pub prompt: RwSignal<Option<Prompt>>,
+}
+
+impl EditingState {
+    fn new() -> Self {
+        Self {
+            mode: RwSignal::new("normal".to_string()),
+            status: RwSignal::new(String::new()),
+            cursors: RwSignal::new(Vec::new()),
+            scroll: RwSignal::new(0),
+            jump: RwSignal::new(None),
+            leader: RwSignal::new(None),
+            find_open: RwSignal::new(false),
+            palette_open: RwSignal::new(false),
+            command_request: RwSignal::new(None),
+            context_menu: RwSignal::new(None),
+            context_target: RwSignal::new(None),
+            prompt: RwSignal::new(None),
+        }
+    }
+}
+
+/// Visibility of the docked panels, toggled from the toolbar and commands.
+/// Reached as `state.panels`.
+#[derive(Clone, Copy)]
+pub struct PanelsState {
+    /// Whether the 3D preview pane is shown. Hiding it gives the editor the full
+    /// width, so neon works as a plain code editor.
+    pub viewport: RwSignal<bool>,
+    /// Whether the console pane is shown.
+    pub console: RwSignal<bool>,
+    /// Whether the Claude chat pane is shown.
+    pub chat: RwSignal<bool>,
+    /// Whether the api reference pane is shown.
+    pub reference: RwSignal<bool>,
+    /// Whether the control panel is shown: the master surface for dispatching any
+    /// command and watching the api log.
+    pub control_panel: RwSignal<bool>,
+    /// Whether the help and keybindings overlay is shown.
+    pub help: RwSignal<bool>,
+}
+
+impl PanelsState {
+    fn new() -> Self {
+        Self {
+            viewport: RwSignal::new(true),
+            console: RwSignal::new(true),
+            chat: RwSignal::new(false),
+            reference: RwSignal::new(false),
+            control_panel: RwSignal::new(false),
+            help: RwSignal::new(false),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct EditorState {
     pub ready: RwSignal<bool>,
     /// Whether the worker is rebuilding the scene, for the top progress bar.
     pub busy: RwSignal<bool>,
-    pub adapter: RwSignal<String>,
-    pub fps: RwSignal<f32>,
-    pub entity_count: RwSignal<u32>,
-    pub selected: RwSignal<Option<SelectedEntity>>,
     /// The api command vocabulary, from the worker's Ready, for highlighting,
     /// the reference, and the console.
     pub commands: RwSignal<Vec<CommandInfo>>,
@@ -160,112 +374,42 @@ pub struct EditorState {
     pub stdlib: RwSignal<Vec<StdModule>>,
     /// The authored plugins. The page owns this set and syncs it to the worker.
     pub plugins: RwSignal<Vec<PluginSource>>,
+    /// Editor plugins: rhai that handles keystrokes through the Editor API. Run
+    /// on the page, never sent to the worker.
+    pub editor_plugins: RwSignal<Vec<PluginSource>>,
     /// The open editor panes, in layout order. Always at least one. Splitting
     /// appends a pane next to the focused one, closing removes the focused one.
     pub panes: RwSignal<Vec<Pane>>,
     /// The key of the focused pane.
     pub focused_key: RwSignal<usize>,
-    /// Files opened from disk through the desktop filesystem bridge.
-    pub files: RwSignal<Vec<FileBuffer>>,
-    /// The opened workspace folder, the LSP root, if any.
-    pub workspace_root: RwSignal<Option<String>>,
-    /// The file tree under the workspace root.
-    pub tree: RwSignal<Vec<TreeNode>>,
-    /// Project search results.
-    pub search_results: RwSignal<Vec<SearchHit>>,
-    /// A pending jump to a file and 1-based line, applied when the file opens.
-    pub goto: RwSignal<Option<(String, u32)>>,
-    /// Whether the language server has been started for this session.
-    pub lsp_started: RwSignal<bool>,
-    /// Whether the consent toast asking to start rust-analyzer is showing.
-    pub lsp_consent: RwSignal<bool>,
-    /// The language-server log lines, for the LSP log panel.
-    pub lsp_log: RwSignal<Vec<String>>,
-    /// Whether the LSP log panel is shown.
-    pub lsp_log_open: RwSignal<bool>,
-    /// Editor plugins: rhai that handles keystrokes through the Editor API. Run
-    /// on the page, never sent to the worker.
-    pub editor_plugins: RwSignal<Vec<PluginSource>>,
-    /// The current editor input mode an editor plugin owns (e.g. vim's normal or
-    /// insert), shown in the toolbar.
-    pub editor_mode: RwSignal<String>,
-    /// A transient status line an editor plugin can set.
-    pub status: RwSignal<String>,
-    /// Whether the 3D preview pane is shown. Hiding it gives the editor the full
-    /// width, so neon works as a plain code editor.
-    pub viewport_open: RwSignal<bool>,
-    /// Whether the console pane is shown.
-    pub console_open: RwSignal<bool>,
-    /// Which view the sidebar shows.
-    pub sidebar_view: RwSignal<SidebarView>,
-    pub log: RwSignal<Vec<LogEntry>>,
-    /// Diagnostics for the active plugin, from the language worker.
-    pub diagnostics: RwSignal<Vec<Diagnostic>>,
-    pub running: RwSignal<bool>,
-    pub chat_open: RwSignal<bool>,
-    pub reference_open: RwSignal<bool>,
-    pub grabbing: RwSignal<bool>,
-    /// The active theme id, applied to the document root as `data-theme`.
-    pub theme: RwSignal<String>,
-    /// Whether the command palette is open.
-    pub palette_open: RwSignal<bool>,
-    /// Whether the find and replace bar is open.
-    pub find_open: RwSignal<bool>,
-    /// The LSP completion popup, when open.
-    pub completion: RwSignal<Option<CompletionMenu>>,
-    /// The highlighted completion candidate.
-    pub completion_index: RwSignal<usize>,
-    /// The LSP hover card, when shown.
-    pub hover: RwSignal<Option<HoverCard>>,
-    /// Active jump mode (avy-style labeled motion), when on.
-    pub jump: RwSignal<Option<JumpState>>,
-    /// Whether the help and keybindings overlay is open.
-    pub help_open: RwSignal<bool>,
-    /// The leader menu an editor plugin published for the pending prefix, shown
-    /// as the which-key panel. `None` when no leader sequence is active.
-    pub leader: RwSignal<Option<LeaderMenu>>,
     /// Split orientation: true lays the panes side by side (split right), false
     /// stacks them (split below).
     pub split_vertical: RwSignal<bool>,
-    /// A command id an editor plugin asked the editor to run, applied by the
-    /// shell. This is how plugins dictate editor actions.
-    pub command_request: RwSignal<Option<String>>,
-    /// Whether the control panel is open: the master surface for dispatching any
-    /// command and watching the api log.
-    pub control_panel_open: RwSignal<bool>,
-    /// The custom right-click menu, when open, with its anchor and items.
-    pub context_menu: RwSignal<Option<ContextMenu>>,
-    /// The rename prompt's current text, when the rename box is open.
-    pub rename: RwSignal<Option<String>>,
-    /// The titles of the code actions offered for the caret, when the picker is
-    /// open. Empty means closed; the index selects the action.
-    pub code_actions: RwSignal<Vec<String>>,
-    /// The document symbols offered in the fuzzy symbol picker. Empty means
-    /// closed; selecting one jumps to it.
-    pub symbol_picker: RwSignal<Vec<SearchHit>>,
-    /// Whether saving a Rust file formats it first through rust-analyzer.
-    pub format_on_save: RwSignal<bool>,
-    /// Every diagnostic across open files, by path, for the problems panel.
-    pub problems: RwSignal<Vec<(String, Diagnostic)>>,
-    /// Whether the problems panel is shown.
-    pub problems_open: RwSignal<bool>,
-    /// The tree path a right-click targeted, with whether it is a directory.
-    pub context_target: RwSignal<Option<(String, bool)>>,
-    /// The open text prompt (new file, rename, delete), when one is showing.
-    pub prompt: RwSignal<Option<Prompt>>,
-    /// The terminal emulator's current screen, when a PTY is open.
-    pub term_grid: RwSignal<Option<TermGrid>>,
-    /// A command queued to run once the PTY's shell is ready.
-    pub term_pending: RwSignal<Option<String>>,
-    /// Whether the terminal panel is shown.
-    pub terminal_open: RwSignal<bool>,
-    /// Whether the page is connected to the desktop terminal relay.
-    pub term_connected: RwSignal<bool>,
-    /// Extra caret offsets (UTF-16) for multi-cursor editing, beyond the
-    /// textarea's own caret. Empty when not in multi-cursor mode.
-    pub cursors: RwSignal<Vec<u32>>,
-    /// A tick bumped when the editor scrolls, so caret overlays reposition.
-    pub editor_scroll: RwSignal<u32>,
+    /// Files opened from disk through the desktop filesystem bridge.
+    pub files: RwSignal<Vec<FileBuffer>>,
+    /// The unified command-and-event console log.
+    pub log: RwSignal<Vec<LogEntry>>,
+    /// Diagnostics for the active plugin, from the language worker.
+    pub diagnostics: RwSignal<Vec<Diagnostic>>,
+    /// Whether the scene-plugin runtime is running rather than paused.
+    pub running: RwSignal<bool>,
+    /// The active theme id, applied to the document root as `data-theme`.
+    pub theme: RwSignal<String>,
+    /// Which view the sidebar shows.
+    pub sidebar_view: RwSignal<SidebarView>,
+    /// Live scene and engine status reported by the worker.
+    pub scene: SceneState,
+    /// The rust-analyzer client surface: server lifecycle, the LSP popups, and
+    /// the problems list.
+    pub lsp: LspState,
+    /// The terminal panel: PTY screen, queued command, visibility, connection.
+    pub terminal: TerminalState,
+    /// The workspace folder, its file tree, and project search.
+    pub explorer: ExplorerState,
+    /// Editor input mode, transient overlays, and the plugin command channel.
+    pub editing: EditingState,
+    /// Visibility of the docked panels.
+    pub panels: PanelsState,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -299,13 +443,10 @@ impl EditorState {
         Self {
             ready: RwSignal::new(false),
             busy: RwSignal::new(false),
-            adapter: RwSignal::new(String::new()),
-            fps: RwSignal::new(0.0),
-            entity_count: RwSignal::new(0),
-            selected: RwSignal::new(None),
             commands: RwSignal::new(Vec::new()),
             stdlib: RwSignal::new(Vec::new()),
             plugins: RwSignal::new(plugins),
+            editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
             panes: RwSignal::new(vec![Pane {
                 key: 0,
                 tabs: vec![BufferRef {
@@ -316,54 +457,19 @@ impl EditorState {
                 flex: 1.0,
             }]),
             focused_key: RwSignal::new(0),
+            split_vertical: RwSignal::new(true),
             files: RwSignal::new(Vec::new()),
-            workspace_root: RwSignal::new(None),
-            tree: RwSignal::new(Vec::new()),
-            search_results: RwSignal::new(Vec::new()),
-            goto: RwSignal::new(None),
-            lsp_started: RwSignal::new(false),
-            lsp_consent: RwSignal::new(false),
-            lsp_log: RwSignal::new(Vec::new()),
-            lsp_log_open: RwSignal::new(false),
-            editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
-            editor_mode: RwSignal::new("normal".to_string()),
-            status: RwSignal::new(String::new()),
-            viewport_open: RwSignal::new(true),
-            console_open: RwSignal::new(true),
-            sidebar_view: RwSignal::new(SidebarView::Installed),
             log: RwSignal::new(Vec::new()),
             diagnostics: RwSignal::new(Vec::new()),
             running: RwSignal::new(true),
-            chat_open: RwSignal::new(false),
-            reference_open: RwSignal::new(false),
-            grabbing: RwSignal::new(false),
             theme: RwSignal::new(crate::theme::stored_theme()),
-            palette_open: RwSignal::new(false),
-            find_open: RwSignal::new(false),
-            completion: RwSignal::new(None),
-            completion_index: RwSignal::new(0),
-            hover: RwSignal::new(None),
-            jump: RwSignal::new(None),
-            help_open: RwSignal::new(false),
-            leader: RwSignal::new(None),
-            split_vertical: RwSignal::new(true),
-            command_request: RwSignal::new(None),
-            control_panel_open: RwSignal::new(false),
-            context_menu: RwSignal::new(None),
-            rename: RwSignal::new(None),
-            code_actions: RwSignal::new(Vec::new()),
-            symbol_picker: RwSignal::new(Vec::new()),
-            format_on_save: RwSignal::new(true),
-            problems: RwSignal::new(Vec::new()),
-            problems_open: RwSignal::new(false),
-            context_target: RwSignal::new(None),
-            prompt: RwSignal::new(None),
-            term_grid: RwSignal::new(None),
-            term_pending: RwSignal::new(None),
-            terminal_open: RwSignal::new(false),
-            term_connected: RwSignal::new(false),
-            cursors: RwSignal::new(Vec::new()),
-            editor_scroll: RwSignal::new(0),
+            sidebar_view: RwSignal::new(SidebarView::Installed),
+            scene: SceneState::new(),
+            lsp: LspState::new(),
+            terminal: TerminalState::new(),
+            explorer: ExplorerState::new(),
+            editing: EditingState::new(),
+            panels: PanelsState::new(),
         }
     }
 

@@ -64,7 +64,7 @@ pub fn rhai_complete(state: EditorState) {
     let caret = element.selection_start().ok().flatten().unwrap_or(0);
     let prefix = word_prefix(&value, caret);
     if prefix.len() < 2 {
-        state.completion.set(None);
+        state.lsp.completion.set(None);
         return;
     }
     let needle = prefix.to_lowercase();
@@ -99,20 +99,20 @@ pub fn rhai_complete(state: EditorState) {
     }
     entries.truncate(40);
     if entries.is_empty() {
-        state.completion.set(None);
+        state.lsp.completion.set(None);
         return;
     }
 
     let (line, column) = line_column(&value, caret);
     let (x, top) = crate::caret::cell(&element, line, column);
     let y = top + crate::caret::line_height(&element);
-    state.completion.set(Some(CompletionMenu {
+    state.lsp.completion.set(Some(CompletionMenu {
         items: entries,
         x,
         y,
         prefix,
     }));
-    state.completion_index.set(0);
+    state.lsp.completion_index.set(0);
 }
 
 fn word_prefix(value: &str, caret: u32) -> String {

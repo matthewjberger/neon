@@ -167,7 +167,7 @@ pub fn replace_all(root: &str, query: &str, replacement: &str) {
 /// Toggles a tree directory, loading its children on first expand.
 pub fn toggle_dir(state: EditorState, path: &str) {
     let mut needs_load = false;
-    state.tree.update(|nodes| {
+    state.explorer.tree.update(|nodes| {
         if let Some(node) = find_node(nodes, path) {
             node.expanded = !node.expanded;
             needs_load = node.expanded && node.children.is_empty();
@@ -181,11 +181,14 @@ pub fn toggle_dir(state: EditorState, path: &str) {
 fn dispatch(state: EditorState, response: FsResponse) {
     match response {
         FsResponse::Folder { root, entries, .. } => {
-            state.workspace_root.set(root);
-            state.tree.set(entries.into_iter().map(to_node).collect());
+            state.explorer.root.set(root);
+            state
+                .explorer
+                .tree
+                .set(entries.into_iter().map(to_node).collect());
         }
         FsResponse::Dir { path, entries, .. } => {
-            state.tree.update(|nodes| {
+            state.explorer.tree.update(|nodes| {
                 if let Some(node) = find_node(nodes, &path) {
                     node.children = entries.into_iter().map(to_node).collect();
                     node.expanded = true;
@@ -224,7 +227,7 @@ fn dispatch(state: EditorState, response: FsResponse) {
             });
         }
         FsResponse::SearchResults { hits, .. } => {
-            state.search_results.set(hits);
+            state.explorer.search_results.set(hits);
         }
         FsResponse::Replaced { count, .. } => {
             let paths: Vec<String> = state
@@ -233,7 +236,10 @@ fn dispatch(state: EditorState, response: FsResponse) {
             for path in paths {
                 read_file(&path);
             }
-            state.status.set(format!("Replaced across {count} files"));
+            state
+                .editing
+                .status
+                .set(format!("Replaced across {count} files"));
         }
         FsResponse::Created {
             path, dir, entries, ..
@@ -298,11 +304,14 @@ fn dispatch(state: EditorState, response: FsResponse) {
 /// Replaces a directory's children in the tree, or the whole tree when the
 /// directory is the workspace root.
 fn refresh_dir(state: EditorState, dir: &str, entries: Vec<DirEntry>) {
-    if state.workspace_root.get_untracked().as_deref() == Some(dir) {
-        state.tree.set(entries.into_iter().map(to_node).collect());
+    if state.explorer.root.get_untracked().as_deref() == Some(dir) {
+        state
+            .explorer
+            .tree
+            .set(entries.into_iter().map(to_node).collect());
         return;
     }
-    state.tree.update(|nodes| {
+    state.explorer.tree.update(|nodes| {
         if let Some(node) = find_node(nodes, dir) {
             node.children = entries.into_iter().map(to_node).collect();
             node.expanded = true;

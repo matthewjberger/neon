@@ -133,20 +133,20 @@ pub fn did_open(state: EditorState, path: &str) {
     if language_for_path(path) != "rust" {
         return;
     }
-    if state.lsp_started.get_untracked() {
+    if state.lsp.started.get_untracked() {
         open_document(state, path);
     } else {
-        state.lsp_consent.set(true);
+        state.lsp.consent.set(true);
     }
 }
 
 /// Accepts the consent toast: enables the bridge and starts the handshake.
 pub fn enable(state: EditorState) {
-    state.lsp_consent.set(false);
-    if state.lsp_started.get_untracked() {
+    state.lsp.consent.set(false);
+    if state.lsp.started.get_untracked() {
         return;
     }
-    state.lsp_started.set(true);
+    state.lsp.started.set(true);
     crate::ipc::notify_host("enable-lsp");
     connect(state);
 }
@@ -198,16 +198,16 @@ fn apply_completion(state: EditorState, value: &Value, prefix: String, x: f64, y
         .map(|items| items.iter().take(60).filter_map(to_entry).collect())
         .unwrap_or_default();
     if items.is_empty() {
-        state.completion.set(None);
+        state.lsp.completion.set(None);
         return;
     }
-    state.completion.set(Some(CompletionMenu {
+    state.lsp.completion.set(Some(CompletionMenu {
         items,
         x,
         y,
         prefix,
     }));
-    state.completion_index.set(0);
+    state.lsp.completion_index.set(0);
 }
 
 fn to_entry(item: &Value) -> Option<CompletionEntry> {
@@ -284,7 +284,7 @@ fn apply_locations(state: EditorState, value: &Value) {
         [] => {}
         [(path, line)] => {
             crate::fs::read_file(path);
-            state.goto.set(Some((path.clone(), *line)));
+            state.explorer.goto.set(Some((path.clone(), *line)));
         }
         _ => {
             let hits = locations
@@ -295,7 +295,7 @@ fn apply_locations(state: EditorState, value: &Value) {
                     line,
                 })
                 .collect();
-            state.symbol_picker.set(hits);
+            state.lsp.symbol_picker.set(hits);
         }
     }
 }
@@ -328,7 +328,7 @@ fn apply_references(state: EditorState, value: &Value) {
             })
         })
         .collect();
-    state.search_results.set(hits);
+    state.explorer.search_results.set(hits);
     state.sidebar_view.set(SidebarView::Search);
 }
 
@@ -338,7 +338,7 @@ fn apply_symbols(state: EditorState, value: &Value, path: &str) {
     };
     let mut hits = Vec::new();
     collect_symbols(items, path, &mut hits);
-    state.symbol_picker.set(hits);
+    state.lsp.symbol_picker.set(hits);
 }
 
 fn collect_symbols(items: &[Value], path: &str, out: &mut Vec<SearchHit>) {
@@ -386,7 +386,7 @@ fn apply_code_actions(state: EditorState, value: &Value) {
         })
         .collect();
     client(|client| client.code_actions = actions);
-    state.code_actions.set(titles);
+    state.lsp.code_actions.set(titles);
 }
 
 fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
@@ -395,7 +395,7 @@ fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
         .and_then(|result| result.get("signatures"))
         .and_then(Value::as_array);
     let Some(signatures) = signatures.filter(|items| !items.is_empty()) else {
-        state.hover.set(None);
+        state.lsp.hover.set(None);
         return;
     };
     let active = result
@@ -409,9 +409,9 @@ fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
         .and_then(Value::as_str)
         .unwrap_or_default();
     if label.trim().is_empty() {
-        state.hover.set(None);
+        state.lsp.hover.set(None);
     } else {
-        state.hover.set(Some(HoverCard {
+        state.lsp.hover.set(Some(HoverCard {
             text: label.to_string(),
             x,
             y,
@@ -442,9 +442,9 @@ fn apply_hover(state: EditorState, value: &Value, x: f64, y: f64) {
         _ => String::new(),
     };
     if text.trim().is_empty() {
-        state.hover.set(None);
+        state.lsp.hover.set(None);
     } else {
-        state.hover.set(Some(HoverCard { text, x, y }));
+        state.lsp.hover.set(Some(HoverCard { text, x, y }));
     }
 }
 
@@ -460,7 +460,7 @@ fn handle(state: EditorState, message: LspServerMessage) {
                 "initialize",
                 json!({
                     "processId": Value::Null,
-                    "rootUri": state.workspace_root.get_untracked().map(|root| file_uri(&root)),
+                    "rootUri": state.explorer.root.get_untracked().map(|root| file_uri(&root)),
                     "capabilities": {
                         "textDocument": {
                             "synchronization": { "didSave": false },
@@ -593,7 +593,7 @@ fn apply_diagnostics(state: EditorState, params: &Value) {
         problems.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.line.cmp(&right.1.line)));
         problems
     });
-    state.problems.set(problems);
+    state.lsp.problems.set(problems);
     let focused = state.focused_buffer();
     if focused.kind == PluginKind::File && focused.id.as_deref() == Some(path.as_str()) {
         refresh_diagnostics(state);
@@ -639,7 +639,7 @@ fn open_rust_files(state: EditorState) -> Vec<String> {
 }
 
 fn log(state: EditorState, line: String) {
-    state.lsp_log.update(|entries| {
+    state.lsp.log.update(|entries| {
         entries.push(line);
         let overflow = entries.len().saturating_sub(500);
         if overflow > 0 {

@@ -44,17 +44,17 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
                 stdlib,
                 ..
             } => {
-                state.adapter.set(adapter);
+                state.scene.adapter.set(adapter);
                 state.commands.set(commands);
                 state.stdlib.set(stdlib);
                 state.ready.set(true);
             }
             WorkerMessage::Stats { fps, entity_count } => {
-                state.fps.set(fps);
-                state.entity_count.set(entity_count);
+                state.scene.fps.set(fps);
+                state.scene.entity_count.set(entity_count);
             }
             WorkerMessage::Busy { active } => state.busy.set(active),
-            WorkerMessage::Selected { detail } => state.selected.set(detail),
+            WorkerMessage::Selected { detail } => state.scene.selected.set(detail),
             WorkerMessage::Report { entries } => state.record_log(entries),
             WorkerMessage::PluginError { message, .. } => {
                 state.record_log([protocol::LogEntry {

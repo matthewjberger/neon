@@ -139,13 +139,12 @@ pub fn Toolbar(
             <button
                 class="command-center"
                 title="Search and run a command"
-                on:click=move |_| state.palette_open.set(true)
+                on:click=move |_| state.editing.palette_open.set(true)
             >
                 <span class="command-center-icon">"\u{1f50d}"</span>
                 <span class="command-center-label">
                     {move || {
-                        state
-                            .workspace_root
+                        state.explorer.root
                             .get()
                             .map(|root| basename(&root).to_string())
                             .unwrap_or_else(|| "neon".to_string())
@@ -156,13 +155,13 @@ pub fn Toolbar(
                 when=move || state.editor_plugins.get().iter().any(|plugin| plugin.enabled)
                 fallback=|| ()
             >
-                <span class="stat mode-chip">{move || state.editor_mode.get()}</span>
+                <span class="stat mode-chip">{move || state.editing.mode.get()}</span>
             </Show>
-            <Show when=move || !state.status.get().is_empty() fallback=|| ()>
-                <span class="stat">{move || state.status.get()}</span>
+            <Show when=move || !state.editing.status.get().is_empty() fallback=|| ()>
+                <span class="stat">{move || state.editing.status.get()}</span>
             </Show>
-            <span class="stat">{move || format!("{:.0} fps", state.fps.get())}</span>
-            <span class="stat">{move || format!("{} entities", state.entity_count.get())}</span>
+            <span class="stat">{move || format!("{:.0} fps", state.scene.fps.get())}</span>
+            <span class="stat">{move || format!("{} entities", state.scene.entity_count.get())}</span>
             <div class="theme-picker">
                 <button
                     class="menu-title"
@@ -200,9 +199,9 @@ pub fn Toolbar(
             </div>
             <button
                 class="menu-title claude-toggle"
-                class:active=move || state.chat_open.get()
+                class:active=move || state.panels.chat.get()
                 title="Ask Claude to drive the editor"
-                on:click=move |_| state.chat_open.update(|open| *open = !*open)
+                on:click=move |_| state.panels.chat.update(|open| *open = !*open)
             >
                 "\u{2726} Claude"
             </button>

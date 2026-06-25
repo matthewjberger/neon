@@ -12,8 +12,8 @@ use crate::state::EditorState;
 pub fn Terminal(state: EditorState) -> impl IntoView {
     let grid_ref = NodeRef::<html::Div>::new();
     Effect::new(move |_| {
-        if state.terminal_open.get()
-            && state.term_connected.get()
+        if state.terminal.open.get()
+            && state.terminal.connected.get()
             && let Some(element) = grid_ref.get()
         {
             let _ = element.focus();
@@ -22,7 +22,7 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
         }
     });
     let _ = window_event_listener(leptos::ev::resize, move |_| {
-        if state.terminal_open.get_untracked()
+        if state.terminal.open.get_untracked()
             && let Some(element) = grid_ref.get_untracked()
         {
             let (cols, rows) = measure(&element);
@@ -36,7 +36,7 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
         }
     };
     view! {
-        <Show when=move || state.terminal_open.get() fallback=|| ()>
+        <Show when=move || state.terminal.open.get() fallback=|| ()>
             <div class="terminal-panel">
                 <div class="terminal-header">
                     <span>"Terminal"</span>
@@ -44,14 +44,14 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
                         <button class="icon-button" on:click=move |_| crate::terminal::interrupt()>
                             "^C"
                         </button>
-                        <button class="icon-button" on:click=move |_| state.terminal_open.set(false)>
+                        <button class="icon-button" on:click=move |_| state.terminal.open.set(false)>
                             "x"
                         </button>
                     </span>
                 </div>
                 <div class="terminal-grid" tabindex="0" node_ref=grid_ref on:keydown=on_keydown>
                     {move || {
-                        let Some(grid) = state.term_grid.get() else {
+                        let Some(grid) = state.terminal.grid.get() else {
                             return ().into_any();
                         };
                         let rows = grid

@@ -44,7 +44,7 @@ pub fn ChatPane(state: EditorState) -> impl IntoView {
     let started = StoredValue::new(false);
 
     Effect::new(move |_| {
-        if !state.chat_open.get() {
+        if !state.panels.chat.get() {
             return;
         }
         if !started.get_value() {
@@ -79,7 +79,7 @@ pub fn ChatPane(state: EditorState) -> impl IntoView {
     };
 
     view! {
-        <div class="chat-pane" style:display=move || if state.chat_open.get() { "flex" } else { "none" }>
+        <div class="chat-pane" style:display=move || if state.panels.chat.get() { "flex" } else { "none" }>
             <div class="chat-header">
                 <span class=move || {
                     if connected.get() { "chat-status connected" } else { "chat-status" }

@@ -18,7 +18,7 @@ pub fn Palette(
     let input_ref = NodeRef::<html::Input>::new();
 
     Effect::new(move |_| {
-        if state.palette_open.get() {
+        if state.editing.palette_open.get() {
             filter.set(String::new());
             selected.set(0);
             if let Some(input) = input_ref.get() {
@@ -38,13 +38,13 @@ pub fn Palette(
     let run_at = move |index: usize| {
         if let Some((_, command)) = filtered().into_iter().nth(index) {
             commands::run(command, state, bridge);
-            state.palette_open.set(false);
+            state.editing.palette_open.set(false);
         }
     };
 
     view! {
-        <Show when=move || state.palette_open.get() fallback=|| ()>
-            <div class="palette-overlay" on:click=move |_| state.palette_open.set(false)>
+        <Show when=move || state.editing.palette_open.get() fallback=|| ()>
+            <div class="palette-overlay" on:click=move |_| state.editing.palette_open.set(false)>
                 <div class="palette" on:click=move |event| event.stop_propagation()>
                     <input
                         class="palette-input"
@@ -59,7 +59,7 @@ pub fn Palette(
                             match event.key().as_str() {
                                 "Escape" => {
                                     event.prevent_default();
-                                    state.palette_open.set(false);
+                                    state.editing.palette_open.set(false);
                                 }
                                 "Enter" => {
                                     event.prevent_default();

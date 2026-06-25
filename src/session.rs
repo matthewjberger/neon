@@ -45,7 +45,7 @@ pub fn restore() {
 /// Saves the current workspace and open files.
 pub fn save(state: EditorState) {
     let session = Session {
-        root: state.workspace_root.get_untracked(),
+        root: state.explorer.root.get_untracked(),
         files: state
             .files
             .with_untracked(|files| files.iter().map(|file| file.path.clone()).collect()),

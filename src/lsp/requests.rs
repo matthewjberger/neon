@@ -208,12 +208,12 @@ pub fn start_rename(state: EditorState) {
     let caret = element.selection_start().ok().flatten().unwrap_or(0);
     let initial = word_at(&value, caret);
     client(|client| client.rename_position = Some((path, line, character)));
-    state.rename.set(Some(initial));
+    state.lsp.rename.set(Some(initial));
 }
 
 /// Sends the rename request for the stored position with the new name.
 pub fn submit_rename(state: EditorState, new_name: &str) {
-    state.rename.set(None);
+    state.lsp.rename.set(None);
     let trimmed = new_name.trim();
     if trimmed.is_empty() {
         return;
@@ -282,7 +282,7 @@ fn covers_line(diagnostic: &Value, line: u32) -> bool {
 
 /// Runs the code action chosen from the picker by index.
 pub fn apply_code_action(state: EditorState, index: usize) {
-    state.code_actions.set(Vec::new());
+    state.lsp.code_actions.set(Vec::new());
     let Some(action) = client(|client| client.code_actions.get(index).cloned()) else {
         return;
     };
@@ -368,7 +368,7 @@ pub fn goto_diagnostic(state: EditorState, forward: bool) {
             .or_else(|| lines.last().copied())
     };
     if let Some(line) = target {
-        state.goto.set(Some((path, line)));
+        state.explorer.goto.set(Some((path, line)));
     }
 }
 
@@ -431,7 +431,7 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
 
 /// Accepts a completion candidate, replacing the typed prefix.
 pub fn accept_completion(state: EditorState, index: usize) {
-    let Some(menu) = state.completion.get_untracked() else {
+    let Some(menu) = state.lsp.completion.get_untracked() else {
         return;
     };
     let Some(entry) = menu.items.get(index) else {
@@ -453,5 +453,5 @@ pub fn accept_completion(state: EditorState, index: usize) {
     if let Ok(event) = web_sys::Event::new("input") {
         let _ = element.dispatch_event(&event);
     }
-    state.completion.set(None);
+    state.lsp.completion.set(None);
 }

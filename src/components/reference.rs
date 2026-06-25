@@ -32,8 +32,8 @@ pub fn Reference(state: EditorState) -> impl IntoView {
     };
 
     view! {
-        <Show when=move || state.reference_open.get() fallback=|| ()>
-            <div class="reference-overlay" on:click=move |_| state.reference_open.set(false)>
+        <Show when=move || state.panels.reference.get() fallback=|| ()>
+            <div class="reference-overlay" on:click=move |_| state.panels.reference.set(false)>
                 <div class="reference-panel" on:click=move |event| event.stop_propagation()>
                     <input
                         class="reference-search"

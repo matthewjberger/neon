@@ -12,7 +12,7 @@ pub fn RenamePrompt(state: EditorState) -> impl IntoView {
     let text = RwSignal::new(String::new());
     let input = NodeRef::<html::Input>::new();
     Effect::new(move |_| {
-        if let Some(initial) = state.rename.get() {
+        if let Some(initial) = state.lsp.rename.get() {
             text.set(initial);
             if let Some(element) = input.get() {
                 let _ = element.focus();
@@ -21,8 +21,8 @@ pub fn RenamePrompt(state: EditorState) -> impl IntoView {
         }
     });
     view! {
-        <Show when=move || state.rename.get().is_some() fallback=|| ()>
-            <div class="overlay-scrim" on:click=move |_| state.rename.set(None)>
+        <Show when=move || state.lsp.rename.get().is_some() fallback=|| ()>
+            <div class="overlay-scrim" on:click=move |_| state.lsp.rename.set(None)>
                 <div class="prompt-box" on:click=move |event| event.stop_propagation()>
                     <span class="prompt-label">"Rename symbol"</span>
                     <input
@@ -34,7 +34,7 @@ pub fn RenamePrompt(state: EditorState) -> impl IntoView {
                             if event.key() == "Enter" {
                                 crate::lsp::submit_rename(state, &text.get_untracked());
                             } else if event.key() == "Escape" {
-                                state.rename.set(None);
+                                state.lsp.rename.set(None);
                             }
                         }
                     />
@@ -50,7 +50,7 @@ pub fn SymbolPicker(state: EditorState) -> impl IntoView {
     let selected = RwSignal::new(0_usize);
     let input = NodeRef::<html::Input>::new();
     Effect::new(move |_| {
-        if !state.symbol_picker.get().is_empty() {
+        if !state.lsp.symbol_picker.get().is_empty() {
             filter.set(String::new());
             selected.set(0);
             if let Some(element) = input.get() {
@@ -61,6 +61,7 @@ pub fn SymbolPicker(state: EditorState) -> impl IntoView {
     let filtered = move || {
         let needle = filter.get().to_lowercase();
         state
+            .lsp
             .symbol_picker
             .get()
             .into_iter()
@@ -70,13 +71,13 @@ pub fn SymbolPicker(state: EditorState) -> impl IntoView {
     let go = move |index: usize| {
         if let Some(hit) = filtered().into_iter().nth(index) {
             crate::fs::read_file(&hit.path);
-            state.goto.set(Some((hit.path.clone(), hit.line)));
-            state.symbol_picker.set(Vec::new());
+            state.explorer.goto.set(Some((hit.path.clone(), hit.line)));
+            state.lsp.symbol_picker.set(Vec::new());
         }
     };
     view! {
-        <Show when=move || !state.symbol_picker.get().is_empty() fallback=|| ()>
-            <div class="palette-overlay" on:click=move |_| state.symbol_picker.set(Vec::new())>
+        <Show when=move || !state.lsp.symbol_picker.get().is_empty() fallback=|| ()>
+            <div class="palette-overlay" on:click=move |_| state.lsp.symbol_picker.set(Vec::new())>
                 <div class="palette" on:click=move |event| event.stop_propagation()>
                     <input
                         class="palette-input"
@@ -91,7 +92,7 @@ pub fn SymbolPicker(state: EditorState) -> impl IntoView {
                             match event.key().as_str() {
                                 "Escape" => {
                                     event.prevent_default();
-                                    state.symbol_picker.set(Vec::new());
+                                    state.lsp.symbol_picker.set(Vec::new());
                                 }
                                 "Enter" => {
                                     event.prevent_default();
@@ -144,13 +145,12 @@ pub fn SymbolPicker(state: EditorState) -> impl IntoView {
 #[component]
 pub fn CodeActionMenu(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || !state.code_actions.get().is_empty() fallback=|| ()>
-            <div class="overlay-scrim" on:click=move |_| state.code_actions.set(Vec::new())>
+        <Show when=move || !state.lsp.code_actions.get().is_empty() fallback=|| ()>
+            <div class="overlay-scrim" on:click=move |_| state.lsp.code_actions.set(Vec::new())>
                 <div class="prompt-box" on:click=move |event| event.stop_propagation()>
                     <span class="prompt-label">"Code actions"</span>
                     {move || {
-                        state
-                            .code_actions
+                        state.lsp.code_actions
                             .get()
                             .into_iter()
                             .enumerate()

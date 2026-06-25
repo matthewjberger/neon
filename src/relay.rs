@@ -145,6 +145,7 @@ fn editor_state_json(state: EditorState) -> serde_json::Value {
         .map(|plugin| json!({ "id": plugin.id, "name": plugin.name, "enabled": plugin.enabled }))
         .collect();
     let selected = state
+        .scene
         .selected
         .get_untracked()
         .map(|detail| json!({ "id": detail.id, "name": detail.name }));
@@ -153,7 +154,7 @@ fn editor_state_json(state: EditorState) -> serde_json::Value {
         "active": state.active_id(),
         "selected": selected,
         "running": state.running.get_untracked(),
-        "entity_count": state.entity_count.get_untracked(),
+        "entity_count": state.scene.entity_count.get_untracked(),
         "theme": state.theme.get_untracked(),
     })
 }

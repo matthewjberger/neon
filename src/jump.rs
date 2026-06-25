@@ -47,7 +47,7 @@ pub fn start_char(state: EditorState) {
     if find::active().is_none() {
         return;
     }
-    state.jump.set(Some(JumpState {
+    state.editing.jump.set(Some(JumpState {
         targets: Vec::new(),
         pending: String::new(),
         awaiting_char: true,
@@ -56,11 +56,11 @@ pub fn start_char(state: EditorState) {
 
 /// Handles a keystroke while jump mode is active. Returns whether it was used.
 pub fn key(state: EditorState, key: &str) -> bool {
-    let Some(mut jump) = state.jump.get_untracked() else {
+    let Some(mut jump) = state.editing.jump.get_untracked() else {
         return false;
     };
     if key == "Escape" {
-        state.jump.set(None);
+        state.editing.jump.set(None);
         return true;
     }
     if key.chars().count() != 1 {
@@ -69,7 +69,7 @@ pub fn key(state: EditorState, key: &str) -> bool {
     if jump.awaiting_char {
         let needle = key.chars().next().unwrap();
         let Some(element) = find::active() else {
-            state.jump.set(None);
+            state.editing.jump.set(None);
             return true;
         };
         let value = element.value();
@@ -81,7 +81,7 @@ pub fn key(state: EditorState, key: &str) -> bool {
     let pending = format!("{}{}", jump.pending, key);
     if let Some(target) = jump.targets.iter().find(|target| target.label == pending) {
         let offset = target.offset;
-        state.jump.set(None);
+        state.editing.jump.set(None);
         if let Some(element) = find::active() {
             let _ = element.focus();
             let _ = element.set_selection_range(offset, offset);
@@ -94,16 +94,16 @@ pub fn key(state: EditorState, key: &str) -> bool {
         .any(|target| target.label.starts_with(&pending))
     {
         jump.pending = pending;
-        state.jump.set(Some(jump));
+        state.editing.jump.set(Some(jump));
         return true;
     }
-    state.jump.set(None);
+    state.editing.jump.set(None);
     true
 }
 
 fn show(state: EditorState, element: &HtmlTextAreaElement, spots: Vec<Spot>) {
     if spots.is_empty() {
-        state.jump.set(None);
+        state.editing.jump.set(None);
         return;
     }
     let labels = labels(spots.len());
@@ -120,7 +120,7 @@ fn show(state: EditorState, element: &HtmlTextAreaElement, spots: Vec<Spot>) {
             }
         })
         .collect();
-    state.jump.set(Some(JumpState {
+    state.editing.jump.set(Some(JumpState {
         targets,
         pending: String::new(),
         awaiting_char: false,

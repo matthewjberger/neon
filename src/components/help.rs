@@ -107,8 +107,8 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
 #[component]
 pub fn Help(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.help_open.get() fallback=|| ()>
-            <div class="help-overlay" on:click=move |_| state.help_open.set(false)>
+        <Show when=move || state.panels.help.get() fallback=|| ()>
+            <div class="help-overlay" on:click=move |_| state.panels.help.set(false)>
                 <div class="help" on:click=move |event| event.stop_propagation()>
                     <div class="help-header">
                         <span class="help-title">"Keybindings and help"</span>

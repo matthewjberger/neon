@@ -12,13 +12,16 @@ use crate::state::EditorState;
 
 /// Whether multi-cursor mode is on (any extra carets).
 pub fn active(state: EditorState) -> bool {
-    state.cursors.with_untracked(|cursors| !cursors.is_empty())
+    state
+        .editing
+        .cursors
+        .with_untracked(|cursors| !cursors.is_empty())
 }
 
 /// Clears the extra carets.
 pub fn clear(state: EditorState) {
     if active(state) {
-        state.cursors.set(Vec::new());
+        state.editing.cursors.set(Vec::new());
     }
 }
 
@@ -46,7 +49,7 @@ fn add_line(state: EditorState, delta: i64) {
     if let Some(offset) = offset_at(&value, target as u32, column)
         && offset != base
     {
-        state.cursors.update(|cursors| {
+        state.editing.cursors.update(|cursors| {
             if !cursors.contains(&offset) {
                 cursors.push(offset);
             }
@@ -137,7 +140,7 @@ pub fn delete_forward(state: EditorState) {
 
 /// The sorted, unique set of edit positions: the primary caret plus the extras.
 fn positions(state: EditorState, base: u32) -> Vec<u32> {
-    let mut positions = state.cursors.get_untracked();
+    let mut positions = state.editing.cursors.get_untracked();
     positions.push(base);
     positions.sort_unstable();
     positions.dedup();
@@ -169,7 +172,7 @@ fn apply(
         .filter(|(position_index, _)| *position_index != index)
         .map(|(_, offset)| *offset)
         .collect();
-    state.cursors.set(extras);
+    state.editing.cursors.set(extras);
 }
 
 fn primary(element: &HtmlTextAreaElement) -> u32 {

@@ -16,13 +16,13 @@ pub fn ControlPanel(
     state: EditorState,
 ) -> impl IntoView {
     view! {
-        <Show when=move || state.control_panel_open.get() fallback=|| ()>
+        <Show when=move || state.panels.control_panel.get() fallback=|| ()>
             <div class="control-panel">
                 <div class="control-panel-header">
                     <span>"Control Panel"</span>
                     <button
                         class="icon-button"
-                        on:click=move |_| state.control_panel_open.set(false)
+                        on:click=move |_| state.panels.control_panel.set(false)
                     >
                         "x"
                     </button>

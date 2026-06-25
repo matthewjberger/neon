@@ -10,15 +10,14 @@ use crate::state::EditorState;
 #[component]
 pub fn WhichKey(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.leader.get().is_some() fallback=|| ()>
+        <Show when=move || state.editing.leader.get().is_some() fallback=|| ()>
             <div class="whichkey">
                 <div class="whichkey-title">
-                    {move || state.leader.get().map(|menu| menu.title).unwrap_or_default()}
+                    {move || state.editing.leader.get().map(|menu| menu.title).unwrap_or_default()}
                 </div>
                 <div class="whichkey-grid">
                     {move || {
-                        state
-                            .leader
+                        state.editing.leader
                             .get()
                             .map(|menu| menu.items)
                             .unwrap_or_default()

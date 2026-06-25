@@ -38,11 +38,11 @@ fn connect(state: EditorState) {
     });
     websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
-    let onopen = Closure::<dyn FnMut()>::new(move || state.term_connected.set(true));
+    let onopen = Closure::<dyn FnMut()>::new(move || state.terminal.connected.set(true));
     websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
     onopen.forget();
     let onclose = Closure::<dyn FnMut()>::new(move || {
-        state.term_connected.set(false);
+        state.terminal.connected.set(false);
         schedule_reconnect(state);
     });
     websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
@@ -76,7 +76,7 @@ fn send(message: &TerminalClientMessage) {
 
 /// Opens the PTY for the workspace at the given grid size.
 pub fn open(state: EditorState, cols: u16, rows: u16) {
-    let cwd = state.workspace_root.get_untracked().unwrap_or_default();
+    let cwd = state.explorer.root.get_untracked().unwrap_or_default();
     send(&TerminalClientMessage::Open { cols, rows, cwd });
 }
 
@@ -99,25 +99,25 @@ pub fn interrupt() {
 /// command until the shell is ready.
 pub fn run(state: EditorState, command: &str) {
     let line = format!("{command}\r");
-    state.terminal_open.set(true);
-    if state.term_grid.get_untracked().is_some() {
+    state.terminal.open.set(true);
+    if state.terminal.grid.get_untracked().is_some() {
         send_input(line.into_bytes());
     } else {
-        state.term_pending.set(Some(line));
+        state.terminal.pending.set(Some(line));
     }
 }
 
 fn dispatch(state: EditorState, message: TerminalServerMessage) {
     match message {
         TerminalServerMessage::Grid(grid) => {
-            state.term_grid.set(Some(grid));
-            if let Some(pending) = state.term_pending.get_untracked() {
-                state.term_pending.set(None);
+            state.terminal.grid.set(Some(grid));
+            if let Some(pending) = state.terminal.pending.get_untracked() {
+                state.terminal.pending.set(None);
                 send_input(pending.into_bytes());
             }
         }
         TerminalServerMessage::Exited => {
-            state.term_grid.set(None);
+            state.terminal.grid.set(None);
         }
     }
 }

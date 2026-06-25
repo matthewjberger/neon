@@ -34,7 +34,7 @@ pub fn FindBar(state: EditorState) -> impl IntoView {
     let input_ref = NodeRef::<html::Input>::new();
 
     Effect::new(move |_| {
-        if state.find_open.get()
+        if state.editing.find_open.get()
             && let Some(input) = input_ref.get()
         {
             let _ = input.focus();
@@ -108,7 +108,7 @@ pub fn FindBar(state: EditorState) -> impl IntoView {
     };
 
     view! {
-        <Show when=move || state.find_open.get() fallback=|| ()>
+        <Show when=move || state.editing.find_open.get() fallback=|| ()>
             <div class="find-bar">
                 <input
                     class="find-input"
@@ -123,7 +123,7 @@ pub fn FindBar(state: EditorState) -> impl IntoView {
                         match event.key().as_str() {
                             "Escape" => {
                                 event.prevent_default();
-                                state.find_open.set(false);
+                                state.editing.find_open.set(false);
                             }
                             "Enter" => {
                                 event.prevent_default();
@@ -153,7 +153,7 @@ pub fn FindBar(state: EditorState) -> impl IntoView {
                 />
                 <button class="tool-button" on:click=move |_| replace_one()>"Replace"</button>
                 <button class="tool-button" on:click=move |_| replace_all()>"All"</button>
-                <button class="tool-button" on:click=move |_| state.find_open.set(false)>"x"</button>
+                <button class="tool-button" on:click=move |_| state.editing.find_open.set(false)>"x"</button>
             </div>
         </Show>
     }

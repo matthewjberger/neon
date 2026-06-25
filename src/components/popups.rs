@@ -8,12 +8,11 @@ use crate::state::EditorState;
 #[component]
 pub fn CompletionPopup(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.completion.get().is_some() fallback=|| ()>
+        <Show when=move || state.lsp.completion.get().is_some() fallback=|| ()>
             <div
                 class="completion"
                 style=move || {
-                    let (x, y) = state
-                        .completion
+                    let (x, y) = state.lsp.completion
                         .get()
                         .map(|menu| (menu.x, menu.y))
                         .unwrap_or((0.0, 0.0));
@@ -21,8 +20,8 @@ pub fn CompletionPopup(state: EditorState) -> impl IntoView {
                 }
             >
                 {move || {
-                    let items = state.completion.get().map(|menu| menu.items).unwrap_or_default();
-                    let active = state.completion_index.get();
+                    let items = state.lsp.completion.get().map(|menu| menu.items).unwrap_or_default();
+                    let active = state.lsp.completion_index.get();
                     items
                         .into_iter()
                         .enumerate()
@@ -52,19 +51,18 @@ pub fn CompletionPopup(state: EditorState) -> impl IntoView {
 #[component]
 pub fn HoverCardView(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.hover.get().is_some() fallback=|| ()>
+        <Show when=move || state.lsp.hover.get().is_some() fallback=|| ()>
             <div
                 class="hover-card"
                 style=move || {
-                    let (x, y) = state
-                        .hover
+                    let (x, y) = state.lsp.hover
                         .get()
                         .map(|card| (card.x, card.y + 16.0))
                         .unwrap_or((0.0, 0.0));
                     format!("left: {x}px; top: {y}px")
                 }
             >
-                {move || state.hover.get().map(|card| card.text).unwrap_or_default()}
+                {move || state.lsp.hover.get().map(|card| card.text).unwrap_or_default()}
             </div>
         </Show>
     }

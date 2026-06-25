@@ -31,11 +31,11 @@ pub fn StatusBar(state: EditorState) -> impl IntoView {
             <span class="status-item">{move || language_label(state)}</span>
             <span
                 class="status-item lsp"
-                class:active=move || state.lsp_started.get()
+                class:active=move || state.lsp.started.get()
                 title="Toggle the rust-analyzer log"
-                on:click=move |_| state.lsp_log_open.update(|open| *open = !*open)
+                on:click=move |_| state.lsp.log_open.update(|open| *open = !*open)
             >
-                {move || if state.lsp_started.get() { "rust-analyzer" } else { "LSP off" }}
+                {move || if state.lsp.started.get() { "rust-analyzer" } else { "LSP off" }}
             </span>
         </div>
     }

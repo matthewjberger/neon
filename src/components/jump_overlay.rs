@@ -10,10 +10,10 @@ use crate::state::EditorState;
 #[component]
 pub fn JumpOverlay(state: EditorState) -> impl IntoView {
     view! {
-        <Show when=move || state.jump.get().is_some() fallback=|| ()>
+        <Show when=move || state.editing.jump.get().is_some() fallback=|| ()>
             <div class="jump-overlay">
                 {move || {
-                    let jump = state.jump.get();
+                    let jump = state.editing.jump.get();
                     let pending = jump.as_ref().map(|jump| jump.pending.clone()).unwrap_or_default();
                     let typed_len = pending.chars().count();
                     jump.map(|jump| jump.targets)

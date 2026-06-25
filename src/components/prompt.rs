@@ -12,7 +12,7 @@ pub fn PromptView(state: EditorState) -> impl IntoView {
     let text = RwSignal::new(String::new());
     let input = NodeRef::<html::Input>::new();
     Effect::new(move |_| {
-        if let Some(prompt) = state.prompt.get() {
+        if let Some(prompt) = state.editing.prompt.get() {
             text.set(prompt.value);
             if let Some(element) = input.get() {
                 let _ = element.focus();
@@ -21,10 +21,10 @@ pub fn PromptView(state: EditorState) -> impl IntoView {
         }
     });
     let confirm = move || {
-        let Some(prompt) = state.prompt.get_untracked() else {
+        let Some(prompt) = state.editing.prompt.get_untracked() else {
             return;
         };
-        state.prompt.set(None);
+        state.editing.prompt.set(None);
         let value = text.get_untracked();
         let value = value.trim();
         match prompt.action {
@@ -42,11 +42,11 @@ pub fn PromptView(state: EditorState) -> impl IntoView {
         }
     };
     view! {
-        <Show when=move || state.prompt.get().is_some() fallback=|| ()>
-            <div class="overlay-scrim" on:click=move |_| state.prompt.set(None)>
+        <Show when=move || state.editing.prompt.get().is_some() fallback=|| ()>
+            <div class="overlay-scrim" on:click=move |_| state.editing.prompt.set(None)>
                 <div class="prompt-box" on:click=move |event| event.stop_propagation()>
                     <span class="prompt-label">
-                        {move || state.prompt.get().map(|prompt| prompt.title).unwrap_or_default()}
+                        {move || state.editing.prompt.get().map(|prompt| prompt.title).unwrap_or_default()}
                     </span>
                     <input
                         class="prompt-input"
@@ -57,7 +57,7 @@ pub fn PromptView(state: EditorState) -> impl IntoView {
                             if event.key() == "Enter" {
                                 confirm();
                             } else if event.key() == "Escape" {
-                                state.prompt.set(None);
+                                state.editing.prompt.set(None);
                             }
                         }
                     />

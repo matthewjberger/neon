@@ -12,12 +12,12 @@ pub fn SearchPanel(state: EditorState) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let replacement = RwSignal::new(String::new());
     let run = move || {
-        if let Some(root) = state.workspace_root.get_untracked() {
+        if let Some(root) = state.explorer.root.get_untracked() {
             fs::search(&root, &query.get_untracked());
         }
     };
     let replace = move || {
-        if let Some(root) = state.workspace_root.get_untracked()
+        if let Some(root) = state.explorer.root.get_untracked()
             && !query.get_untracked().is_empty()
         {
             fs::replace_all(&root, &query.get_untracked(), &replacement.get_untracked());
@@ -51,8 +51,7 @@ pub fn SearchPanel(state: EditorState) -> impl IntoView {
             </div>
             <div class="search-results">
                 {move || {
-                    state
-                        .search_results
+                    state.explorer.search_results
                         .get()
                         .into_iter()
                         .map(|hit| {
@@ -64,7 +63,7 @@ pub fn SearchPanel(state: EditorState) -> impl IntoView {
                                     class="search-hit"
                                     on:click=move |_| {
                                         fs::read_file(&path);
-                                        state.goto.set(Some((path.clone(), line)));
+                                        state.explorer.goto.set(Some((path.clone(), line)));
                                     }
                                 >
                                     <span class="search-hit-loc">{location}</span>

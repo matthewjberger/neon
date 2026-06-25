@@ -10,7 +10,10 @@ use crate::state::{ContextMenu, EditorState};
 
 /// Opens the context menu at a pointer position with the given items.
 pub fn open(state: EditorState, x: f64, y: f64, items: Vec<(String, EditorCommand)>) {
-    state.context_menu.set(Some(ContextMenu { x, y, items }));
+    state
+        .editing
+        .context_menu
+        .set(Some(ContextMenu { x, y, items }));
 }
 
 /// The general menu for empty chrome: panels, palette, and theme.
@@ -90,17 +93,17 @@ pub fn ContextMenuView(
     state: EditorState,
 ) -> impl IntoView {
     view! {
-        <Show when=move || state.context_menu.get().is_some() fallback=|| ()>
+        <Show when=move || state.editing.context_menu.get().is_some() fallback=|| ()>
             <div
                 class="context-backdrop"
-                on:click=move |_| state.context_menu.set(None)
+                on:click=move |_| state.editing.context_menu.set(None)
                 on:contextmenu=move |event: web_sys::MouseEvent| {
                     event.prevent_default();
-                    state.context_menu.set(None);
+                    state.editing.context_menu.set(None);
                 }
             >
                 {move || {
-                    let menu = state.context_menu.get();
+                    let menu = state.editing.context_menu.get();
                     menu.map(|menu| {
                         let style = format!("left:{}px;top:{}px;", menu.x, menu.y);
                         view! {
@@ -117,7 +120,7 @@ pub fn ContextMenuView(
                                             <div
                                                 class="context-item"
                                                 on:click=move |_| {
-                                                    state.context_menu.set(None);
+                                                    state.editing.context_menu.set(None);
                                                     commands::run(command.clone(), state, bridge);
                                                 }
                                             >

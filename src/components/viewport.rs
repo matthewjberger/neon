@@ -95,7 +95,7 @@ pub fn Viewport(
                     },
                 );
             }
-            state.grabbing.set(true);
+            state.scene.grabbing.set(true);
             return;
         }
         let button = event.button().max(0) as u8;
@@ -119,7 +119,7 @@ pub fn Viewport(
                 );
             }
         }
-        state.grabbing.set(true);
+        state.scene.grabbing.set(true);
     };
 
     let on_pointermove = move |event: PointerEvent| {
@@ -192,13 +192,13 @@ pub fn Viewport(
                 }
             }
             if touches.with_value(HashMap::is_empty) {
-                state.grabbing.set(false);
+                state.scene.grabbing.set(false);
             }
             return;
         }
         let (button, moved) = drag.with_value(|state| (state.button, state.moved));
         drag.update_value(|state| state.button = None);
-        state.grabbing.set(false);
+        state.scene.grabbing.set(false);
         if let Some(canvas) = canvas_ref.get() {
             let _ = canvas.release_pointer_capture(event.pointer_id());
             if let Some(bridge) = bridge.get_value() {
@@ -220,7 +220,7 @@ pub fn Viewport(
     let on_contextmenu = move |event: MouseEvent| event.prevent_default();
 
     let canvas_class = move || {
-        if state.grabbing.get() {
+        if state.scene.grabbing.get() {
             "viewport-canvas grabbing"
         } else {
             "viewport-canvas"

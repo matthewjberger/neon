@@ -22,7 +22,7 @@ pub(super) fn connect(state: EditorState) {
     };
     let open_state = state;
     let onopen = Closure::<dyn FnMut()>::new(move || {
-        if let Some(root) = open_state.workspace_root.get_untracked() {
+        if let Some(root) = open_state.explorer.root.get_untracked() {
             send(&LspClientMessage::Start {
                 root_uri: file_uri(&root),
             });
@@ -53,7 +53,7 @@ pub(super) fn connect(state: EditorState) {
 
 fn schedule_reconnect(state: EditorState) {
     client(|client| client.socket = None);
-    if !state.lsp_started.get_untracked() {
+    if !state.lsp.started.get_untracked() {
         return;
     }
     let Some(window) = web_sys::window() else {

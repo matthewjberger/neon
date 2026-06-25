@@ -14,8 +14,7 @@ pub fn FileTree(state: EditorState) -> impl IntoView {
             <div class="panel-title">
                 <span>
                     {move || {
-                        state
-                            .workspace_root
+                        state.explorer.root
                             .get()
                             .map(|root| basename(&root).to_string())
                             .unwrap_or_else(|| "No folder".to_string())
@@ -29,7 +28,7 @@ pub fn FileTree(state: EditorState) -> impl IntoView {
                     "open"
                 </button>
             </div>
-            <div class="file-tree">{move || render_nodes(state, state.tree.get(), 0)}</div>
+            <div class="file-tree">{move || render_nodes(state, state.explorer.tree.get(), 0)}</div>
         </div>
     }
 }
@@ -68,7 +67,7 @@ fn render_node(state: EditorState, node: TreeNode, depth: usize) -> AnyView {
             on:contextmenu=move |event: web_sys::MouseEvent| {
                 event.prevent_default();
                 event.stop_propagation();
-                state.context_target.set(Some((menu_path.clone(), is_dir)));
+                state.editing.context_target.set(Some((menu_path.clone(), is_dir)));
                 crate::components::context_menu::open(
                     state,
                     event.client_x() as f64,

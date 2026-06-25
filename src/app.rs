@@ -73,7 +73,7 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        state.workspace_root.get();
+        state.explorer.root.get();
         state.files.get();
         crate::session::save(state);
     });
@@ -85,8 +85,8 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        if let Some(id) = state.command_request.get() {
-            state.command_request.set(None);
+        if let Some(id) = state.editing.command_request.get() {
+            state.editing.command_request.set(None);
             run_command(&id, state, bridge);
         }
     });
@@ -107,7 +107,7 @@ pub fn App() -> impl IntoView {
     });
 
     let _ = window_event_listener(leptos::ev::keydown, move |event| {
-        if state.jump.get_untracked().is_some() {
+        if state.editing.jump.get_untracked().is_some() {
             event.prevent_default();
             crate::jump::key(state, &event.key());
             return;
@@ -162,12 +162,12 @@ pub fn App() -> impl IntoView {
             run_command("redo", state, bridge);
             return;
         }
-        if event.key() == "Escape" && state.help_open.get_untracked() {
-            state.help_open.set(false);
+        if event.key() == "Escape" && state.panels.help.get_untracked() {
+            state.panels.help.set(false);
             return;
         }
-        if event.key() == "Escape" && state.leader.get_untracked().is_some() {
-            state.leader.set(None);
+        if event.key() == "Escape" && state.editing.leader.get_untracked().is_some() {
+            state.editing.leader.set(None);
         }
         if typing_in_field(&event) {
             return;
@@ -290,10 +290,10 @@ pub fn App() -> impl IntoView {
                 </div>
                 <div
                     class="right-column"
-                    style:display=move || if state.viewport_open.get() { "flex" } else { "none" }
+                    style:display=move || if state.panels.viewport.get() { "flex" } else { "none" }
                 >
                     <Viewport bridge state />
-                    <Show when=move || state.console_open.get() fallback=|| ()>
+                    <Show when=move || state.panels.console.get() fallback=|| ()>
                         <Console bridge state />
                     </Show>
                 </div>
