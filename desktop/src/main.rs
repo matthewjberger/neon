@@ -1,7 +1,8 @@
 //! Standalone shell: hosts the same web bundle the browser runs, served from
 //! a local port into a native webview window. Debug builds read `../dist`
 //! from disk so a fresh `trunk build` shows up on relaunch; release builds
-//! embed the bundle into the executable.
+//! embed the bundle into the executable. With the `networking` feature the
+//! first process hosts a broker and opens more windows as child processes.
 
 #[cfg(feature = "agent")]
 mod agent;
@@ -11,6 +12,8 @@ mod chat;
 mod fs;
 #[cfg(feature = "agent")]
 mod lsp;
+#[cfg(feature = "networking")]
+mod network;
 #[cfg(feature = "agent")]
 mod pty;
 #[cfg(feature = "agent")]
@@ -43,7 +46,8 @@ fn content_type(path: &str) -> &'static str {
 
 /// Serves the bundle on an ephemeral localhost port from a background thread
 /// and returns the port. Localhost is a secure context, so WebGPU behaves
-/// exactly as it does in a browser tab.
+/// exactly as it does in a browser tab. Each window process serves its own
+/// copy, so the windows share only the broker, not a page server.
 fn serve_dist() -> u16 {
     let server = tiny_http::Server::http("127.0.0.1:0").expect("failed to bind localhost");
     let port = server
@@ -77,7 +81,10 @@ fn serve_dist() -> u16 {
 }
 
 struct App {
-    port: u16,
+    url: String,
+    title: String,
+    #[cfg(feature = "networking")]
+    shutdown: Option<network::ShutdownChannel>,
     window: Option<Window>,
     webview: Option<WebView>,
 }
@@ -88,27 +95,34 @@ impl ApplicationHandler for App {
             return;
         }
         let attributes = Window::default_attributes()
-            .with_title("Neon")
+            .with_title(self.title.clone())
             .with_maximized(true);
         let window = event_loop
             .create_window(attributes)
             .expect("failed to create window");
 
         let builder = WebViewBuilder::new()
-            .with_url(format!("http://127.0.0.1:{}/", self.port))
+            .with_url(self.url.clone())
             .with_navigation_handler(|url| {
                 url.starts_with("http://127.0.0.1") || url.starts_with("https://127.0.0.1")
             });
-        #[cfg(feature = "agent")]
+        #[cfg(any(feature = "agent", feature = "networking"))]
         let builder = builder.with_ipc_handler(|request| match request.body().as_str() {
+            #[cfg(feature = "agent")]
             "enable-mcp" => agent::start(),
+            #[cfg(feature = "agent")]
             "open-chat" => {
                 agent::start();
                 chat::start();
             }
+            #[cfg(feature = "agent")]
             "enable-fs" => fs::start(),
+            #[cfg(feature = "agent")]
             "enable-lsp" => lsp::start(),
+            #[cfg(feature = "agent")]
             "enable-terminal" => pty::start(),
+            #[cfg(feature = "networking")]
+            "new-window" => network::request_window(),
             _ => {}
         });
         #[cfg(target_os = "windows")]
@@ -129,6 +143,10 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         if let WindowEvent::CloseRequested = event {
+            #[cfg(feature = "networking")]
+            if let Some(channel) = &self.shutdown {
+                network::notify_shutdown(channel);
+            }
             event_loop.exit();
         }
     }
@@ -140,10 +158,28 @@ fn main() {
         std::process::exit(1);
     }
     let port = serve_dist();
+
+    #[cfg(feature = "networking")]
+    let (url, title, shutdown) = {
+        let role = network::ShellRole::detect();
+        let is_host = role.is_host();
+        let shell_id = format!("neon-{}", std::process::id());
+        let shutdown = network::start(role, shell_id.clone());
+        let role_name = if is_host { "primary" } else { "child" };
+        let title = if is_host { "Neon" } else { "Neon - Window" };
+        let url = format!("http://127.0.0.1:{port}/?role={role_name}&shell={shell_id}");
+        (url, title.to_string(), shutdown)
+    };
+    #[cfg(not(feature = "networking"))]
+    let (url, title) = (format!("http://127.0.0.1:{port}/"), "Neon".to_string());
+
     let event_loop = EventLoop::new().expect("failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = App {
-        port,
+        url,
+        title,
+        #[cfg(feature = "networking")]
+        shutdown,
         window: None,
         webview: None,
     };

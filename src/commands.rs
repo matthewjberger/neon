@@ -16,6 +16,7 @@ pub enum EditorCommand {
     SplitEditor { vertical: bool },
     CloseSplit,
     FocusOther,
+    NewWindow,
     TogglePreview,
     ToggleConsole,
     ToggleReference,
@@ -98,6 +99,7 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ),
         ("close-split", Some("Close split"), CloseSplit),
         ("focus-other", Some("Focus other pane"), FocusOther),
+        ("new-window", Some("New window"), NewWindow),
         ("toggle-preview", Some("Toggle 3D preview"), TogglePreview),
         ("toggle-console", Some("Toggle console"), ToggleConsole),
         (
@@ -276,6 +278,7 @@ pub fn run(
         EditorCommand::SplitEditor { vertical } => state.split(vertical),
         EditorCommand::CloseSplit => state.close_focused(),
         EditorCommand::FocusOther => state.focus_next(),
+        EditorCommand::NewWindow => crate::ipc::notify_host("new-window"),
         EditorCommand::TogglePreview => state.panels.viewport.update(|open| *open = !*open),
         EditorCommand::ToggleConsole => state.panels.console.update(|open| *open = !*open),
         EditorCommand::ToggleReference => state.panels.reference.update(|open| *open = !*open),
