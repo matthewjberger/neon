@@ -19,9 +19,7 @@ default = ["agent", "networking"]
 # Multi-window: the first process hosts a hearsay pub/sub broker and spawns
 # more windows as supervised child processes; children join the broker and exit
 # when the host does. The page asks for a new window over the webview IPC.
-# Reuses nightshade's `networking` re-export of hearsay, with the engine's
-# default features off so only the broker comes in, not wgpu.
-networking = ["dep:nightshade", "nightshade/networking", "dep:tokio"]
+networking = ["dep:hearsay", "dep:tokio"]
 # The Claude bridge: the MCP HTTP endpoint, the page relay websocket, and the
 # chat relay to a claude subprocess. Runtime gated, the sockets open only when
 # the page sends its open-chat signal.
@@ -66,6 +64,7 @@ regex = { version = "1", optional = true }
 portable-pty = { version = "0.8", optional = true }
 vt100 = { version = "0.15", optional = true }
 dirs = { version = "5", optional = true }
-nightshade = { path = "../../nightshade/crates/nightshade", default-features = false, features = [
-    "networking",
+hearsay = { version = "0.1", features = [
+    "spawn",
+    "websockets",
 ], optional = true }

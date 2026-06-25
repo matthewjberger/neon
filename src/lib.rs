@@ -30,6 +30,7 @@ mod jump;
 mod lang;
 mod lsp;
 mod multicursor;
+mod network;
 mod plugins;
 mod relay;
 mod session;

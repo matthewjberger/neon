@@ -51,6 +51,7 @@ pub fn App() -> impl IntoView {
     let lang = StoredValue::new_local(Some(lang::connect(state)));
 
     crate::session::capture();
+    crate::network::start();
     crate::ipc::notify_host("enable-fs");
     crate::fs::start(state);
     crate::ipc::notify_host("enable-terminal");

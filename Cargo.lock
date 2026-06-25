@@ -1455,8 +1455,8 @@ dependencies = [
  "dirs 5.0.1",
  "futures-util",
  "grep",
+ "hearsay",
  "ignore",
- "nightshade",
  "portable-pty",
  "protocol",
  "regex",
@@ -3943,8 +3943,10 @@ name = "neon"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "hearsay",
  "js-sys",
  "leptos",
+ "postcard",
  "protocol",
  "rhai",
  "serde",
@@ -3992,7 +3994,6 @@ dependencies = [
  "glam 0.30.10",
  "gltf",
  "half",
- "hearsay",
  "image",
  "js-sys",
  "kira",

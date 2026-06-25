@@ -1,13 +1,11 @@
 //! The native side of the multi-window shell contract. The first process hosts
-//! the hearsay broker and its websocket listener and spawns more windows as
-//! supervised child processes; a child joins the broker and exits when the host
-//! publishes the shutdown topic or its own close topic. The page asks for a new
-//! window over the webview IPC, which the host turns into a broker spawn, so any
-//! window can open another.
+//! the hearsay broker and its websocket listener and serves spawn requests by
+//! launching more copies of this executable; a child joins the broker and exits
+//! when the host publishes the shutdown topic or its own close topic. Any
+//! window's page publishes the spawn topic over the broker, so the request
+//! reaches the host no matter which window asked.
 
-use std::sync::OnceLock;
-
-use nightshade::networking;
+use hearsay as networking;
 
 const BROKER_ADDRESS: &str = "127.0.0.1:8782";
 const WEBSOCKET_ADDRESS: &str = "127.0.0.1:8783";
@@ -37,18 +35,6 @@ impl ShellRole {
 
     pub fn is_host(&self) -> bool {
         matches!(self, Self::Host)
-    }
-}
-
-/// The host's spawn channel: the network thread waits on it, the webview IPC
-/// handler pushes onto it when the page asks for a new window.
-static SPAWN: OnceLock<tokio::sync::mpsc::UnboundedSender<()>> = OnceLock::new();
-
-/// Asks the host to open another window. A no-op on a child or before the
-/// broker is up, so the page can call it unconditionally.
-pub fn request_window() {
-    if let Some(sender) = SPAWN.get() {
-        let _ = sender.send(());
     }
 }
 
@@ -96,12 +82,10 @@ pub fn start(role: ShellRole, shell_id: String) -> Option<ShutdownChannel> {
                     };
                     let (shutdown_sender, shutdown_receiver) =
                         tokio::sync::mpsc::unbounded_channel();
-                    let (spawn_sender, spawn_receiver) = tokio::sync::mpsc::unbounded_channel();
-                    let _ = SPAWN.set(spawn_sender);
                     let _ = channel_sender.send(ShutdownChannel {
                         sender: shutdown_sender,
                     });
-                    run_host(broker, client, shutdown_receiver, spawn_receiver).await;
+                    run_host(broker, client, shutdown_receiver).await;
                 }
                 ShellRole::Child { broker_address } => {
                     let Some(client) = connect_client(&shell_id, &broker_address).await else {
@@ -131,7 +115,6 @@ async fn run_host(
     broker: networking::Broker,
     mut client: networking::Client,
     mut shutdown_receiver: tokio::sync::mpsc::UnboundedReceiver<std::sync::mpsc::Sender<()>>,
-    mut spawn_receiver: tokio::sync::mpsc::UnboundedReceiver<()>,
 ) {
     if networking::subscribe(&mut client, &[SPAWN_TOPIC])
         .await
@@ -149,12 +132,6 @@ async fn run_host(
                 if message.topic == SPAWN_TOPIC {
                     spawn_window(&broker, &mut window_counter).await;
                 }
-            }
-            request = spawn_receiver.recv() => {
-                if request.is_none() {
-                    break;
-                }
-                spawn_window(&broker, &mut window_counter).await;
             }
             acknowledge = shutdown_receiver.recv() => {
                 let Some(acknowledge) = acknowledge else {

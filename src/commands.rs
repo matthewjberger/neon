@@ -278,7 +278,7 @@ pub fn run(
         EditorCommand::SplitEditor { vertical } => state.split(vertical),
         EditorCommand::CloseSplit => state.close_focused(),
         EditorCommand::FocusOther => state.focus_next(),
-        EditorCommand::NewWindow => crate::ipc::notify_host("new-window"),
+        EditorCommand::NewWindow => crate::network::request_spawn_window(),
         EditorCommand::TogglePreview => state.panels.viewport.update(|open| *open = !*open),
         EditorCommand::ToggleConsole => state.panels.console.update(|open| *open = !*open),
         EditorCommand::ToggleReference => state.panels.reference.update(|open| *open = !*open),

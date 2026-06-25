@@ -106,23 +106,16 @@ impl ApplicationHandler for App {
             .with_navigation_handler(|url| {
                 url.starts_with("http://127.0.0.1") || url.starts_with("https://127.0.0.1")
             });
-        #[cfg(any(feature = "agent", feature = "networking"))]
+        #[cfg(feature = "agent")]
         let builder = builder.with_ipc_handler(|request| match request.body().as_str() {
-            #[cfg(feature = "agent")]
             "enable-mcp" => agent::start(),
-            #[cfg(feature = "agent")]
             "open-chat" => {
                 agent::start();
                 chat::start();
             }
-            #[cfg(feature = "agent")]
             "enable-fs" => fs::start(),
-            #[cfg(feature = "agent")]
             "enable-lsp" => lsp::start(),
-            #[cfg(feature = "agent")]
             "enable-terminal" => pty::start(),
-            #[cfg(feature = "networking")]
-            "new-window" => network::request_window(),
             _ => {}
         });
         #[cfg(target_os = "windows")]
