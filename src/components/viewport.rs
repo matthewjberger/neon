@@ -246,8 +246,8 @@ const MAX_RENDER_DPR: f64 = 2.0;
 
 fn render_dpr() -> f64 {
     web_sys::window()
-        .unwrap()
-        .device_pixel_ratio()
+        .map(|window| window.device_pixel_ratio())
+        .unwrap_or(1.0)
         .min(MAX_RENDER_DPR)
 }
 

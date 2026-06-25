@@ -7,38 +7,10 @@
 use std::collections::HashSet;
 
 use leptos::prelude::*;
-use protocol::{Diagnostic, Severity};
+use protocol::{Diagnostic, RHAI_BUILTINS, Severity, unknown_command_calls};
 use rhai::Engine;
 
 use crate::state::EditorState;
-
-const BUILTINS: &[&str] = &[
-    "push",
-    "tag",
-    "last",
-    "log",
-    "print",
-    "len",
-    "clear",
-    "pad",
-    "to_float",
-    "to_int",
-    "abs",
-    "sin",
-    "cos",
-    "tan",
-    "sqrt",
-    "floor",
-    "ceil",
-    "round",
-    "min",
-    "max",
-    "random",
-    "random_range",
-    "random_int",
-    "entity_ref",
-    "result",
-];
 
 /// Compile-check a plugin's source and flag unknown command calls.
 pub fn check(state: EditorState, source: &str) -> Vec<Diagnostic> {
@@ -54,7 +26,7 @@ pub fn check(state: EditorState, source: &str) -> Vec<Diagnostic> {
             severity: Severity::Error,
         }];
     }
-    unknown_calls(state, source)
+    unknown_command_calls(source, &vocabulary(state))
 }
 
 fn vocabulary(state: EditorState) -> HashSet<String> {
@@ -71,65 +43,8 @@ fn vocabulary(state: EditorState) -> HashSet<String> {
             }
         }
     });
-    for builtin in BUILTINS {
+    for builtin in RHAI_BUILTINS {
         set.insert((*builtin).to_string());
     }
     set
-}
-
-fn unknown_calls(state: EditorState, source: &str) -> Vec<Diagnostic> {
-    let vocabulary = vocabulary(state);
-    if vocabulary.is_empty() {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    let bytes = source.as_bytes();
-    let needle = b"commands.";
-    let mut index = 0;
-    while index + needle.len() <= bytes.len() {
-        if &bytes[index..index + needle.len()] == needle {
-            let start = index + needle.len();
-            let mut end = start;
-            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-                end += 1;
-            }
-            let mut after = end;
-            while after < bytes.len() && bytes[after] == b' ' {
-                after += 1;
-            }
-            if end > start && after < bytes.len() && bytes[after] == b'(' {
-                let name = &source[start..end];
-                if !vocabulary.contains(name) {
-                    let (line, column) = line_col(source, start);
-                    out.push(Diagnostic {
-                        message: format!("unknown command or helper: commands.{name}"),
-                        line,
-                        column,
-                        severity: Severity::Warning,
-                    });
-                }
-            }
-            index = end;
-        } else {
-            index += 1;
-        }
-    }
-    out
-}
-
-fn line_col(source: &str, index: usize) -> (u32, u32) {
-    let mut line = 1_u32;
-    let mut column = 1_u32;
-    for (offset, character) in source.char_indices() {
-        if offset >= index {
-            break;
-        }
-        if character == '\n' {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-    (line, column)
 }

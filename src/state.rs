@@ -8,6 +8,10 @@ use protocol::{
     TermGrid,
 };
 
+/// The most console rows kept in [`EditorState::log`]; older rows drop as new
+/// ones arrive, so an endlessly running scene cannot grow it without bound.
+const LOG_LIMIT: usize = 500;
+
 /// Which set the open buffer belongs to: scene plugins run in the engine worker,
 /// editor plugins run on the page and drive the editor through key dispatch,
 /// built-ins are the standard library (viewable but locked), and files are real
@@ -361,20 +365,27 @@ impl EditorState {
         }
     }
 
-    /// Records one api call or event into the unified log the console and the
-    /// control panel both read.
-    pub fn log_api(&self, kind: LogKind, label: impl Into<String>, detail: impl Into<String>) {
+    /// Appends entries to the unified console log, dropping the oldest rows past
+    /// [`LOG_LIMIT`]. Every writer (the worker report, plugin errors, and editor
+    /// commands) goes through here, so the cap is one number.
+    pub fn record_log(&self, entries: impl IntoIterator<Item = LogEntry>) {
         self.log.update(|log| {
-            log.push(LogEntry {
-                kind,
-                label: label.into(),
-                detail: detail.into(),
-            });
-            let overflow = log.len().saturating_sub(500);
+            log.extend(entries);
+            let overflow = log.len().saturating_sub(LOG_LIMIT);
             if overflow > 0 {
                 log.drain(0..overflow);
             }
         });
+    }
+
+    /// Records one api call or event into the unified log the console and the
+    /// control panel both read.
+    pub fn log_api(&self, kind: LogKind, label: impl Into<String>, detail: impl Into<String>) {
+        self.record_log([LogEntry {
+            kind,
+            label: label.into(),
+            detail: detail.into(),
+        }]);
     }
 
     /// A buffer's source by kind and id, from the scene set, the editor set, the

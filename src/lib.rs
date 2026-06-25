@@ -34,6 +34,7 @@ mod plugins;
 mod relay;
 mod session;
 mod state;
+mod storage;
 mod terminal;
 mod theme;
 mod tour;

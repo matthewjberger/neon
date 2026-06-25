@@ -21,16 +21,10 @@ thread_local! {
     static PENDING: RefCell<Option<Session>> = const { RefCell::new(None) };
 }
 
-fn storage() -> Option<web_sys::Storage> {
-    web_sys::window()?.local_storage().ok().flatten()
-}
-
 /// Reads the saved session into memory at startup, before the save effect runs
 /// and overwrites it with the empty initial state.
 pub fn capture() {
-    let session = storage()
-        .and_then(|storage| storage.get_item(KEY).ok().flatten())
-        .and_then(|text| serde_json::from_str::<Session>(&text).ok());
+    let session = crate::storage::get_json::<Session>(KEY);
     PENDING.with(|pending| *pending.borrow_mut() = session);
 }
 
@@ -56,7 +50,5 @@ pub fn save(state: EditorState) {
             .files
             .with_untracked(|files| files.iter().map(|file| file.path.clone()).collect()),
     };
-    if let (Some(storage), Ok(text)) = (storage(), serde_json::to_string(&session)) {
-        let _ = storage.set_item(KEY, &text);
-    }
+    crate::storage::set_json(KEY, &session);
 }

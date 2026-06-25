@@ -15,9 +15,7 @@ const THEME_KEY: &str = "neon.theme";
 /// The persisted theme id, falling back to the default when nothing is stored or
 /// the stored id no longer exists.
 pub fn stored_theme() -> String {
-    web_sys::window()
-        .and_then(|window| window.local_storage().ok().flatten())
-        .and_then(|storage| storage.get_item(THEME_KEY).ok().flatten())
+    crate::storage::get_string(THEME_KEY)
         .filter(|stored| THEMES.iter().any(|(id, _)| id == stored))
         .unwrap_or_else(|| THEMES[0].0.to_string())
 }
@@ -36,11 +34,7 @@ pub fn preview_theme(id: &str) {
 /// Switches the page to the given theme and persists the choice.
 pub fn apply_theme(id: &str) {
     preview_theme(id);
-    if let Some(storage) =
-        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
-    {
-        let _ = storage.set_item(THEME_KEY, id);
-    }
+    crate::storage::set_string(THEME_KEY, id);
 }
 
 /// The label for a theme id.

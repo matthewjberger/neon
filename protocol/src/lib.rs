@@ -11,6 +11,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod lint;
+pub use lint::{RHAI_BUILTINS, unknown_command_calls};
+
 /// Envelope field carrying the serialized message in every `postMessage`.
 pub const MESSAGE_KEY: &str = "message";
 /// Envelope field carrying the transferred `OffscreenCanvas` (on `Init` only).

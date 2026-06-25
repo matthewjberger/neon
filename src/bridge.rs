@@ -13,8 +13,6 @@ use web_sys::{MessageEvent, OffscreenCanvas, Worker, WorkerOptions, WorkerType};
 
 use crate::state::EditorState;
 
-const LOG_LIMIT: usize = 300;
-
 #[derive(Clone)]
 pub struct Bridge {
     worker: Worker,
@@ -57,23 +55,13 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
             }
             WorkerMessage::Busy { active } => state.busy.set(active),
             WorkerMessage::Selected { detail } => state.selected.set(detail),
-            WorkerMessage::Report { entries } => {
-                state.log.update(|log| {
-                    log.extend(entries);
-                    if log.len() > LOG_LIMIT {
-                        let excess = log.len() - LOG_LIMIT;
-                        log.drain(0..excess);
-                    }
-                });
-            }
+            WorkerMessage::Report { entries } => state.record_log(entries),
             WorkerMessage::PluginError { message, .. } => {
-                state.log.update(|log| {
-                    log.push(protocol::LogEntry {
-                        kind: LogKind::Error,
-                        label: "error".to_string(),
-                        detail: message,
-                    });
-                });
+                state.record_log([protocol::LogEntry {
+                    kind: LogKind::Error,
+                    label: "error".to_string(),
+                    detail: message,
+                }]);
             }
             WorkerMessage::Agent(response) => {
                 crate::relay::send_response(&response_socket, &response);

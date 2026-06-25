@@ -298,28 +298,14 @@ pub fn entry_to_plugin(entry: &CatalogEntry) -> PluginSource {
     }
 }
 
-fn storage() -> Option<web_sys::Storage> {
-    web_sys::window().and_then(|window| window.local_storage().ok().flatten())
-}
-
 /// Loads the installed scene plugins, or the first-run set.
 pub fn load() -> Vec<PluginSource> {
-    let Some(storage) = storage() else {
-        return defaults();
-    };
-    match storage.get_item(PLUGINS_KEY).ok().flatten() {
-        Some(text) => serde_json::from_str(&text).unwrap_or_else(|_| defaults()),
-        None => defaults(),
-    }
+    crate::storage::get_json(PLUGINS_KEY).unwrap_or_else(defaults)
 }
 
 /// Persists the scene-plugin set.
 pub fn save(plugins: &[PluginSource]) {
-    if let Some(storage) = storage()
-        && let Ok(text) = serde_json::to_string(plugins)
-    {
-        let _ = storage.set_item(PLUGINS_KEY, &text);
-    }
+    crate::storage::set_json(PLUGINS_KEY, &plugins);
 }
 
 /// A fresh plugin with a unique id and the starter template.
@@ -345,22 +331,12 @@ pub fn defaults() -> Vec<PluginSource> {
 
 /// Loads the installed editor plugins, or the first-run set (none).
 pub fn load_editor_plugins() -> Vec<PluginSource> {
-    let Some(storage) = storage() else {
-        return default_editor_plugins();
-    };
-    match storage.get_item(EDITOR_PLUGINS_KEY).ok().flatten() {
-        Some(text) => serde_json::from_str(&text).unwrap_or_else(|_| default_editor_plugins()),
-        None => default_editor_plugins(),
-    }
+    crate::storage::get_json(EDITOR_PLUGINS_KEY).unwrap_or_else(default_editor_plugins)
 }
 
 /// Persists the editor-plugin set.
 pub fn save_editor_plugins(plugins: &[PluginSource]) {
-    if let Some(storage) = storage()
-        && let Ok(text) = serde_json::to_string(plugins)
-    {
-        let _ = storage.set_item(EDITOR_PLUGINS_KEY, &text);
-    }
+    crate::storage::set_json(EDITOR_PLUGINS_KEY, &plugins);
 }
 
 /// First run installs Spacemacs as the default keybindings; vim and the template

@@ -7,7 +7,8 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use protocol::{
-    CommandInfo, Diagnostic, LangRequest, LangResponse, MESSAGE_KEY, Severity, StdModule,
+    CommandInfo, Diagnostic, LangRequest, LangResponse, MESSAGE_KEY, RHAI_BUILTINS, Severity,
+    StdModule, unknown_command_calls,
 };
 use rhai::Engine;
 use wasm_bindgen::prelude::*;
@@ -17,34 +18,6 @@ use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 thread_local! {
     static VOCAB: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
-
-const BUILTINS: &[&str] = &[
-    "push",
-    "tag",
-    "last",
-    "log",
-    "print",
-    "len",
-    "clear",
-    "pad",
-    "to_float",
-    "to_int",
-    "abs",
-    "sin",
-    "cos",
-    "tan",
-    "sqrt",
-    "floor",
-    "ceil",
-    "round",
-    "min",
-    "max",
-    "random",
-    "random_range",
-    "random_int",
-    "entity_ref",
-    "result",
-];
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -89,7 +62,7 @@ fn seed(commands: &[CommandInfo], stdlib: &[StdModule]) {
                 set.insert(helper.name.clone());
             }
         }
-        for builtin in BUILTINS {
+        for builtin in RHAI_BUILTINS {
             set.insert((*builtin).to_string());
         }
     });
@@ -115,68 +88,7 @@ fn check(source: &str) -> Vec<Diagnostic> {
             severity: Severity::Error,
         }];
     }
-    unknown_calls(source)
-}
-
-fn unknown_calls(source: &str) -> Vec<Diagnostic> {
-    let mut out = Vec::new();
-    VOCAB.with(|vocab| {
-        let vocab = vocab.borrow();
-        if vocab.is_empty() {
-            return;
-        }
-        let bytes = source.as_bytes();
-        let needle = b"commands.";
-        let mut index = 0;
-        while index + needle.len() <= bytes.len() {
-            if &bytes[index..index + needle.len()] == needle {
-                let start = index + needle.len();
-                let mut end = start;
-                while end < bytes.len()
-                    && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
-                {
-                    end += 1;
-                }
-                let mut after = end;
-                while after < bytes.len() && bytes[after] == b' ' {
-                    after += 1;
-                }
-                if end > start && after < bytes.len() && bytes[after] == b'(' {
-                    let name = &source[start..end];
-                    if !vocab.contains(name) {
-                        let (line, column) = line_col(source, start);
-                        out.push(Diagnostic {
-                            message: format!("unknown command or helper: commands.{name}"),
-                            line,
-                            column,
-                            severity: Severity::Warning,
-                        });
-                    }
-                }
-                index = end;
-            } else {
-                index += 1;
-            }
-        }
-    });
-    out
-}
-
-fn line_col(source: &str, index: usize) -> (u32, u32) {
-    let mut line = 1_u32;
-    let mut column = 1_u32;
-    for (offset, character) in source.char_indices() {
-        if offset >= index {
-            break;
-        }
-        if character == '\n' {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-    (line, column)
+    VOCAB.with(|vocab| unknown_command_calls(source, &vocab.borrow()))
 }
 
 fn post(response: &LangResponse) {
