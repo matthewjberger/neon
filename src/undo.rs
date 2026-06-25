@@ -7,7 +7,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use crate::components::find;
+use crate::components::overlays::find;
 use crate::state::{EditorState, PluginKind};
 
 const COALESCE_MS: f64 = 600.0;

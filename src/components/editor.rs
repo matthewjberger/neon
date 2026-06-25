@@ -119,7 +119,7 @@ pub fn EditorPane(
     let on_focus = move |_| {
         state.focused_key.set(pane_key);
         if let Some(element) = textarea.get() {
-            crate::components::find::set_active(element);
+            crate::components::overlays::find::set_active(element);
         }
     };
 
@@ -239,11 +239,11 @@ pub fn EditorPane(
                         on:contextmenu=move |event: web_sys::MouseEvent| {
                             event.prevent_default();
                             event.stop_propagation();
-                            crate::components::context_menu::open(
+                            crate::components::overlays::context_menu::open(
                                 state,
                                 event.client_x() as f64,
                                 event.client_y() as f64,
-                                crate::components::context_menu::editor_menu(),
+                                crate::components::overlays::context_menu::editor_menu(),
                             );
                         }
                         on:scroll=move |event| {

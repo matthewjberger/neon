@@ -7,7 +7,7 @@
 use leptos::prelude::*;
 use web_sys::HtmlTextAreaElement;
 
-use crate::components::find;
+use crate::components::overlays::find;
 use crate::state::EditorState;
 
 /// Whether multi-cursor mode is on (any extra carets).

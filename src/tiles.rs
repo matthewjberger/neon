@@ -8,9 +8,9 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::Bridge;
-use crate::components::console::Console;
-use crate::components::reference::Reference;
-use crate::components::terminal::Terminal;
+use crate::components::panels::console::Console;
+use crate::components::panels::reference::Reference;
+use crate::components::panels::terminal::Terminal;
 use crate::components::viewport::Viewport;
 use crate::state::{BufferRef, EditorState};
 

@@ -12,7 +12,7 @@ pub fn MultiCursorOverlay(state: EditorState) -> impl IntoView {
             {move || {
                 state.editing.scroll.get();
                 let cursors = state.editing.cursors.get();
-                let Some(element) = crate::components::find::active() else {
+                let Some(element) = crate::components::overlays::find::active() else {
                     return ().into_any();
                 };
                 let value = element.value();

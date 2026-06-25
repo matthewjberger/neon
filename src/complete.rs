@@ -57,7 +57,7 @@ pub fn rhai_complete(state: EditorState) {
         PluginKind::Scene | PluginKind::Builtin => false,
         PluginKind::File => return,
     };
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let value = element.value();

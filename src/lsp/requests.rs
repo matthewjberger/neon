@@ -31,7 +31,7 @@ pub fn request_completion(state: EditorState) {
     if language_for_path(&path) != "rust" {
         return;
     }
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let value = element.value();
@@ -105,7 +105,7 @@ pub fn request_hover_at_caret(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {
         return;
     };
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let (x, y) = caret_pixel(&element, line, character);
@@ -126,7 +126,7 @@ pub fn request_signature_help(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {
         return;
     };
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let (x, y) = caret_pixel(&element, line, character);
@@ -165,7 +165,7 @@ pub fn request_workspace_symbols() {
     if !ready() {
         return;
     }
-    let query = crate::components::find::active()
+    let query = crate::components::overlays::find::active()
         .map(|element| {
             let value = element.value();
             let caret = element.selection_start().ok().flatten().unwrap_or(0);
@@ -201,7 +201,7 @@ pub fn start_rename(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {
         return;
     };
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let value = element.value();
@@ -340,7 +340,7 @@ pub fn goto_diagnostic(state: EditorState, forward: bool) {
     if diagnostics.is_empty() {
         return;
     }
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let value = element.value();
@@ -385,7 +385,7 @@ fn caret_position(state: EditorState) -> Option<(String, u32, u32)> {
     if language_for_path(&path) != "rust" {
         return None;
     }
-    let element = crate::components::find::active()?;
+    let element = crate::components::overlays::find::active()?;
     let value = element.value();
     let caret = element.selection_start().ok().flatten().unwrap_or(0);
     let (line, character) = line_character(&value, caret);
@@ -407,7 +407,7 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     if language_for_path(&path) != "rust" {
         return;
     }
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let (line, column) = crate::caret::locate(&element, client_x, client_y);
@@ -437,7 +437,7 @@ pub fn accept_completion(state: EditorState, index: usize) {
     let Some(entry) = menu.items.get(index) else {
         return;
     };
-    let Some(element) = crate::components::find::active() else {
+    let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
     let value = element.value();

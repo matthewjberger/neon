@@ -110,11 +110,11 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                                     event.prevent_default();
                                     event.stop_propagation();
                                     state.focus_tab(pane_key, index);
-                                    crate::components::context_menu::open(
+                                    crate::components::overlays::context_menu::open(
                                         state,
                                         event.client_x() as f64,
                                         event.client_y() as f64,
-                                        crate::components::context_menu::tab_menu(),
+                                        crate::components::overlays::context_menu::tab_menu(),
                                     );
                                 }
                             >

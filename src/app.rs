@@ -9,15 +9,15 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use crate::bridge::{self, Bridge};
 use crate::commands::{self, EditorCommand};
-use crate::components::activity_bar::ActivityBar;
+use crate::components::chrome::activity_bar::ActivityBar;
+use crate::components::chrome::status_bar::StatusBar;
+use crate::components::chrome::toolbar::Toolbar;
 use crate::components::editor::EditorPane;
-use crate::components::extensions::Extensions;
-use crate::components::file_tree::FileTree;
 use crate::components::overlays::Overlays;
-use crate::components::plugin_panel::PluginPanel;
-use crate::components::search::SearchPanel;
-use crate::components::status_bar::StatusBar;
-use crate::components::toolbar::Toolbar;
+use crate::components::sidebar::extensions::Extensions;
+use crate::components::sidebar::file_tree::FileTree;
+use crate::components::sidebar::plugin_panel::PluginPanel;
+use crate::components::sidebar::search::SearchPanel;
 use crate::lang;
 use crate::state::{EditorState, SidebarView};
 use crate::theme;
@@ -237,11 +237,11 @@ pub fn App() -> impl IntoView {
             class="app-shell"
             on:contextmenu=move |event: web_sys::MouseEvent| {
                 event.prevent_default();
-                crate::components::context_menu::open(
+                crate::components::overlays::context_menu::open(
                     state,
                     event.client_x() as f64,
                     event.client_y() as f64,
-                    crate::components::context_menu::general_menu(),
+                    crate::components::overlays::context_menu::general_menu(),
                 );
             }
         >

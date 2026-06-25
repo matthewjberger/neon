@@ -68,11 +68,11 @@ fn render_node(state: EditorState, node: TreeNode, depth: usize) -> AnyView {
                 event.prevent_default();
                 event.stop_propagation();
                 state.editing.context_target.set(Some((menu_path.clone(), is_dir)));
-                crate::components::context_menu::open(
+                crate::components::overlays::context_menu::open(
                     state,
                     event.client_x() as f64,
                     event.client_y() as f64,
-                    crate::components::context_menu::tree_menu(),
+                    crate::components::overlays::context_menu::tree_menu(),
                 );
             }
         >

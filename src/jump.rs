@@ -8,7 +8,7 @@ use leptos::prelude::*;
 use web_sys::HtmlTextAreaElement;
 
 use crate::caret;
-use crate::components::find;
+use crate::components::overlays::find;
 use crate::state::{EditorState, JumpState, JumpTarget};
 
 const LABELS: &[u8] = b"asdfghjklqwertyuiopzxcvbnm";
