@@ -3,7 +3,7 @@ pub mod chat;
 pub mod console;
 pub mod context_menu;
 pub mod control_panel;
-pub mod editor_pane;
+pub mod editor;
 pub mod extensions;
 pub mod file_tree;
 pub mod find;

@@ -13,7 +13,7 @@ use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
 use crate::components::context_menu::ContextMenuView;
 use crate::components::control_panel::ControlPanel;
-use crate::components::editor_pane::EditorPane;
+use crate::components::editor::EditorPane;
 use crate::components::extensions::Extensions;
 use crate::components::file_tree::FileTree;
 use crate::components::find::FindBar;
