@@ -9,6 +9,8 @@ use protocol::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::tiles::TileContent;
+
 mod panes;
 
 /// The most console rows kept in [`EditorState::log`]; older rows drop as new
@@ -125,39 +127,6 @@ pub struct JumpState {
     pub targets: Vec<JumpTarget>,
     pub pending: String,
     pub awaiting_char: bool,
-}
-
-/// What a tile holds: a text buffer, or one of the editor's panels. Any tile can
-/// hold any of these, so the 3D view, console, terminal, and reference are
-/// contents you open into a pane, not fixed chrome.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub enum TileContent {
-    Buffer(BufferRef),
-    Viewport,
-    Console,
-    Terminal,
-    Reference,
-}
-
-impl TileContent {
-    /// The buffer this tile holds, or `None` for a panel tile.
-    pub fn as_buffer(&self) -> Option<&BufferRef> {
-        match self {
-            TileContent::Buffer(buffer) => Some(buffer),
-            _ => None,
-        }
-    }
-
-    /// The tab's display name.
-    pub fn title(&self, state: &EditorState) -> String {
-        match self {
-            TileContent::Buffer(buffer) => state.buffer_name(buffer.kind, &buffer.id),
-            TileContent::Viewport => "3D View".to_string(),
-            TileContent::Console => "Console".to_string(),
-            TileContent::Terminal => "Terminal".to_string(),
-            TileContent::Reference => "Reference".to_string(),
-        }
-    }
 }
 
 /// One editor pane: a stable key, its open tiles as tabs with an active index,

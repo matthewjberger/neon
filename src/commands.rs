@@ -275,9 +275,9 @@ pub fn run(
         EditorCommand::CloseSplit => state.close_focused(),
         EditorCommand::FocusOther => state.focus_next(),
         EditorCommand::NewWindow => crate::network::request_spawn_window(),
-        EditorCommand::TogglePreview => state.open_tile(crate::state::TileContent::Viewport),
-        EditorCommand::ToggleConsole => state.open_tile(crate::state::TileContent::Console),
-        EditorCommand::ToggleReference => state.open_tile(crate::state::TileContent::Reference),
+        EditorCommand::TogglePreview => state.open_tile(crate::tiles::TileContent::Viewport),
+        EditorCommand::ToggleConsole => state.open_tile(crate::tiles::TileContent::Console),
+        EditorCommand::ToggleReference => state.open_tile(crate::tiles::TileContent::Reference),
         EditorCommand::ToggleControlPanel => {
             state.panels.control_panel.update(|open| *open = !*open)
         }
@@ -383,7 +383,7 @@ pub fn run(
         EditorCommand::CargoTest => crate::terminal::run(state, "cargo test"),
         EditorCommand::CargoRun => crate::terminal::run(state, "cargo run"),
         EditorCommand::Interrupt => crate::terminal::interrupt(),
-        EditorCommand::ToggleTerminal => state.open_tile(crate::state::TileContent::Terminal),
+        EditorCommand::ToggleTerminal => state.open_tile(crate::tiles::TileContent::Terminal),
         EditorCommand::AddCursorBelow => crate::multicursor::add_below(state),
         EditorCommand::AddCursorAbove => crate::multicursor::add_above(state),
         EditorCommand::ClearCursors => crate::multicursor::clear(state),

@@ -5,7 +5,8 @@
 
 use leptos::prelude::*;
 
-use crate::state::{BufferRef, EditorState, Pane, PluginKind, TileContent};
+use crate::state::{BufferRef, EditorState, Pane, PluginKind};
+use crate::tiles::TileContent;
 
 impl EditorState {
     /// The focused pane, falling back to the first if the key is stale.

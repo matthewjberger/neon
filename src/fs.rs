@@ -12,7 +12,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
-use crate::state::{EditorState, FileBuffer, PluginKind, TileContent, TreeNode};
+use crate::state::{EditorState, FileBuffer, PluginKind, TreeNode};
+use crate::tiles::TileContent;
 
 const FS_URL: &str = "ws://127.0.0.1:8792";
 const RECONNECT_MS: i32 = 1000;

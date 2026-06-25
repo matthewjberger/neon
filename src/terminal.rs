@@ -99,7 +99,7 @@ pub fn interrupt() {
 /// command until the shell is ready.
 pub fn run(state: EditorState, command: &str) {
     let line = format!("{command}\r");
-    state.open_tile(crate::state::TileContent::Terminal);
+    state.open_tile(crate::tiles::TileContent::Terminal);
     if state.terminal.grid.get_untracked().is_some() {
         send_input(line.into_bytes());
     } else {

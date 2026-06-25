@@ -38,6 +38,7 @@ mod state;
 mod storage;
 mod terminal;
 mod theme;
+mod tiles;
 mod tour;
 mod undo;
 

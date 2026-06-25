@@ -12,14 +12,11 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::bridge::{self, Bridge};
-use crate::components::console::Console;
-use crate::components::reference::Reference;
-use crate::components::terminal::Terminal;
-use crate::components::viewport::Viewport;
 use crate::editor_plugins;
 use crate::highlight::highlight;
 use crate::lang::{self, Lang};
-use crate::state::{EditorState, PluginKind, TileContent, kind_readonly, language_for_path};
+use crate::state::{EditorState, PluginKind, kind_readonly, language_for_path};
+use crate::tiles;
 
 const APPLY_DELAY_MS: i32 = 350;
 
@@ -183,24 +180,7 @@ pub fn EditorPane(
             <TabBar state pane_key />
             <Show
                 when=move || active_id().is_some()
-                fallback=move || match content.get() {
-                    Some(TileContent::Viewport) => {
-                        view! { <Viewport bridge state /> }.into_any()
-                    }
-                    Some(TileContent::Console) => {
-                        view! { <Console bridge state /> }.into_any()
-                    }
-                    Some(TileContent::Terminal) => {
-                        view! { <Terminal state /> }.into_any()
-                    }
-                    Some(TileContent::Reference) => {
-                        view! { <Reference state /> }.into_any()
-                    }
-                    _ => {
-                        view! { <div class="editor-empty">"Open a buffer to edit"</div> }
-                            .into_any()
-                    }
-                }
+                fallback=move || tiles::body(content.get(), bridge, state)
             >
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
