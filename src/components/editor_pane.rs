@@ -390,6 +390,16 @@ fn handle_keydown(ctx: KeyContext) {
         debounce,
         request_id,
     } = ctx;
+    // A lone modifier press (e.g. Shift on the way to a `?`) is never a
+    // keystroke on its own; dispatching it would reset a pending leader
+    // sequence and dismiss the which-key menu. Plugins read modifiers as flags
+    // on a real key, so drop the standalone press here.
+    if matches!(
+        event.key().as_str(),
+        "Shift" | "Control" | "Alt" | "Meta" | "CapsLock" | "AltGraph"
+    ) {
+        return;
+    }
     if state.editing.jump.get_untracked().is_some() {
         return;
     }
