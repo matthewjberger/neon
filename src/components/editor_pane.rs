@@ -52,11 +52,16 @@ pub fn EditorPane(
             .panes
             .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
     };
-    let buffer = move || pane().and_then(|pane| pane.buffer().cloned());
-    let content = move || pane().and_then(|pane| pane.content().cloned());
-    let active_id = move || buffer().and_then(|buffer| buffer.id);
+    // Memoize the active buffer and content so they only notify when the tab
+    // actually changes, not when a divider drag rewrites the pane's flex. Plain
+    // closures here would re-run the body dispatch on every resize frame,
+    // remounting the viewport (and respawning the engine worker) mid-drag.
+    let buffer = Memo::new(move |_| pane().and_then(|pane| pane.buffer().cloned()));
+    let content = Memo::new(move |_| pane().and_then(|pane| pane.content().cloned()));
+    let active_id = move || buffer.get().and_then(|buffer| buffer.id);
     let active_kind = move || {
-        buffer()
+        buffer
+            .get()
             .map(|buffer| buffer.kind)
             .unwrap_or(PluginKind::Scene)
     };
@@ -75,7 +80,7 @@ pub fn EditorPane(
 
     Effect::new(move |_| {
         let goto = state.explorer.goto.get();
-        let current = buffer();
+        let current = buffer.get();
         let Some((path, line)) = goto else {
             return;
         };
@@ -177,7 +182,7 @@ pub fn EditorPane(
             <TabBar state pane_key />
             <Show
                 when=move || active_id().is_some()
-                fallback=move || match content() {
+                fallback=move || match content.get() {
                     Some(TileContent::Viewport) => {
                         view! { <Viewport bridge state /> }.into_any()
                     }

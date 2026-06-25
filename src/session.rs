@@ -2,14 +2,21 @@
 //! saved to local storage and restored on launch, so neon reopens where you left
 //! off. The plugin set persists separately (`plugins.rs`).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 
 use crate::state::{EditorState, Pane};
 
 const KEY: &str = "neon.session";
+const SAVE_DEBOUNCE_MS: i32 = 400;
+
+thread_local! {
+    static SAVE_TIMER: Cell<Option<i32>> = const { Cell::new(None) };
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct Session {
@@ -60,8 +67,28 @@ pub fn restore() {
     }
 }
 
-/// Saves the current workspace and open files.
+/// Schedules a debounced write of the workspace, so a divider drag that
+/// rewrites the layout many times a second persists once after it settles
+/// rather than hammering local storage each frame and stuttering the resize.
 pub fn save(state: EditorState) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    SAVE_TIMER.with(|timer| {
+        if let Some(handle) = timer.take() {
+            window.clear_timeout_with_handle(handle);
+        }
+        let callback = Closure::once_into_js(move || write(state));
+        if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            callback.unchecked_ref(),
+            SAVE_DEBOUNCE_MS,
+        ) {
+            timer.set(Some(handle));
+        }
+    });
+}
+
+fn write(state: EditorState) {
     let session = Session {
         root: state.explorer.root.get_untracked(),
         files: state
