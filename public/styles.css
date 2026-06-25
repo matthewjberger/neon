@@ -1310,7 +1310,12 @@ body {
   min-height: 30px;
 }
 
+.tab-bar.drop-target {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+}
+
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1320,10 +1325,29 @@ body {
   cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .tab:active {
   cursor: grabbing;
+}
+
+/* The insertion line where a dragged tab will land. */
+.tab.drop-target::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+/* Keep child elements from stealing dragenter/leave, so the indicator is steady. */
+.tab.drop-target .tab-name,
+.tab.drop-target .tab-close,
+.tab.drop-target .tab-dirty {
+  pointer-events: none;
 }
 
 .tab:hover {

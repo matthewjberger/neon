@@ -3,6 +3,7 @@
 //! buffer named by its entry in `state.panes`, keyed by `pane_key`, so every
 //! split pane edits independently. Built-ins are read-only.
 
+use std::cell::Cell;
 use std::collections::HashSet;
 
 use leptos::html;
@@ -282,17 +283,52 @@ pub fn EditorPane(
     }
 }
 
-/// The tab strip for one pane: a draggable, closable tab per open buffer.
+thread_local! {
+    /// The tab a drag started on, as `(pane_key, index)`, shared across every
+    /// pane's tab bar so a tab can be dropped into a different pane.
+    static TAB_DRAG: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
+}
+
+fn set_drop_target(event: &web_sys::DragEvent, on: bool) {
+    if let Some(element) = event
+        .current_target()
+        .and_then(|target| target.dyn_into::<web_sys::HtmlElement>().ok())
+    {
+        let list = element.class_list();
+        if on {
+            let _ = list.add_1("drop-target");
+        } else {
+            let _ = list.remove_1("drop-target");
+        }
+    }
+}
+
+/// The tab strip for one pane: a draggable, closable tab per open tile. Dragging
+/// a tab reorders it within the pane or moves it into another pane; dropping on
+/// the empty strip appends it.
 #[component]
 fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
-    let dragging = StoredValue::new(None::<usize>);
     let pane = move || {
         state
             .panes
             .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
     };
+    let tab_count = move || pane().map(|pane| pane.tabs.len()).unwrap_or(0);
     view! {
-        <div class="tab-bar">
+        <div
+            class="tab-bar"
+            on:dragover=move |event: web_sys::DragEvent| {
+                if TAB_DRAG.with(|drag| drag.get().is_some()) {
+                    event.prevent_default();
+                }
+            }
+            on:drop=move |event: web_sys::DragEvent| {
+                event.prevent_default();
+                if let Some((from_pane, from_index)) = TAB_DRAG.with(|drag| drag.take()) {
+                    state.move_tab_across(from_pane, from_index, pane_key, tab_count());
+                }
+            }
+        >
             {move || {
                 let current_pane = pane();
                 let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
@@ -313,20 +349,33 @@ fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                                 class:active=index == active
                                 draggable="true"
                                 on:click=move |_| state.focus_tab(pane_key, index)
-                                on:dragstart=move |_| dragging.set_value(Some(index))
+                                on:dragstart=move |_| {
+                                    TAB_DRAG.with(|drag| drag.set(Some((pane_key, index))));
+                                }
                                 on:dragover=move |event: web_sys::DragEvent| {
-                                    if dragging.get_value().is_some() {
+                                    if TAB_DRAG.with(|drag| drag.get().is_some()) {
                                         event.prevent_default();
+                                        event.stop_propagation();
+                                        set_drop_target(&event, true);
                                     }
+                                }
+                                on:dragleave=move |event: web_sys::DragEvent| {
+                                    set_drop_target(&event, false);
                                 }
                                 on:drop=move |event: web_sys::DragEvent| {
                                     event.prevent_default();
-                                    if let Some(from) = dragging.get_value() {
-                                        state.move_tab(pane_key, from, index);
+                                    event.stop_propagation();
+                                    set_drop_target(&event, false);
+                                    if let Some((from_pane, from_index)) = TAB_DRAG
+                                        .with(|drag| drag.take())
+                                    {
+                                        state.move_tab_across(from_pane, from_index, pane_key, index);
                                     }
-                                    dragging.set_value(None);
                                 }
-                                on:dragend=move |_| dragging.set_value(None)
+                                on:dragend=move |event: web_sys::DragEvent| {
+                                    set_drop_target(&event, false);
+                                    TAB_DRAG.with(|drag| drag.set(None));
+                                }
                                 on:mousedown=move |event: web_sys::MouseEvent| {
                                     if event.button() == 1 {
                                         event.prevent_default();

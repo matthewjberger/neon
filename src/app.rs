@@ -66,6 +66,13 @@ pub fn App() -> impl IntoView {
         theme::apply_theme(&state.theme.get());
     });
 
+    // Collapse any pane left without tabs (a closed-out pane, or one from an old
+    // saved layout) so it never lingers as dead "open a buffer" space.
+    Effect::new(move |_| {
+        state.panes.with(|panes| panes.len());
+        state.prune_empty_panes();
+    });
+
     Effect::new(move |_| {
         let plugins = state.plugins.get();
         crate::plugins::save(&plugins);

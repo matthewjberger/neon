@@ -91,42 +91,92 @@ impl EditorState {
         self.focused_key.set(pane_key);
     }
 
-    /// Closes a tab in a pane, leaving the pane open even with no tabs.
+    /// Closes a tab, removing the pane when it empties so a closed-out pane does
+    /// not linger as dead space, the way an editor group collapses.
     pub fn close_tab(&self, pane_key: usize, index: usize) {
+        let mut removed = false;
         self.panes.update(|panes| {
-            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == pane_key)
-                && index < pane.tabs.len()
-            {
-                pane.tabs.remove(index);
-                if index < pane.active {
-                    pane.active -= 1;
+            let Some(position) = panes.iter().position(|pane| pane.key == pane_key) else {
+                return;
+            };
+            if index < panes[position].tabs.len() {
+                panes[position].tabs.remove(index);
+                if index < panes[position].active {
+                    panes[position].active -= 1;
                 }
-                if pane.active >= pane.tabs.len() {
-                    pane.active = pane.tabs.len().saturating_sub(1);
+                let last = panes[position].tabs.len().saturating_sub(1);
+                if panes[position].active > last {
+                    panes[position].active = last;
                 }
             }
+            if panes[position].tabs.is_empty() && panes.len() > 1 {
+                panes.remove(position);
+                removed = true;
+            }
         });
+        if removed && self.focused_key.get_untracked() == pane_key {
+            let next = self
+                .panes
+                .with_untracked(|panes| panes.first().map(|pane| pane.key));
+            if let Some(next) = next {
+                self.focused_key.set(next);
+            }
+        }
     }
 
-    /// Reorder a tab within a pane, keeping the active buffer selected.
-    pub fn move_tab(&self, pane_key: usize, from: usize, to: usize) {
+    /// Moves a tab to a pane (the same one to reorder, another to relocate),
+    /// inserting it at `to_index` and collapsing the source pane if the move
+    /// empties it. The drop target of a cross-pane tab drag.
+    pub fn move_tab_across(
+        &self,
+        from_pane: usize,
+        from_index: usize,
+        to_pane: usize,
+        to_index: usize,
+    ) {
         self.panes.update(|panes| {
-            if let Some(pane) = panes.iter_mut().find(|pane| pane.key == pane_key)
-                && from < pane.tabs.len()
-                && to < pane.tabs.len()
-                && from != to
-            {
-                let active = pane.tabs.get(pane.active).cloned();
-                let tab = pane.tabs.remove(from);
-                pane.tabs.insert(to, tab);
-                if let Some(active) = active
-                    && let Some(index) = pane.tabs.iter().position(|tab| *tab == active)
-                {
-                    pane.active = index;
-                }
+            let Some(from) = panes.iter().position(|pane| pane.key == from_pane) else {
+                return;
+            };
+            if from_index >= panes[from].tabs.len() {
+                return;
+            }
+            let tab = panes[from].tabs.remove(from_index);
+            let last = panes[from].tabs.len().saturating_sub(1);
+            if panes[from].active > last {
+                panes[from].active = last;
+            }
+            let Some(to) = panes.iter().position(|pane| pane.key == to_pane) else {
+                let at = from_index.min(panes[from].tabs.len());
+                panes[from].tabs.insert(at, tab);
+                return;
+            };
+            // Removing the source shifts later indices in the same pane down one.
+            let shifted = if from_pane == to_pane && to_index > from_index {
+                to_index - 1
+            } else {
+                to_index
+            };
+            let at = shifted.min(panes[to].tabs.len());
+            panes[to].tabs.insert(at, tab);
+            panes[to].active = at;
+            if panes[from].tabs.is_empty() && panes.len() > 1 {
+                panes.remove(from);
             }
         });
-        self.focused_key.set(pane_key);
+        self.focused_key.set(to_pane);
+    }
+
+    /// Removes any pane that has no tabs, keeping at least one, so a layout that
+    /// somehow holds an empty pane (an old saved session) cleans itself up.
+    pub fn prune_empty_panes(&self) {
+        let has_empty = self.panes.with_untracked(|panes| {
+            panes.len() > 1 && panes.iter().any(|pane| pane.tabs.is_empty())
+        });
+        if has_empty {
+            self.panes
+                .update(|panes| panes.retain(|pane| !pane.tabs.is_empty()));
+        }
     }
 
     /// Append a pane next to the focused one, cloning its buffer, and focus it.
