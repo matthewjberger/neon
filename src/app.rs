@@ -47,7 +47,13 @@ pub fn App() -> impl IntoView {
     let lang = StoredValue::new_local(Some(lang::connect(state)));
 
     crate::session::capture();
-    crate::session::restore_layout(state);
+    // Only the primary window owns the saved workspace: child windows open with
+    // the default layout and never write the session, so the windows do not
+    // clobber each other's layout through the one storage key.
+    let primary = crate::network::detect_shell().0;
+    if primary {
+        crate::session::restore_layout(state);
+    }
     crate::network::start();
     crate::ipc::notify_host("enable-fs");
     crate::fs::start(state);
@@ -70,13 +76,15 @@ pub fn App() -> impl IntoView {
         crate::plugins::save_editor_plugins(&editor_plugins);
     });
 
-    Effect::new(move |_| {
-        state.explorer.root.get();
-        state.files.get();
-        state.panes.get();
-        state.focused_key.get();
-        crate::session::save(state);
-    });
+    if primary {
+        Effect::new(move |_| {
+            state.explorer.root.get();
+            state.files.get();
+            state.panes.get();
+            state.focused_key.get();
+            crate::session::save(state);
+        });
+    }
 
     Effect::new(move |_| {
         state.active_id();
