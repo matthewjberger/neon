@@ -40,13 +40,21 @@ pub fn Viewport(
     let drag = StoredValue::new(DragState::default());
     let touches = StoredValue::new(HashMap::<i32, TouchTrack>::new());
     let rect_offset = StoredValue::new((0.0_f64, 0.0_f64));
+    let connected_once = StoredValue::new(false);
 
     Effect::new(move |_| {
         let Some(canvas) = canvas_ref.get() else {
             return;
         };
-        if bridge.with_value(Option::is_some) {
+        // Connect once per mount. Reopening the viewport tile is a fresh mount,
+        // so terminate the worker the previous mount left running and connect a
+        // new one to this canvas; the new worker re-syncs plugins on Ready.
+        if connected_once.get_value() {
             return;
+        }
+        connected_once.set_value(true);
+        if let Some(old) = bridge.get_value() {
+            bridge::terminate(&old);
         }
         let dpr = render_dpr() as f32;
         let rect = canvas.get_bounding_client_rect();

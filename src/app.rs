@@ -99,9 +99,6 @@ pub fn App() -> impl IntoView {
         if let Some(lang) = lang.get_value() {
             lang::init(&lang, commands, state.stdlib.get_untracked());
         }
-        if let Some(bridge) = bridge.get_value() {
-            bridge::sync_plugins(&bridge, state);
-        }
     });
 
     let _ = window_event_listener(leptos::ev::keydown, move |event| {

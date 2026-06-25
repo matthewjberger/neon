@@ -28,6 +28,7 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
 
     let relay_socket: crate::relay::RelaySocket = Rc::new(RefCell::new(None));
     let response_socket = relay_socket.clone();
+    let sync_worker = worker.clone();
 
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
         let data = event.data();
@@ -48,6 +49,15 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
                 state.commands.set(commands);
                 state.stdlib.set(stdlib);
                 state.ready.set(true);
+                // Sync plugins on every Ready, not just the first, so a worker
+                // spawned by reopening the 3D view rebuilds the scene instead of
+                // coming up empty.
+                post(
+                    &sync_worker,
+                    &ClientMessage::SetPlugins {
+                        plugins: state.plugins.get_untracked(),
+                    },
+                );
             }
             WorkerMessage::Stats { fps, entity_count } => {
                 state.scene.fps.set(fps);
@@ -79,10 +89,19 @@ pub fn connect(offscreen: OffscreenCanvas, width: f32, height: f32, state: Edito
 
 /// Forwards a message to the worker inside the `{ message }` envelope.
 pub fn send(bridge: &Bridge, message: &ClientMessage) {
+    post(&bridge.worker, message);
+}
+
+/// Stops the worker, freeing the engine when its viewport tile closes.
+pub fn terminate(bridge: &Bridge) {
+    bridge.worker.terminate();
+}
+
+fn post(worker: &Worker, message: &ClientMessage) {
     let envelope = js_sys::Object::new();
     let value = serde_wasm_bindgen::to_value(message).unwrap_or(JsValue::NULL);
     let _ = js_sys::Reflect::set(&envelope, &JsValue::from_str(MESSAGE_KEY), &value);
-    let _ = bridge.worker.post_message(&envelope);
+    let _ = worker.post_message(&envelope);
 }
 
 /// Pushes the whole plugin set to the worker, which rebuilds and reruns it.
