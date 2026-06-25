@@ -13,6 +13,7 @@ pub mod loader;
 pub mod lsp_menus;
 pub mod lsp_panel;
 pub mod multicursor;
+pub mod overlays;
 pub mod palette;
 pub mod plugin_panel;
 pub mod popups;

@@ -10,28 +10,14 @@ use wasm_bindgen::{JsCast, JsValue};
 use crate::bridge::{self, Bridge};
 use crate::commands::{self, EditorCommand};
 use crate::components::activity_bar::ActivityBar;
-use crate::components::chat::ChatPane;
-use crate::components::context_menu::ContextMenuView;
-use crate::components::control_panel::ControlPanel;
 use crate::components::editor::EditorPane;
 use crate::components::extensions::Extensions;
 use crate::components::file_tree::FileTree;
-use crate::components::find::FindBar;
-use crate::components::help::Help;
-use crate::components::jump_overlay::JumpOverlay;
-use crate::components::loader::Loader;
-use crate::components::lsp_menus::{CodeActionMenu, RenamePrompt, SymbolPicker};
-use crate::components::lsp_panel::{LspConsent, LspLog};
-use crate::components::multicursor::MultiCursorOverlay;
-use crate::components::palette::Palette;
+use crate::components::overlays::Overlays;
 use crate::components::plugin_panel::PluginPanel;
-use crate::components::popups::{CompletionPopup, HoverCardView};
-use crate::components::problems::ProblemsPanel;
-use crate::components::prompt::PromptView;
 use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
 use crate::components::toolbar::Toolbar;
-use crate::components::which_key::WhichKey;
 use crate::lang;
 use crate::state::{EditorState, SidebarView};
 use crate::theme;
@@ -302,25 +288,7 @@ pub fn App() -> impl IntoView {
                 </div>
             </div>
             <StatusBar state />
-            <FindBar state />
-            <CompletionPopup state />
-            <HoverCardView state />
-            <JumpOverlay state />
-            <WhichKey state />
-            <LspConsent state />
-            <LspLog state />
-            <ProblemsPanel state />
-            <MultiCursorOverlay state />
-            <RenamePrompt state />
-            <CodeActionMenu state />
-            <SymbolPicker state />
-            <ControlPanel bridge state />
-            <ContextMenuView bridge state />
-            <PromptView state />
-            <Palette bridge state />
-            <Help state />
-            <ChatPane state />
-            <Loader state />
+            <Overlays bridge state />
         </div>
     }
     .into_any()
