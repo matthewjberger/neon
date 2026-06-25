@@ -260,21 +260,15 @@ async fn handle_tool_call(shared: &Arc<Shared>, params: Value, id: Option<Value>
         .to_string();
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
-    if name == "screenshot" {
-        return match screenshot_tool(shared, arguments).await {
-            Ok(content) => rpc_result(id, json!({ "content": content, "isError": false })),
-            Err(error) => rpc_result(
-                id,
-                json!({ "content": [{ "type": "text", "text": error }], "isError": true }),
-            ),
-        };
-    }
-
-    match run_tool(shared, &name, arguments).await {
-        Ok(text) => rpc_result(
-            id,
-            json!({ "content": [{ "type": "text", "text": text }], "isError": false }),
-        ),
+    let content = if name == "screenshot" {
+        screenshot_tool(shared, arguments).await
+    } else {
+        run_tool(shared, &name, arguments)
+            .await
+            .map(|text| json!([{ "type": "text", "text": text }]))
+    };
+    match content {
+        Ok(content) => rpc_result(id, json!({ "content": content, "isError": false })),
         Err(error) => rpc_result(
             id,
             json!({ "content": [{ "type": "text", "text": error }], "isError": true }),

@@ -1,8 +1,9 @@
-//! Synchronous plugin source check for the agent path. Mirrors the language
-//! worker (`lang/`): a rhai compile for syntax errors plus a scan for
+//! Synchronous plugin source check for the agent path: a rhai compile for
+//! syntax errors plus the shared [`protocol::unknown_command_calls`] scan for
 //! `commands.x(` calls that are not a known command or helper. The language
-//! worker drives the editor's live diagnostics off-thread; this answers the
-//! agent in one round trip so it knows whether its edit compiled.
+//! worker (`lang/`) runs the same scan to drive the editor's live diagnostics
+//! off-thread; this answers the agent in one round trip so it knows whether its
+//! edit compiled.
 
 use std::collections::HashSet;
 
