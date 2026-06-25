@@ -32,53 +32,49 @@ pub fn Reference(state: EditorState) -> impl IntoView {
     };
 
     view! {
-        <Show when=move || state.panels.reference.get() fallback=|| ()>
-            <div class="reference-overlay" on:click=move |_| state.panels.reference.set(false)>
-                <div class="reference-panel" on:click=move |event| event.stop_propagation()>
-                    <input
-                        class="reference-search"
-                        placeholder="filter commands and helpers"
-                        prop:value=move || filter.get()
-                        on:input=move |event| filter.set(event_target_value(&event))
-                    />
-                    <div class="reference-scroll">
-                        <div class="reference-section">"Standard library"</div>
-                        <For
-                            each=helpers
-                            key=|helper| helper.name.clone()
-                            children=move |helper| {
-                                view! {
-                                    <div class="reference-row">
-                                        <span class="tok-command">{helper.signature.clone()}</span>
-                                        <span class="reference-desc">{helper.description.clone()}</span>
-                                    </div>
-                                }
-                            }
-                        />
-                        <div class="reference-section">"Commands"</div>
-                        <For
-                            each=commands
-                            key=|command| command.method.clone()
-                            children=move |command| {
-                                let params = command
-                                    .fields
-                                    .iter()
-                                    .map(|field| field.name.clone())
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                view! {
-                                    <div class="reference-row">
-                                        <span class="tok-command">
-                                            {format!("{}({params})", command.method)}
-                                        </span>
-                                        <span class="reference-desc">{command.description.clone()}</span>
-                                    </div>
-                                }
-                            }
-                        />
-                    </div>
-                </div>
+        <div class="reference-panel">
+            <input
+                class="reference-search"
+                placeholder="filter commands and helpers"
+                prop:value=move || filter.get()
+                on:input=move |event| filter.set(event_target_value(&event))
+            />
+            <div class="reference-scroll">
+                <div class="reference-section">"Standard library"</div>
+                <For
+                    each=helpers
+                    key=|helper| helper.name.clone()
+                    children=move |helper| {
+                        view! {
+                            <div class="reference-row">
+                                <span class="tok-command">{helper.signature.clone()}</span>
+                                <span class="reference-desc">{helper.description.clone()}</span>
+                            </div>
+                        }
+                    }
+                />
+                <div class="reference-section">"Commands"</div>
+                <For
+                    each=commands
+                    key=|command| command.method.clone()
+                    children=move |command| {
+                        let params = command
+                            .fields
+                            .iter()
+                            .map(|field| field.name.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        view! {
+                            <div class="reference-row">
+                                <span class="tok-command">
+                                    {format!("{}({params})", command.method)}
+                                </span>
+                                <span class="reference-desc">{command.description.clone()}</span>
+                            </div>
+                        }
+                    }
+                />
             </div>
-        </Show>
+        </div>
     }
 }

@@ -136,6 +136,7 @@ pub enum TileContent {
     Viewport,
     Console,
     Terminal,
+    Reference,
 }
 
 impl TileContent {
@@ -154,6 +155,7 @@ impl TileContent {
             TileContent::Viewport => "3D View".to_string(),
             TileContent::Console => "Console".to_string(),
             TileContent::Terminal => "Terminal".to_string(),
+            TileContent::Reference => "Reference".to_string(),
         }
     }
 }
@@ -369,8 +371,6 @@ impl EditingState {
 pub struct PanelsState {
     /// Whether the Claude chat pane is shown.
     pub chat: RwSignal<bool>,
-    /// Whether the api reference pane is shown.
-    pub reference: RwSignal<bool>,
     /// Whether the control panel is shown: the master surface for dispatching any
     /// command and watching the api log.
     pub control_panel: RwSignal<bool>,
@@ -382,7 +382,6 @@ impl PanelsState {
     fn new() -> Self {
         Self {
             chat: RwSignal::new(false),
-            reference: RwSignal::new(false),
             control_panel: RwSignal::new(false),
             help: RwSignal::new(false),
         }

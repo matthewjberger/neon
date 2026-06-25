@@ -102,11 +102,7 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("new-window", Some("New window"), NewWindow),
         ("toggle-preview", Some("Open 3D view"), TogglePreview),
         ("toggle-console", Some("Open console"), ToggleConsole),
-        (
-            "toggle-reference",
-            Some("Toggle reference"),
-            ToggleReference,
-        ),
+        ("toggle-reference", Some("Open reference"), ToggleReference),
         (
             "toggle-control-panel",
             Some("Toggle control panel"),
@@ -281,7 +277,7 @@ pub fn run(
         EditorCommand::NewWindow => crate::network::request_spawn_window(),
         EditorCommand::TogglePreview => state.open_tile(crate::state::TileContent::Viewport),
         EditorCommand::ToggleConsole => state.open_tile(crate::state::TileContent::Console),
-        EditorCommand::ToggleReference => state.panels.reference.update(|open| *open = !*open),
+        EditorCommand::ToggleReference => state.open_tile(crate::state::TileContent::Reference),
         EditorCommand::ToggleControlPanel => {
             state.panels.control_panel.update(|open| *open = !*open)
         }

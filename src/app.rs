@@ -28,7 +28,6 @@ use crate::components::plugin_panel::PluginPanel;
 use crate::components::popups::{CompletionPopup, HoverCardView};
 use crate::components::problems::ProblemsPanel;
 use crate::components::prompt::PromptView;
-use crate::components::reference::Reference;
 use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
 use crate::components::toolbar::Toolbar;
@@ -292,7 +291,6 @@ pub fn App() -> impl IntoView {
             <CompletionPopup state />
             <HoverCardView state />
             <JumpOverlay state />
-            <Reference state />
             <WhichKey state />
             <LspConsent state />
             <LspLog state />

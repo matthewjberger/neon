@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::bridge::{self, Bridge};
 use crate::components::console::Console;
+use crate::components::reference::Reference;
 use crate::components::terminal::Terminal;
 use crate::components::viewport::Viewport;
 use crate::editor_plugins;
@@ -185,6 +186,9 @@ pub fn EditorPane(
                     }
                     Some(TileContent::Terminal) => {
                         view! { <Terminal state /> }.into_any()
+                    }
+                    Some(TileContent::Reference) => {
+                        view! { <Reference state /> }.into_any()
                     }
                     _ => {
                         view! { <div class="editor-empty">"Open a buffer to edit"</div> }
