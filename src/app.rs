@@ -11,7 +11,6 @@ use crate::bridge::{self, Bridge};
 use crate::commands::{self, EditorCommand};
 use crate::components::activity_bar::ActivityBar;
 use crate::components::chat::ChatPane;
-use crate::components::console::Console;
 use crate::components::context_menu::ContextMenuView;
 use crate::components::control_panel::ControlPanel;
 use crate::components::editor_pane::EditorPane;
@@ -34,7 +33,6 @@ use crate::components::search::SearchPanel;
 use crate::components::status_bar::StatusBar;
 use crate::components::terminal::Terminal;
 use crate::components::toolbar::Toolbar;
-use crate::components::viewport::Viewport;
 use crate::components::which_key::WhichKey;
 use crate::lang;
 use crate::state::{EditorState, SidebarView};
@@ -288,15 +286,6 @@ pub fn App() -> impl IntoView {
                             }
                         }
                     />
-                </div>
-                <div
-                    class="right-column"
-                    style:display=move || if state.panels.viewport.get() { "flex" } else { "none" }
-                >
-                    <Viewport bridge state />
-                    <Show when=move || state.panels.console.get() fallback=|| ()>
-                        <Console bridge state />
-                    </Show>
                 </div>
             </div>
             <StatusBar state />

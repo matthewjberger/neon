@@ -100,8 +100,8 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("close-split", Some("Close split"), CloseSplit),
         ("focus-other", Some("Focus other pane"), FocusOther),
         ("new-window", Some("New window"), NewWindow),
-        ("toggle-preview", Some("Toggle 3D preview"), TogglePreview),
-        ("toggle-console", Some("Toggle console"), ToggleConsole),
+        ("toggle-preview", Some("Open 3D view"), TogglePreview),
+        ("toggle-console", Some("Open console"), ToggleConsole),
         (
             "toggle-reference",
             Some("Toggle reference"),
@@ -279,8 +279,8 @@ pub fn run(
         EditorCommand::CloseSplit => state.close_focused(),
         EditorCommand::FocusOther => state.focus_next(),
         EditorCommand::NewWindow => crate::network::request_spawn_window(),
-        EditorCommand::TogglePreview => state.panels.viewport.update(|open| *open = !*open),
-        EditorCommand::ToggleConsole => state.panels.console.update(|open| *open = !*open),
+        EditorCommand::TogglePreview => state.open_tile(crate::state::TileContent::Viewport),
+        EditorCommand::ToggleConsole => state.open_tile(crate::state::TileContent::Console),
         EditorCommand::ToggleReference => state.panels.reference.update(|open| *open = !*open),
         EditorCommand::ToggleControlPanel => {
             state.panels.control_panel.update(|open| *open = !*open)

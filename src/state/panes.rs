@@ -5,7 +5,7 @@
 
 use leptos::prelude::*;
 
-use crate::state::{BufferRef, EditorState, Pane, PluginKind};
+use crate::state::{BufferRef, EditorState, Pane, PluginKind, TileContent};
 
 impl EditorState {
     /// The focused pane, falling back to the first if the key is stale.
@@ -58,18 +58,21 @@ impl EditorState {
     /// Open a buffer in the focused pane: focus its tab if already open, else add
     /// a tab and focus it.
     pub fn open_in_focused(&self, kind: PluginKind, id: Option<String>) {
+        self.open_tile(TileContent::Buffer(BufferRef { kind, id }));
+    }
+
+    /// Open a tile of any content in the focused pane: focus its tab if already
+    /// open, else add a tab and focus it. How the 3D view, console, terminal,
+    /// and reference get placed into a pane.
+    pub fn open_tile(&self, content: TileContent) {
         let key = self.focused_key.get_untracked();
         self.panes.update(|panes| {
             let index = panes.iter().position(|pane| pane.key == key).unwrap_or(0);
             if let Some(pane) = panes.get_mut(index) {
-                if let Some(existing) = pane
-                    .tabs
-                    .iter()
-                    .position(|tab| tab.kind == kind && tab.id == id)
-                {
+                if let Some(existing) = pane.tabs.iter().position(|tab| *tab == content) {
                     pane.active = existing;
                 } else {
-                    pane.tabs.push(BufferRef { kind, id });
+                    pane.tabs.push(content);
                     pane.active = pane.tabs.len() - 1;
                 }
             }

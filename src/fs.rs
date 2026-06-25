@@ -12,7 +12,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
-use crate::state::{EditorState, FileBuffer, PluginKind, TreeNode};
+use crate::state::{EditorState, FileBuffer, PluginKind, TileContent, TreeNode};
 
 const FS_URL: &str = "ws://127.0.0.1:8792";
 const RECONNECT_MS: i32 = 1000;
@@ -263,9 +263,11 @@ fn dispatch(state: EditorState, response: FsResponse) {
             state.panes.update(|panes| {
                 for pane in panes.iter_mut() {
                     for tab in pane.tabs.iter_mut() {
-                        if tab.kind == PluginKind::File && tab.id.as_deref() == Some(from.as_str())
+                        if let TileContent::Buffer(buffer) = tab
+                            && buffer.kind == PluginKind::File
+                            && buffer.id.as_deref() == Some(from.as_str())
                         {
-                            tab.id = Some(to.clone());
+                            buffer.id = Some(to.clone());
                         }
                     }
                 }
@@ -281,7 +283,9 @@ fn dispatch(state: EditorState, response: FsResponse) {
             state.panes.update(|panes| {
                 for pane in panes.iter_mut() {
                     pane.tabs.retain(|tab| {
-                        !(tab.kind == PluginKind::File && tab.id.as_deref() == Some(path.as_str()))
+                        !matches!(tab, TileContent::Buffer(buffer)
+                            if buffer.kind == PluginKind::File
+                                && buffer.id.as_deref() == Some(path.as_str()))
                     });
                     if pane.active >= pane.tabs.len() {
                         pane.active = pane.tabs.len().saturating_sub(1);

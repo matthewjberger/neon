@@ -126,21 +126,55 @@ pub struct JumpState {
     pub awaiting_char: bool,
 }
 
-/// One editor pane: a stable key, its open buffers as tabs with an active index,
+/// What a tile holds: a text buffer, or one of the editor's panels. Any tile can
+/// hold any of these, so the 3D view, console, terminal, and reference are
+/// contents you open into a pane, not fixed chrome.
+#[derive(Clone, PartialEq)]
+pub enum TileContent {
+    Buffer(BufferRef),
+    Viewport,
+    Console,
+}
+
+impl TileContent {
+    /// The buffer this tile holds, or `None` for a panel tile.
+    pub fn as_buffer(&self) -> Option<&BufferRef> {
+        match self {
+            TileContent::Buffer(buffer) => Some(buffer),
+            _ => None,
+        }
+    }
+
+    /// The tab's display name.
+    pub fn title(&self, state: &EditorState) -> String {
+        match self {
+            TileContent::Buffer(buffer) => state.buffer_name(buffer.kind, &buffer.id),
+            TileContent::Viewport => "3D View".to_string(),
+            TileContent::Console => "Console".to_string(),
+        }
+    }
+}
+
+/// One editor pane: a stable key, its open tiles as tabs with an active index,
 /// and its flex-grow weight in the split. Plain data, held in a `Vec`, so any
 /// number of panes can stack and each can hold any number of tabs.
 #[derive(Clone, PartialEq)]
 pub struct Pane {
     pub key: usize,
-    pub tabs: Vec<BufferRef>,
+    pub tabs: Vec<TileContent>,
     pub active: usize,
     pub flex: f32,
 }
 
 impl Pane {
-    /// The buffer the active tab points to, if any.
-    pub fn buffer(&self) -> Option<&BufferRef> {
+    /// The active tab's content, if any.
+    pub fn content(&self) -> Option<&TileContent> {
         self.tabs.get(self.active)
+    }
+
+    /// The buffer the active tab holds, if it is a buffer tile.
+    pub fn buffer(&self) -> Option<&BufferRef> {
+        self.content().and_then(TileContent::as_buffer)
     }
 }
 
@@ -333,11 +367,6 @@ impl EditingState {
 /// Reached as `state.panels`.
 #[derive(Clone, Copy)]
 pub struct PanelsState {
-    /// Whether the 3D preview pane is shown. Hiding it gives the editor the full
-    /// width, so neon works as a plain code editor.
-    pub viewport: RwSignal<bool>,
-    /// Whether the console pane is shown.
-    pub console: RwSignal<bool>,
     /// Whether the Claude chat pane is shown.
     pub chat: RwSignal<bool>,
     /// Whether the api reference pane is shown.
@@ -352,8 +381,6 @@ pub struct PanelsState {
 impl PanelsState {
     fn new() -> Self {
         Self {
-            viewport: RwSignal::new(true),
-            console: RwSignal::new(true),
             chat: RwSignal::new(false),
             reference: RwSignal::new(false),
             control_panel: RwSignal::new(false),
@@ -447,15 +474,23 @@ impl EditorState {
             stdlib: RwSignal::new(Vec::new()),
             plugins: RwSignal::new(plugins),
             editor_plugins: RwSignal::new(crate::plugins::load_editor_plugins()),
-            panes: RwSignal::new(vec![Pane {
-                key: 0,
-                tabs: vec![BufferRef {
-                    kind: PluginKind::Scene,
-                    id: active,
-                }],
-                active: 0,
-                flex: 1.0,
-            }]),
+            panes: RwSignal::new(vec![
+                Pane {
+                    key: 0,
+                    tabs: vec![TileContent::Buffer(BufferRef {
+                        kind: PluginKind::Scene,
+                        id: active,
+                    })],
+                    active: 0,
+                    flex: 1.0,
+                },
+                Pane {
+                    key: 1,
+                    tabs: vec![TileContent::Viewport],
+                    active: 0,
+                    flex: 1.0,
+                },
+            ]),
             focused_key: RwSignal::new(0),
             split_vertical: RwSignal::new(true),
             files: RwSignal::new(Vec::new()),

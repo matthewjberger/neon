@@ -11,10 +11,12 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::bridge::{self, Bridge};
+use crate::components::console::Console;
+use crate::components::viewport::Viewport;
 use crate::editor_plugins;
 use crate::highlight::highlight;
 use crate::lang::{self, Lang};
-use crate::state::{EditorState, PluginKind, kind_readonly, language_for_path};
+use crate::state::{EditorState, PluginKind, TileContent, kind_readonly, language_for_path};
 
 const APPLY_DELAY_MS: i32 = 350;
 
@@ -49,6 +51,7 @@ pub fn EditorPane(
             .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
     };
     let buffer = move || pane().and_then(|pane| pane.buffer().cloned());
+    let content = move || pane().and_then(|pane| pane.content().cloned());
     let active_id = move || buffer().and_then(|buffer| buffer.id);
     let active_kind = move || {
         buffer()
@@ -172,7 +175,18 @@ pub fn EditorPane(
             <TabBar state pane_key />
             <Show
                 when=move || active_id().is_some()
-                fallback=|| view! { <div class="editor-empty">"Open a buffer to edit"</div> }
+                fallback=move || match content() {
+                    Some(TileContent::Viewport) => {
+                        view! { <Viewport bridge state /> }.into_any()
+                    }
+                    Some(TileContent::Console) => {
+                        view! { <Console bridge state /> }.into_any()
+                    }
+                    _ => {
+                        view! { <div class="editor-empty">"Open a buffer to edit"</div> }
+                            .into_any()
+                    }
+                }
             >
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
@@ -275,8 +289,11 @@ fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                     .into_iter()
                     .enumerate()
                     .map(|(index, tab)| {
-                        let name = state.buffer_name(tab.kind, &tab.id);
-                        let dirty = state.is_dirty(tab.kind, &tab.id);
+                        let name = tab.title(&state);
+                        let dirty = tab
+                            .as_buffer()
+                            .map(|buffer| state.is_dirty(buffer.kind, &buffer.id))
+                            .unwrap_or(false);
                         view! {
                             <div
                                 class="tab"
