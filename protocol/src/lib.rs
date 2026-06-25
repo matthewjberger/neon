@@ -11,7 +11,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod diff;
 mod lint;
+pub use diff::{DiffLine, Hunk, LineChange, diff_lines, hunks};
 pub use lint::{RHAI_BUILTINS, unknown_command_calls};
 
 /// Envelope field carrying the serialized message in every `postMessage`.
