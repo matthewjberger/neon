@@ -12,8 +12,7 @@ use crate::state::EditorState;
 pub fn Terminal(state: EditorState) -> impl IntoView {
     let grid_ref = NodeRef::<html::Div>::new();
     Effect::new(move |_| {
-        if state.terminal.open.get()
-            && state.terminal.connected.get()
+        if state.terminal.connected.get()
             && let Some(element) = grid_ref.get()
         {
             let _ = element.focus();
@@ -22,9 +21,7 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
         }
     });
     let _ = window_event_listener(leptos::ev::resize, move |_| {
-        if state.terminal.open.get_untracked()
-            && let Some(element) = grid_ref.get_untracked()
-        {
+        if let Some(element) = grid_ref.get_untracked() {
             let (cols, rows) = measure(&element);
             crate::terminal::resize(cols, rows);
         }
@@ -36,50 +33,45 @@ pub fn Terminal(state: EditorState) -> impl IntoView {
         }
     };
     view! {
-        <Show when=move || state.terminal.open.get() fallback=|| ()>
-            <div class="terminal-panel">
-                <div class="terminal-header">
-                    <span>"Terminal"</span>
-                    <span class="terminal-actions">
-                        <button class="icon-button" on:click=move |_| crate::terminal::interrupt()>
-                            "^C"
-                        </button>
-                        <button class="icon-button" on:click=move |_| state.terminal.open.set(false)>
-                            "x"
-                        </button>
-                    </span>
-                </div>
-                <div class="terminal-grid" tabindex="0" node_ref=grid_ref on:keydown=on_keydown>
-                    {move || {
-                        let Some(grid) = state.terminal.grid.get() else {
-                            return ().into_any();
-                        };
-                        let rows = grid
-                            .lines
-                            .into_iter()
-                            .map(|spans| {
-                                let cells = spans
-                                    .into_iter()
-                                    .map(|span| {
-                                        let style = span_style(&span);
-                                        view! { <span style=style>{span.text}</span> }
-                                    })
-                                    .collect_view();
-                                view! { <div class="term-row">{cells}</div> }
-                            })
-                            .collect_view();
-                        let cursor = grid.cursor_visible.then(|| {
-                            let style = format!(
-                                "left:calc({} * 1ch);top:calc({} * 1.2em)",
-                                grid.cursor_col, grid.cursor_row,
-                            );
-                            view! { <div class="term-cursor" style=style></div> }
-                        });
-                        view! { {rows} {cursor} }.into_any()
-                    }}
-                </div>
+        <div class="terminal-panel">
+            <div class="terminal-header">
+                <span>"Terminal"</span>
+                <span class="terminal-actions">
+                    <button class="icon-button" on:click=move |_| crate::terminal::interrupt()>
+                        "^C"
+                    </button>
+                </span>
             </div>
-        </Show>
+            <div class="terminal-grid" tabindex="0" node_ref=grid_ref on:keydown=on_keydown>
+                {move || {
+                    let Some(grid) = state.terminal.grid.get() else {
+                        return ().into_any();
+                    };
+                    let rows = grid
+                        .lines
+                        .into_iter()
+                        .map(|spans| {
+                            let cells = spans
+                                .into_iter()
+                                .map(|span| {
+                                    let style = span_style(&span);
+                                    view! { <span style=style>{span.text}</span> }
+                                })
+                                .collect_view();
+                            view! { <div class="term-row">{cells}</div> }
+                        })
+                        .collect_view();
+                    let cursor = grid.cursor_visible.then(|| {
+                        let style = format!(
+                            "left:calc({} * 1ch);top:calc({} * 1.2em)",
+                            grid.cursor_col, grid.cursor_row,
+                        );
+                        view! { <div class="term-cursor" style=style></div> }
+                    });
+                    view! { {rows} {cursor} }.into_any()
+                }}
+            </div>
+        </div>
     }
 }
 

@@ -134,6 +134,7 @@ pub enum TileContent {
     Buffer(BufferRef),
     Viewport,
     Console,
+    Terminal,
 }
 
 impl TileContent {
@@ -151,6 +152,7 @@ impl TileContent {
             TileContent::Buffer(buffer) => state.buffer_name(buffer.kind, &buffer.id),
             TileContent::Viewport => "3D View".to_string(),
             TileContent::Console => "Console".to_string(),
+            TileContent::Terminal => "Terminal".to_string(),
         }
     }
 }
@@ -186,8 +188,6 @@ pub struct TerminalState {
     pub grid: RwSignal<Option<TermGrid>>,
     /// A command queued to run once the PTY's shell is ready.
     pub pending: RwSignal<Option<String>>,
-    /// Whether the terminal panel is shown.
-    pub open: RwSignal<bool>,
     /// Whether the page is connected to the desktop terminal relay.
     pub connected: RwSignal<bool>,
 }
@@ -197,7 +197,6 @@ impl TerminalState {
         Self {
             grid: RwSignal::new(None),
             pending: RwSignal::new(None),
-            open: RwSignal::new(false),
             connected: RwSignal::new(false),
         }
     }
