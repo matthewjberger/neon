@@ -290,13 +290,11 @@ fn dispatch(state: EditorState, response: FsResponse) {
             });
         }
         FsResponse::Error { message, .. } => {
-            state.log.update(|log| {
-                log.push(protocol::LogEntry {
-                    kind: LogKind::Error,
-                    label: "fs".to_string(),
-                    detail: message,
-                });
-            });
+            state.record_log([protocol::LogEntry {
+                kind: LogKind::Error,
+                label: "fs".to_string(),
+                detail: message,
+            }]);
         }
     }
 }

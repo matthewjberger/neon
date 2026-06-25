@@ -582,6 +582,13 @@ fn prev_word(text: &[char], caret: usize) -> usize {
     index
 }
 
+/// The most compiled plugin ASTs kept. Each distinct source (every edit of an
+/// editor plugin is a new one) caches an entry, so without a cap the map grows
+/// for the whole session. When it fills, drop everything and recompile on
+/// demand; the working set is a handful of enabled plugins, so the rebuild is
+/// cheap and rare.
+const CACHE_LIMIT: usize = 64;
+
 fn compiled(source: &str) -> Option<AST> {
     let key = hash_source(source);
     CACHE.with(|cache| {
@@ -589,7 +596,11 @@ fn compiled(source: &str) -> Option<AST> {
             return Some(ast.clone());
         }
         let ast = ENGINE.with(|engine| engine.compile(source).ok())?;
-        cache.borrow_mut().insert(key, ast.clone());
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(key, ast.clone());
         Some(ast)
     })
 }
