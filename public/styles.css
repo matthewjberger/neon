@@ -1325,7 +1325,42 @@ body {
   cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
+  user-select: none;
   transition: background 0.12s ease, color 0.12s ease;
+}
+
+/* Fills the rest of the strip so dropping past the last tab appends here. */
+.tab-tail {
+  position: relative;
+  flex: 1;
+  min-width: 24px;
+}
+
+.tab-tail.drop-target::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+/* The tab that follows the pointer while dragging. */
+.tab-drag-preview {
+  position: fixed;
+  z-index: 1000;
+  transform: translate(8px, 8px);
+  padding: 4px 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.9;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .tab:active {

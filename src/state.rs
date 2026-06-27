@@ -279,6 +279,24 @@ impl ExplorerState {
     }
 }
 
+/// An in-progress tab drag. Driven by pointer events, not the HTML5 drag API,
+/// because the desktop webview (WebView2) does not deliver `drag*` events to
+/// page elements. Holds the tab being dragged, the live pointer position for the
+/// floating preview, whether the pointer has moved far enough to count as a drag
+/// rather than a click, and the resolved drop slot `(pane_key, insert_index)`.
+#[derive(Clone, PartialEq)]
+pub struct TabDrag {
+    pub from_pane: usize,
+    pub from_index: usize,
+    pub title: String,
+    pub origin_x: f64,
+    pub origin_y: f64,
+    pub x: f64,
+    pub y: f64,
+    pub started: bool,
+    pub target: Option<(usize, usize)>,
+}
+
 /// Editor input state and the transient overlays it drives: the modal mode, the
 /// status line, multi-cursor offsets, the jump and which-key overlays, the find
 /// and palette bars, and the right-click and prompt popups. Reached as
@@ -313,6 +331,8 @@ pub struct EditingState {
     pub context_target: RwSignal<Option<(String, bool)>>,
     /// The open text prompt (new file, rename, delete), when one is showing.
     pub prompt: RwSignal<Option<Prompt>>,
+    /// The tab being dragged with the pointer, when a drag is in progress.
+    pub tab_drag: RwSignal<Option<TabDrag>>,
 }
 
 impl EditingState {
@@ -330,6 +350,7 @@ impl EditingState {
             context_menu: RwSignal::new(None),
             context_target: RwSignal::new(None),
             prompt: RwSignal::new(None),
+            tab_drag: RwSignal::new(None),
         }
     }
 }

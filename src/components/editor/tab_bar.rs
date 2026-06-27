@@ -1,35 +1,19 @@
 //! The pane tab strip and cross-pane tab dragging, split out of the editor.
-
-use std::cell::Cell;
+//!
+//! Dragging is pointer-driven, not the HTML5 drag API: the desktop webview
+//! (WebView2) never delivers `drag*` events to page elements, so a tab is
+//! dragged the same way the pane dividers are, with pointer events and a state
+//! signal. `App` hosts the window-level `pointermove`/`pointerup` listeners and
+//! the floating preview; this strip starts the drag and shows the drop line.
 
 use leptos::prelude::*;
-use wasm_bindgen::JsCast;
 
-use crate::state::EditorState;
-
-thread_local! {
-    /// The tab a drag started on, as `(pane_key, index)`, shared across every
-    /// pane's tab bar so a tab can be dropped into a different pane.
-    static TAB_DRAG: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
-}
-
-fn set_drop_target(event: &web_sys::DragEvent, on: bool) {
-    if let Some(element) = event
-        .current_target()
-        .and_then(|target| target.dyn_into::<web_sys::HtmlElement>().ok())
-    {
-        let list = element.class_list();
-        if on {
-            let _ = list.add_1("drop-target");
-        } else {
-            let _ = list.remove_1("drop-target");
-        }
-    }
-}
+use crate::state::{EditorState, TabDrag};
 
 /// The tab strip for one pane: a draggable, closable tab per open tile. Dragging
-/// a tab reorders it within the pane or moves it into another pane; dropping on
-/// the empty strip appends it.
+/// a tab reorders it within the pane or moves it into another pane; dropping past
+/// the last tab appends it. The `data-pane` and `data-index` attributes let the
+/// drag hit-test resolve the drop slot from the pointer position.
 #[component]
 pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
     let pane = move || {
@@ -38,21 +22,14 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
             .with(|panes| panes.iter().find(|pane| pane.key == pane_key).cloned())
     };
     let tab_count = move || pane().map(|pane| pane.tabs.len()).unwrap_or(0);
+    let tail_target = move || {
+        state.editing.tab_drag.with(|drag| {
+            drag.as_ref()
+                .is_some_and(|drag| drag.started && drag.target == Some((pane_key, tab_count())))
+        })
+    };
     view! {
-        <div
-            class="tab-bar"
-            on:dragover=move |event: web_sys::DragEvent| {
-                if TAB_DRAG.with(|drag| drag.get().is_some()) {
-                    event.prevent_default();
-                }
-            }
-            on:drop=move |event: web_sys::DragEvent| {
-                event.prevent_default();
-                if let Some((from_pane, from_index)) = TAB_DRAG.with(|drag| drag.take()) {
-                    state.move_tab_across(from_pane, from_index, pane_key, tab_count());
-                }
-            }
-        >
+        <div class="tab-bar" data-pane=pane_key>
             {move || {
                 let current_pane = pane();
                 let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
@@ -67,38 +44,41 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                             .as_buffer()
                             .map(|buffer| state.is_dirty(buffer.kind, &buffer.id))
                             .unwrap_or(false);
+                        let preview = name.clone();
+                        let is_drop = move || {
+                            state.editing.tab_drag.with(|drag| {
+                                drag.as_ref().is_some_and(|drag| {
+                                    drag.started && drag.target == Some((pane_key, index))
+                                })
+                            })
+                        };
                         view! {
                             <div
                                 class="tab"
                                 class:active=index == active
-                                draggable="true"
+                                class:drop-target=is_drop
+                                data-index=index
                                 on:click=move |_| state.focus_tab(pane_key, index)
-                                on:dragstart=move |_| {
-                                    TAB_DRAG.with(|drag| drag.set(Some((pane_key, index))));
-                                }
-                                on:dragover=move |event: web_sys::DragEvent| {
-                                    if TAB_DRAG.with(|drag| drag.get().is_some()) {
-                                        event.prevent_default();
-                                        event.stop_propagation();
-                                        set_drop_target(&event, true);
+                                on:pointerdown=move |event: web_sys::PointerEvent| {
+                                    if event.button() != 0 {
+                                        return;
                                     }
-                                }
-                                on:dragleave=move |event: web_sys::DragEvent| {
-                                    set_drop_target(&event, false);
-                                }
-                                on:drop=move |event: web_sys::DragEvent| {
-                                    event.prevent_default();
-                                    event.stop_propagation();
-                                    set_drop_target(&event, false);
-                                    if let Some((from_pane, from_index)) = TAB_DRAG
-                                        .with(|drag| drag.take())
-                                    {
-                                        state.move_tab_across(from_pane, from_index, pane_key, index);
-                                    }
-                                }
-                                on:dragend=move |event: web_sys::DragEvent| {
-                                    set_drop_target(&event, false);
-                                    TAB_DRAG.with(|drag| drag.set(None));
+                                    state
+                                        .editing
+                                        .tab_drag
+                                        .set(
+                                            Some(TabDrag {
+                                                from_pane: pane_key,
+                                                from_index: index,
+                                                title: preview.clone(),
+                                                origin_x: event.client_x() as f64,
+                                                origin_y: event.client_y() as f64,
+                                                x: event.client_x() as f64,
+                                                y: event.client_y() as f64,
+                                                started: false,
+                                                target: None,
+                                            }),
+                                        );
                                 }
                                 on:mousedown=move |event: web_sys::MouseEvent| {
                                     if event.button() == 1 {
@@ -124,6 +104,9 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                                 </Show>
                                 <button
                                     class="tab-close"
+                                    on:pointerdown=move |event: web_sys::PointerEvent| {
+                                        event.stop_propagation();
+                                    }
                                     on:click=move |event: web_sys::MouseEvent| {
                                         event.stop_propagation();
                                         state.close_tab(pane_key, index);
@@ -136,6 +119,7 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                     })
                     .collect_view()
             }}
+            <div class="tab-tail" class:drop-target=tail_target></div>
         </div>
     }
 }

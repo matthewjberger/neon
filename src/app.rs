@@ -230,6 +230,42 @@ pub fn App() -> impl IntoView {
         dragging.set_value(None);
     });
 
+    // Tab dragging. Pointer-driven because WebView2 does not deliver HTML5
+    // `drag*` events to page elements; the divider drag above uses the same
+    // pattern. A drag only begins once the pointer leaves a small dead zone, so
+    // a plain click still focuses the tab.
+    let _ = window_event_listener(leptos::ev::pointermove, move |event| {
+        let Some(mut drag) = state.editing.tab_drag.get_untracked() else {
+            return;
+        };
+        let x = event.client_x() as f64;
+        let y = event.client_y() as f64;
+        if !drag.started {
+            let dx = x - drag.origin_x;
+            let dy = y - drag.origin_y;
+            if dx * dx + dy * dy < TAB_DRAG_THRESHOLD * TAB_DRAG_THRESHOLD {
+                return;
+            }
+            drag.started = true;
+        }
+        drag.x = x;
+        drag.y = y;
+        drag.target = tab_drop_target(state, x, y);
+        state.editing.tab_drag.set(Some(drag));
+    });
+
+    let _ = window_event_listener(leptos::ev::pointerup, move |_| {
+        let Some(drag) = state.editing.tab_drag.get_untracked() else {
+            return;
+        };
+        state.editing.tab_drag.set(None);
+        if let Some((to_pane, to_index)) = drag.target
+            && drag.started
+        {
+            state.move_tab_across(drag.from_pane, drag.from_index, to_pane, to_index);
+        }
+    });
+
     let split_below = move || state.pane_count() > 1 && !state.split_vertical.get();
 
     view! {
@@ -289,9 +325,59 @@ pub fn App() -> impl IntoView {
             </div>
             <StatusBar state />
             <Overlays bridge state />
+            {move || {
+                state
+                    .editing
+                    .tab_drag
+                    .with(|drag| {
+                        drag.as_ref()
+                            .filter(|drag| drag.started)
+                            .map(|drag| {
+                                let style = format!("left: {}px; top: {}px;", drag.x, drag.y);
+                                let title = drag.title.clone();
+                                view! {
+                                    <div class="tab-drag-preview" style=style>
+                                        {title}
+                                    </div>
+                                }
+                            })
+                    })
+            }}
         </div>
     }
     .into_any()
+}
+
+/// How far (in pixels) the pointer must travel from a tab's `pointerdown` before
+/// the press counts as a drag rather than a click.
+const TAB_DRAG_THRESHOLD: f64 = 4.0;
+
+/// Resolves the tab drop slot under the pointer as `(pane_key, insert_index)`,
+/// hit-testing the document so a drop can land in any pane. Over a tab, the
+/// pointer's side of that tab picks before or after it; over a tab bar's empty
+/// tail, the tab appends to that pane.
+fn tab_drop_target(state: EditorState, x: f64, y: f64) -> Option<(usize, usize)> {
+    let document = web_sys::window()?.document()?;
+    let element = document.element_from_point(x as f32, y as f32)?;
+    let bar = element.closest(".tab-bar").ok().flatten()?;
+    let pane_key: usize = bar.get_attribute("data-pane")?.parse().ok()?;
+    if let Some(tab) = element.closest(".tab").ok().flatten()
+        && let Some(index) = tab
+            .get_attribute("data-index")
+            .and_then(|index| index.parse::<usize>().ok())
+    {
+        let rect = tab.get_bounding_client_rect();
+        let after = x > rect.left() + rect.width() / 2.0;
+        return Some((pane_key, if after { index + 1 } else { index }));
+    }
+    let count = state.panes.with_untracked(|panes| {
+        panes
+            .iter()
+            .find(|pane| pane.key == pane_key)
+            .map(|pane| pane.tabs.len())
+            .unwrap_or(0)
+    });
+    Some((pane_key, count))
 }
 
 /// Looks up a command by id and runs it, the single path every global shortcut
