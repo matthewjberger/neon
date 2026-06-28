@@ -7,6 +7,12 @@
 //   ops                  push actions here
 //   state                a map that persists across keystrokes
 //
+// Read-only view of the buffer (the host owns the text):
+//   caret                #{ line, column, offset } of the cursor, all 0-based
+//   line_text            the text of the line the caret sits on
+//   selection            the selected text, or "" when nothing is selected
+//   word                 the word under the caret
+//
 // Push to ops:
 //   "Consume"                       stop the key from typing normally
 //   #{ SetMode: "insert" }          set the mode label

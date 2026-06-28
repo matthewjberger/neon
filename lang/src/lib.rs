@@ -139,6 +139,14 @@ mod tests {
         scope.push("ctrl", false);
         scope.push("shift", false);
         scope.push("alt", false);
+        let mut caret = rhai::Map::new();
+        caret.insert("line".into(), rhai::Dynamic::from_int(0));
+        caret.insert("column".into(), rhai::Dynamic::from_int(0));
+        caret.insert("offset".into(), rhai::Dynamic::from_int(0));
+        scope.push("caret", caret);
+        scope.push("line_text", String::new());
+        scope.push("selection", String::new());
+        scope.push("word", String::new());
         scope.push("ops", rhai::Array::new());
         scope.push("state", state_map.clone());
         engine

@@ -94,7 +94,8 @@ pub fn handle_key(
     event: &KeyEvent,
 ) -> KeyOutcome {
     let mode = state.editing.mode.get_untracked();
-    let ops = dispatch(state, event, &mode);
+    let introspection = introspect(textarea);
+    let ops = dispatch(state, event, &mode, &introspection);
     if ops.is_empty() {
         return KeyOutcome {
             consumed: false,
@@ -106,7 +107,87 @@ pub fn handle_key(
     KeyOutcome { consumed, changed }
 }
 
-fn dispatch(state: EditorState, event: &KeyEvent, mode: &str) -> Vec<EditorOp> {
+/// The read-only view of the buffer a plugin's `on_key` sees: where the caret is,
+/// the line it sits on, the selected text, and the word under it. The host owns
+/// the buffer, so this is how a plugin reasons about content (text objects,
+/// surround, search the word under the caret) without touching the textarea.
+struct Introspection {
+    caret_line: i64,
+    caret_column: i64,
+    caret_offset: i64,
+    line_text: String,
+    selection: String,
+    word: String,
+}
+
+/// Reads the introspection a keystroke exposes from the focused textarea.
+fn introspect(textarea: &HtmlTextAreaElement) -> Introspection {
+    let value = textarea.value();
+    let chars: Vec<char> = value.chars().collect();
+    let selection_start = textarea.selection_start().ok().flatten().unwrap_or(0) as usize;
+    let selection_end = textarea.selection_end().ok().flatten().unwrap_or(0) as usize;
+    let caret = selection_start.min(chars.len());
+    let start = line_start(&chars, caret);
+    let end = line_end(&chars, caret);
+    let caret_line = chars[..start]
+        .iter()
+        .filter(|character| **character == '\n')
+        .count() as i64;
+    let line_text: String = chars[start..end].iter().collect();
+    let mut word_start = caret;
+    while word_start > 0 && is_word(chars[word_start - 1]) {
+        word_start -= 1;
+    }
+    let mut word_end = caret;
+    while word_end < chars.len() && is_word(chars[word_end]) {
+        word_end += 1;
+    }
+    let word: String = chars[word_start..word_end].iter().collect();
+    Introspection {
+        caret_line,
+        caret_column: (caret - start) as i64,
+        caret_offset: caret as i64,
+        line_text,
+        selection: selection_text(&value, selection_start, selection_end),
+        word,
+    }
+}
+
+/// The selected text between two UTF-16 offsets, or empty when nothing is
+/// selected.
+fn selection_text(value: &str, start: usize, end: usize) -> String {
+    if end <= start {
+        return String::new();
+    }
+    let units: Vec<u16> = value.encode_utf16().collect();
+    if start >= units.len() {
+        return String::new();
+    }
+    String::from_utf16_lossy(&units[start..end.min(units.len())])
+}
+
+/// The caret introspection as the rhai map a plugin reads as `caret.line`,
+/// `caret.column`, and `caret.offset`.
+fn caret_map(introspection: &Introspection) -> Map {
+    let mut map = Map::new();
+    map.insert("line".into(), Dynamic::from_int(introspection.caret_line));
+    map.insert(
+        "column".into(),
+        Dynamic::from_int(introspection.caret_column),
+    );
+    map.insert(
+        "offset".into(),
+        Dynamic::from_int(introspection.caret_offset),
+    );
+    map
+}
+
+fn dispatch(
+    state: EditorState,
+    event: &KeyEvent,
+    mode: &str,
+    introspection: &Introspection,
+) -> Vec<EditorOp> {
     let plugins = state.editor_plugins.get_untracked();
     let mut all_ops = Vec::new();
     for plugin in plugins.iter().filter(|plugin| plugin.enabled) {
@@ -127,6 +208,10 @@ fn dispatch(state: EditorState, event: &KeyEvent, mode: &str) -> Vec<EditorOp> {
         scope.push("ctrl", event.ctrl);
         scope.push("shift", event.shift);
         scope.push("alt", event.alt);
+        scope.push("caret", caret_map(introspection));
+        scope.push("line_text", introspection.line_text.clone());
+        scope.push("selection", introspection.selection.clone());
+        scope.push("word", introspection.word.clone());
         scope.push("ops", Array::new());
         scope.push("state", plugin_state);
         let ran = ENGINE
