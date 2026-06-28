@@ -300,7 +300,10 @@ pub fn EditorPane(
                             }
                             state.editing.scroll.update(|tick| *tick = tick.wrapping_add(1));
                         }
-                        on:mousedown=move |_| crate::multicursor::clear(state)
+                        on:mousedown=move |_| {
+                            crate::multicursor::clear(state);
+                            crate::editor_plugins::clear_mark();
+                        }
                     />
                 </div>
                 <DiagnosticStrip state pane_key />

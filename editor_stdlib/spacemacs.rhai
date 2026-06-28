@@ -34,7 +34,13 @@
 //
 // Normal mode: hjkl move, i/a/A/I insert, o open line, x/X delete, D/C to line
 // end, dd delete line, J join, 0/$ ends, w/b words, / find, Escape leaves
-// insert. Edit this live to change anything.
+// insert.
+//
+// Operators and text objects: d and c take a motion or an object, so diw / ciw
+// (inner word), di" / ci( (inner pair), daw / da{ (around), plus dw/db/d$ and
+// cc/cw. v starts a charwise selection, V a linewise one; in visual the motions
+// extend it and d/c/x/s act on it, > / < indent, u / U change case, gc comments,
+// i/a select a text object, and S wraps it (S) ' " ( [ { < `). Edit this live.
 
 fn leader_menu() {
     #{ title: "Leader", items: [
@@ -220,6 +226,18 @@ fn plugin_menu() {
     ] };
 }
 
+// The bracket or quote pair a surround key names, or () for an unknown key.
+fn surround_pair(key) {
+    if key == "(" || key == ")" || key == "b" { return ["(", ")"]; }
+    if key == "{" || key == "}" || key == "B" { return ["{", "}"]; }
+    if key == "[" || key == "]" { return ["[", "]"]; }
+    if key == "<" || key == ">" { return ["<", ">"]; }
+    if key == "\"" { return ["\"", "\""]; }
+    if key == "'" { return ["'", "'"]; }
+    if key == "`" { return ["`", "`"]; }
+    return ();
+}
+
 fn on_key() {
     if mode == "insert" {
         if key == "Escape" {
@@ -237,6 +255,52 @@ fn on_key() {
     }
 
     if ctrl || alt {
+        return;
+    }
+
+    // Visual mode: the mark is live, so motions paint the selection and the
+    // operators act on it. i/a pick a text object, S surrounds, gc comments.
+    if mode == "visual" {
+        let vpending = if "vpending" in state { state.vpending } else { "" };
+        ops.push("Consume");
+        if vpending == "S" {
+            state.vpending = "";
+            let pair = surround_pair(key);
+            if pair != () { ops.push(#{ Surround: pair }); }
+            ops.push(#{ SetMode: "normal" });
+            return;
+        }
+        if vpending == "g" {
+            state.vpending = "";
+            if key == "c" { ops.push(#{ ToggleComment: "//" }); ops.push(#{ SetMode: "normal" }); }
+            return;
+        }
+        if vpending == "i" || vpending == "a" {
+            let around = vpending == "a";
+            state.vpending = "";
+            if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
+            return;
+        }
+        if key == "h" || key == "ArrowLeft" { ops.push(#{ Move: -1 }); }
+        else if key == "l" || key == "ArrowRight" { ops.push(#{ Move: 1 }); }
+        else if key == "j" || key == "ArrowDown" { ops.push(#{ MoveLine: 1 }); }
+        else if key == "k" || key == "ArrowUp" { ops.push(#{ MoveLine: -1 }); }
+        else if key == "0" { ops.push("LineStart"); }
+        else if key == "$" { ops.push("LineEnd"); }
+        else if key == "w" { ops.push("NextWord"); }
+        else if key == "b" { ops.push("PrevWord"); }
+        else if key == "o" { ops.push("SwapEnds"); }
+        else if key == "i" { state.vpending = "i"; }
+        else if key == "a" { state.vpending = "a"; }
+        else if key == "g" { state.vpending = "g"; }
+        else if key == "S" { state.vpending = "S"; }
+        else if key == "d" || key == "x" { ops.push("DeleteSelection"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "c" || key == "s" { ops.push("DeleteSelection"); ops.push(#{ SetMode: "insert" }); }
+        else if key == ">" { ops.push("Indent"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "<" { ops.push("Outdent"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "u" { ops.push("LowerCaseWord"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "U" { ops.push("UpperCaseWord"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "Escape" { ops.push("Collapse"); ops.push(#{ SetMode: "normal" }); }
         return;
     }
 
@@ -432,14 +496,50 @@ fn on_key() {
     }
     if pending == "d" {
         ops.push("Consume");
+        if key == "i" { state.pending = "di"; }
+        else if key == "a" { state.pending = "da"; }
+        else {
+            state.pending = "";
+            if key == "d" { ops.push("DeleteLine"); }
+            else if key == "w" { ops.push("DeleteWordForward"); }
+            else if key == "b" { ops.push("DeleteWordBackward"); }
+            else if key == "$" { ops.push("DeleteToLineEnd"); }
+        }
+        return;
+    }
+    if pending == "di" || pending == "da" {
+        ops.push("Consume");
+        let around = pending == "da";
         state.pending = "";
-        if key == "d" { ops.push("DeleteLine"); }
+        if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
+        ops.push("DeleteSelection");
+        return;
+    }
+    if pending == "c" {
+        ops.push("Consume");
+        if key == "i" { state.pending = "ci"; }
+        else if key == "a" { state.pending = "ca"; }
+        else {
+            state.pending = "";
+            if key == "c" { ops.push("LineStart"); ops.push("DeleteToLineEnd"); ops.push(#{ SetMode: "insert" }); }
+            else if key == "w" { ops.push("DeleteWordForward"); ops.push(#{ SetMode: "insert" }); }
+        }
+        return;
+    }
+    if pending == "ci" || pending == "ca" {
+        ops.push("Consume");
+        let around = pending == "ca";
+        state.pending = "";
+        if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
+        ops.push("DeleteSelection");
+        ops.push(#{ SetMode: "insert" });
         return;
     }
     if pending == "g" {
         ops.push("Consume");
         state.pending = "";
         if key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
+        else if key == "c" { ops.push(#{ ToggleComment: "//" }); }
         return;
     }
 
@@ -469,4 +569,7 @@ fn on_key() {
     else if key == "K" { ops.push(#{ RunCommand: "hover" }); }
     else if key == "u" { ops.push(#{ RunCommand: "undo" }); }
     else if key == "d" { state.pending = "d"; }
+    else if key == "c" { state.pending = "c"; }
+    else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
+    else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }

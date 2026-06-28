@@ -234,6 +234,52 @@ mod tests {
         );
     }
 
+    fn has_string_op(ops: &rhai::Array, name: &str) -> bool {
+        ops.iter().any(|op| {
+            op.clone()
+                .into_string()
+                .map(|text| text == name)
+                .unwrap_or(false)
+        })
+    }
+
+    fn has_map_op(ops: &rhai::Array, name: &str) -> bool {
+        ops.iter().any(|op| {
+            op.clone()
+                .try_cast::<rhai::Map>()
+                .map(|map| map.contains_key(name))
+                .unwrap_or(false)
+        })
+    }
+
+    #[test]
+    fn spacemacs_v_enters_visual() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        let ops = run_key(&engine, &ast, &mut state_map, "v");
+        assert!(
+            has_string_op(&ops, "Anchor"),
+            "v did not anchor a selection"
+        );
+        assert!(has_map_op(&ops, "SetMode"), "v did not enter a mode");
+    }
+
+    #[test]
+    fn spacemacs_diw_deletes_inner_word() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "d");
+        run_key(&engine, &ast, &mut state_map, "i");
+        let ops = run_key(&engine, &ast, &mut state_map, "w");
+        assert!(has_map_op(&ops, "SelectInner"), "diw did not select inner");
+        assert!(
+            has_string_op(&ops, "DeleteSelection"),
+            "diw did not delete the selection"
+        );
+    }
+
     #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[

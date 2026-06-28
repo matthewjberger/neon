@@ -25,8 +25,17 @@
 //   "DuplicateLine" "MoveLineUp" "MoveLineDown" "JoinLines"
 //   "Indent" "Outdent"
 //   "UpperCaseWord" "LowerCaseWord" "SortLines" "DeleteTrailingWhitespace"
-//   #{ ToggleComment: "//" }        comment or uncomment the line
+//   #{ ToggleComment: "//" }        comment or uncomment the line (the region
+//                                   when a selection is active)
 //   #{ FindChar: "x" }              jump to the next x on the line
+//
+// Selections and text objects (the host tracks the region anchor):
+//   "Anchor" "Collapse" "SwapEnds"  start / clear / flip the selection
+//   "SelectLine" "SelectWord" "SelectAll"
+//   #{ SelectInner: "(" } #{ SelectAround: "\"" }   text objects (w ( [ { < " ' `)
+//   "DeleteSelection" #{ ReplaceSelection: "text" }
+//   #{ Surround: ["(", ")"] }       wrap the selection (or the word) in a pair
+//   "Indent" "Outdent" act on the selected lines when a selection is active
 //
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"

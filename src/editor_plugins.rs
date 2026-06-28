@@ -5,7 +5,7 @@
 //! mirrors the scene-plugin model, applied to the editor instead of the scene.
 //! It is what carries the vim layer.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
@@ -19,6 +19,11 @@ thread_local! {
     static ENGINE: Engine = make_engine();
     static CACHE: RefCell<HashMap<u64, AST>> = RefCell::new(HashMap::new());
     static STATES: RefCell<HashMap<String, Map>> = RefCell::new(HashMap::new());
+    /// The region anchor (a char index), set by `Anchor` and cleared by
+    /// `Collapse` or any region-consuming edit. While it is set, motion ops
+    /// extend the textarea selection from it to the caret, which is how visual
+    /// mode works without the plugin tracking the selection itself.
+    static MARK: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 /// A rhai engine with the depth and operation limits lifted, so a plugin with a
@@ -66,6 +71,30 @@ enum EditorOp {
     OpenPalette,
     ShowMenu(LeaderMenu),
     HideMenu,
+    /// Region: start a selection at the caret.
+    Anchor,
+    /// Region: clear the selection, collapsing to the caret.
+    Collapse,
+    /// Region: move the caret to the other end of the selection.
+    SwapEnds,
+    /// Region: select the current line.
+    SelectLine,
+    /// Region: select the word under the caret.
+    SelectWord,
+    /// Region: select the whole buffer.
+    SelectAll,
+    /// Region: select inside the nearest pair named by the spec (a bracket, a
+    /// quote, or `w` for the word), the inner text object.
+    SelectInner(String),
+    /// Region: like `SelectInner` but include the delimiters, the around object.
+    SelectAround(String),
+    /// Region: delete the selection.
+    DeleteSelection,
+    /// Region: replace the selection with text.
+    ReplaceSelection(String),
+    /// Region: wrap the selection (or the word under the caret when there is no
+    /// selection) with an opening and closing string.
+    Surround(String, String),
 }
 
 /// One keystroke handed to the editor plugins.
@@ -261,6 +290,13 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "DeleteTrailingWhitespace" => Some(EditorOp::DeleteTrailingWhitespace),
             "OpenPalette" => Some(EditorOp::OpenPalette),
             "HideMenu" => Some(EditorOp::HideMenu),
+            "Anchor" => Some(EditorOp::Anchor),
+            "Collapse" => Some(EditorOp::Collapse),
+            "SwapEnds" => Some(EditorOp::SwapEnds),
+            "SelectLine" => Some(EditorOp::SelectLine),
+            "SelectWord" => Some(EditorOp::SelectWord),
+            "SelectAll" => Some(EditorOp::SelectAll),
+            "DeleteSelection" => Some(EditorOp::DeleteSelection),
             _ => None,
         };
     }
@@ -268,6 +304,15 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
     let (name, payload) = map.into_iter().next()?;
     match name.as_str() {
         "ShowMenu" => parse_menu(payload).map(EditorOp::ShowMenu),
+        "SelectInner" => Some(EditorOp::SelectInner(payload.into_string().ok()?)),
+        "SelectAround" => Some(EditorOp::SelectAround(payload.into_string().ok()?)),
+        "ReplaceSelection" => Some(EditorOp::ReplaceSelection(payload.into_string().ok()?)),
+        "Surround" => {
+            let pair = payload.try_cast::<Array>()?;
+            let open = pair.first()?.clone().into_string().ok()?;
+            let close = pair.get(1)?.clone().into_string().ok()?;
+            Some(EditorOp::Surround(open, close))
+        }
         "ToggleComment" => Some(EditorOp::ToggleComment(payload.into_string().ok()?)),
         "FindChar" => Some(EditorOp::FindChar(payload.into_string().ok()?)),
         "SetMode" => Some(EditorOp::SetMode(payload.into_string().ok()?)),
@@ -318,6 +363,7 @@ fn apply(
     let mut text: Vec<char> = textarea.value().chars().collect();
     let mut caret = textarea.selection_start().ok().flatten().unwrap_or(0) as usize;
     caret = caret.min(text.len());
+    let mut mark = MARK.with(Cell::get).map(|index| index.min(text.len()));
 
     let mut changed = false;
     let mut new_mode: Option<String> = None;
@@ -456,21 +502,41 @@ fn apply(
                 }
             }
             EditorOp::Indent => {
-                let start = line_start(&text, caret);
-                text.splice(start..start, [' ', ' ', ' ', ' ']);
-                caret += 4;
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    caret = map_block_lines(&mut text, start, end, |line| {
+                        if line.trim().is_empty() {
+                            line.to_string()
+                        } else {
+                            format!("    {line}")
+                        }
+                    });
+                    mark = None;
+                } else {
+                    let start = line_start(&text, caret);
+                    text.splice(start..start, [' ', ' ', ' ', ' ']);
+                    caret += 4;
+                }
                 changed = true;
             }
             EditorOp::Outdent => {
-                let start = line_start(&text, caret);
-                let mut removed = 0;
-                while removed < 4 && start + removed < text.len() && text[start + removed] == ' ' {
-                    removed += 1;
-                }
-                if removed > 0 {
-                    text.drain(start..start + removed);
-                    caret = caret.saturating_sub(removed);
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    caret = map_block_lines(&mut text, start, end, outdent_line);
+                    mark = None;
                     changed = true;
+                } else {
+                    let start = line_start(&text, caret);
+                    let mut removed = 0;
+                    while removed < 4
+                        && start + removed < text.len()
+                        && text[start + removed] == ' '
+                    {
+                        removed += 1;
+                    }
+                    if removed > 0 {
+                        text.drain(start..start + removed);
+                        caret = caret.saturating_sub(removed);
+                        changed = true;
+                    }
                 }
             }
             EditorOp::SmartLineStart => {
@@ -484,14 +550,8 @@ fn apply(
             }
             EditorOp::UpperCaseWord | EditorOp::LowerCaseWord => {
                 let upper = matches!(op, EditorOp::UpperCaseWord);
-                let mut start = caret;
-                while start > 0 && is_word(text[start - 1]) {
-                    start -= 1;
-                }
-                let mut end = caret;
-                while end < text.len() && is_word(text[end]) {
-                    end += 1;
-                }
+                let (start, end) =
+                    selection_range(mark, caret).unwrap_or_else(|| word_bounds(&text, caret));
                 if end > start {
                     for character in text.iter_mut().take(end).skip(start) {
                         *character = if upper {
@@ -499,6 +559,10 @@ fn apply(
                         } else {
                             character.to_ascii_lowercase()
                         };
+                    }
+                    if mark.is_some() {
+                        caret = start;
+                        mark = None;
                     }
                     changed = true;
                 }
@@ -528,6 +592,14 @@ fn apply(
                 }
             }
             EditorOp::ToggleComment(marker) => {
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    if !marker.is_empty() {
+                        caret = comment_block(&mut text, start, end, &marker);
+                        changed = true;
+                    }
+                    mark = None;
+                    continue;
+                }
                 let marker: Vec<char> = marker.chars().collect();
                 if !marker.is_empty() {
                     let start = line_start(&text, caret);
@@ -579,6 +651,70 @@ fn apply(
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
             EditorOp::HideMenu => state.editing.leader.set(None),
+            EditorOp::Anchor => mark = Some(caret),
+            EditorOp::Collapse => mark = None,
+            EditorOp::SwapEnds => {
+                if let Some(anchor) = mark {
+                    mark = Some(caret);
+                    caret = anchor;
+                }
+            }
+            EditorOp::SelectLine => {
+                mark = Some(line_start(&text, caret));
+                caret = line_end(&text, caret);
+            }
+            EditorOp::SelectWord => {
+                let (start, end) = word_bounds(&text, caret);
+                mark = Some(start);
+                caret = end;
+            }
+            EditorOp::SelectAll => {
+                mark = Some(0);
+                caret = text.len();
+            }
+            EditorOp::SelectInner(spec) => {
+                if let Some((start, end)) = object_bounds(&text, caret, &spec, false) {
+                    mark = Some(start);
+                    caret = end;
+                }
+            }
+            EditorOp::SelectAround(spec) => {
+                if let Some((start, end)) = object_bounds(&text, caret, &spec, true) {
+                    mark = Some(start);
+                    caret = end;
+                }
+            }
+            EditorOp::DeleteSelection => {
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    if end > start {
+                        text.drain(start..end);
+                        caret = start;
+                        changed = true;
+                    }
+                    mark = None;
+                }
+            }
+            EditorOp::ReplaceSelection(value) => {
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    let inserted: Vec<char> = value.chars().collect();
+                    let count = inserted.len();
+                    text.splice(start..end, inserted);
+                    caret = start + count;
+                    changed = true;
+                    mark = None;
+                }
+            }
+            EditorOp::Surround(open, close) => {
+                let (start, end) =
+                    selection_range(mark, caret).unwrap_or_else(|| word_bounds(&text, caret));
+                let open_chars: Vec<char> = open.chars().collect();
+                let open_count = open_chars.len();
+                text.splice(end..end, close.chars());
+                text.splice(start..start, open_chars);
+                caret = start + open_count;
+                changed = true;
+                mark = None;
+            }
         }
     }
 
@@ -586,8 +722,19 @@ fn apply(
     if changed {
         textarea.set_value(&value);
     }
-    let caret = caret.min(text.len()) as u32;
-    let _ = textarea.set_selection_range(caret, caret);
+    let caret = caret.min(text.len());
+    let mark = mark.map(|anchor| anchor.min(text.len()));
+    MARK.with(|cell| cell.set(mark));
+    // With a live mark the textarea shows the region; otherwise the caret sits
+    // collapsed. This is what makes motions paint a visual-mode selection.
+    match selection_range(mark, caret) {
+        Some((lo, hi)) if hi > lo => {
+            let _ = textarea.set_selection_range(lo as u32, hi as u32);
+        }
+        _ => {
+            let _ = textarea.set_selection_range(caret as u32, caret as u32);
+        }
+    }
 
     if let Some(mode) = new_mode {
         state.editing.mode.set(mode);
@@ -597,6 +744,191 @@ fn apply(
         state.set_buffer_text(kind, &id, value.clone());
     }
     changed
+}
+
+/// The ordered selection range `(start, end)` for an active mark, or none.
+fn selection_range(mark: Option<usize>, caret: usize) -> Option<(usize, usize)> {
+    mark.map(|anchor| {
+        if anchor <= caret {
+            (anchor, caret)
+        } else {
+            (caret, anchor)
+        }
+    })
+}
+
+/// The word boundaries around a caret.
+fn word_bounds(text: &[char], caret: usize) -> (usize, usize) {
+    let caret = caret.min(text.len());
+    let mut start = caret;
+    while start > 0 && is_word(text[start - 1]) {
+        start -= 1;
+    }
+    let mut end = caret;
+    while end < text.len() && is_word(text[end]) {
+        end += 1;
+    }
+    (start, end)
+}
+
+/// The bounds of a text object around the caret: a word (`w`/`W`), or the text
+/// inside (or, with `around`, including) the nearest bracket or quote pair the
+/// spec names.
+fn object_bounds(text: &[char], caret: usize, spec: &str, around: bool) -> Option<(usize, usize)> {
+    match spec.chars().next()? {
+        'w' | 'W' => {
+            let (start, end) = word_bounds(text, caret);
+            if start == end {
+                return None;
+            }
+            if around {
+                let mut stop = end;
+                while stop < text.len() && (text[stop] == ' ' || text[stop] == '\t') {
+                    stop += 1;
+                }
+                Some((start, stop))
+            } else {
+                Some((start, end))
+            }
+        }
+        quote @ ('"' | '\'' | '`') => quote_bounds(text, caret, quote, around),
+        '(' | ')' | 'b' => bracket_bounds(text, caret, '(', ')', around),
+        '{' | '}' | 'B' => bracket_bounds(text, caret, '{', '}', around),
+        '[' | ']' => bracket_bounds(text, caret, '[', ']', around),
+        '<' | '>' => bracket_bounds(text, caret, '<', '>', around),
+        _ => None,
+    }
+}
+
+/// The bounds of the quote pair on the caret's line that encloses or follows it.
+fn quote_bounds(text: &[char], caret: usize, quote: char, around: bool) -> Option<(usize, usize)> {
+    let lo = line_start(text, caret);
+    let hi = line_end(text, caret);
+    let positions: Vec<usize> = (lo..hi).filter(|index| text[*index] == quote).collect();
+    let pick = positions
+        .chunks_exact(2)
+        .find(|pair| pair[0] <= caret && caret <= pair[1])
+        .or_else(|| positions.chunks_exact(2).find(|pair| pair[0] >= caret))?;
+    let (open, close) = (pick[0], pick[1]);
+    if around {
+        Some((open, close + 1))
+    } else {
+        Some((open + 1, close))
+    }
+}
+
+/// The bounds of the bracket pair enclosing the caret, matched with nesting.
+fn bracket_bounds(
+    text: &[char],
+    caret: usize,
+    open: char,
+    close: char,
+    around: bool,
+) -> Option<(usize, usize)> {
+    let mut depth = 0;
+    let mut index = caret.min(text.len());
+    let open_index = loop {
+        if index == 0 {
+            return None;
+        }
+        index -= 1;
+        if text[index] == close {
+            depth += 1;
+        } else if text[index] == open {
+            if depth == 0 {
+                break index;
+            }
+            depth -= 1;
+        }
+    };
+    let mut depth = 0;
+    let mut index = caret;
+    let close_index = loop {
+        if index >= text.len() {
+            return None;
+        }
+        if text[index] == open && index != open_index {
+            depth += 1;
+        } else if text[index] == close {
+            if depth == 0 {
+                break index;
+            }
+            depth -= 1;
+        }
+        index += 1;
+    };
+    if around {
+        Some((open_index, close_index + 1))
+    } else {
+        Some((open_index + 1, close_index))
+    }
+}
+
+/// The first-line start and last-line end of the block a selection touches.
+fn block_bounds(text: &[char], start: usize, end: usize) -> (usize, usize) {
+    let last = if end > start { end - 1 } else { end };
+    (line_start(text, start), line_end(text, last))
+}
+
+/// Rewrites every line the selection touches through `map`, returning the block
+/// start as the new caret. The substrate for region indent, outdent, and comment.
+fn map_block_lines(
+    text: &mut Vec<char>,
+    start: usize,
+    end: usize,
+    map: impl Fn(&str) -> String,
+) -> usize {
+    let (lo, hi) = block_bounds(text, start, end);
+    let block: String = text[lo..hi].iter().collect();
+    let mapped = block.split('\n').map(&map).collect::<Vec<_>>().join("\n");
+    text.splice(lo..hi, mapped.chars());
+    lo
+}
+
+/// Removes up to four leading spaces (or one tab) from a line, the per-line work
+/// of a region outdent.
+fn outdent_line(line: &str) -> String {
+    if let Some(rest) = line.strip_prefix('\t') {
+        return rest.to_string();
+    }
+    let mut removed = 0;
+    while removed < 4 && line[removed..].starts_with(' ') {
+        removed += 1;
+    }
+    line[removed..].to_string()
+}
+
+/// Comments or uncomments every line of a block: uncomment when every non-blank
+/// line already opens with the marker, otherwise comment.
+fn comment_block(text: &mut Vec<char>, start: usize, end: usize, marker: &str) -> usize {
+    let (lo, hi) = block_bounds(text, start, end);
+    let block: String = text[lo..hi].iter().collect();
+    let commented = block
+        .split('\n')
+        .filter(|line| !line.trim().is_empty())
+        .all(|line| line.trim_start().starts_with(marker));
+    map_block_lines(text, start, end, |line| {
+        if line.trim().is_empty() {
+            return line.to_string();
+        }
+        if commented {
+            let indent: String = line
+                .chars()
+                .take_while(|character| *character == ' ' || *character == '\t')
+                .collect();
+            let rest = line.trim_start();
+            let rest = rest.strip_prefix(marker).unwrap_or(rest);
+            let rest = rest.strip_prefix(' ').unwrap_or(rest);
+            format!("{indent}{rest}")
+        } else {
+            let indent: String = line
+                .chars()
+                .take_while(|character| *character == ' ' || *character == '\t')
+                .collect();
+            let rest = line.trim_start();
+            format!("{indent}{marker} {rest}")
+        }
+    })
 }
 
 fn shift(caret: usize, delta: i64, len: usize) -> usize {
@@ -730,4 +1062,11 @@ pub fn any_enabled(state: EditorState) -> bool {
 /// Resets the editor mode to normal when entering or leaving editor plugins.
 pub fn reset_mode(state: EditorState) {
     state.editing.mode.set("normal".to_string());
+    clear_mark();
+}
+
+/// Drops the region anchor, so a pointer click or buffer switch does not leave a
+/// stale visual-mode selection that the next motion would extend.
+pub fn clear_mark() {
+    MARK.with(|cell| cell.set(None));
 }
