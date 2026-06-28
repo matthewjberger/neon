@@ -293,6 +293,18 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_find_and_search() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "f");
+        let find = run_key(&engine, &ast, &mut state_map, "x");
+        assert!(has_map_op(&find, "FindChar"), "fx did not find the char");
+        let next = run_key(&engine, &ast, &mut state_map, "n");
+        assert!(has_string_op(&next, "SearchNext"), "n did not search next");
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (

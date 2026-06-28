@@ -33,6 +33,21 @@ thread_local! {
     /// The last charwise paste `(start, length, ring index)`, so `PastePop` can
     /// swap it for the previous ring entry, an Emacs-style yank-pop.
     static LAST_PASTE: Cell<Option<(usize, usize, usize)>> = const { Cell::new(None) };
+    /// The last buffer search `(needle, forward)`, repeated by `SearchNext` and
+    /// `SearchPrev`.
+    static LAST_SEARCH: RefCell<Option<(String, bool)>> = const { RefCell::new(None) };
+    /// The last in-line find `(char, kind)`, repeated by `RepeatFind`.
+    static LAST_FIND: Cell<Option<(char, FindKind)>> = const { Cell::new(None) };
+}
+
+/// How an in-line find lands: on the character (`f`/`F`) or just before/after it
+/// (`t`/`T`), forward or backward.
+#[derive(Clone, Copy, PartialEq)]
+enum FindKind {
+    Find,
+    FindBack,
+    Till,
+    TillBack,
 }
 
 /// The most entries the kill-ring keeps before the oldest falls off.
@@ -117,6 +132,24 @@ enum EditorOp {
     PastePop,
     /// Kill-ring: name the register the next yank or paste uses.
     Register(String),
+    /// Search: move to the next match of a needle in the buffer, forward.
+    Search(String),
+    /// Search: like `Search`, backward.
+    SearchBack(String),
+    /// Search: repeat the last search in its own direction.
+    SearchNext,
+    /// Search: repeat the last search in the opposite direction.
+    SearchPrev,
+    /// In-line find: move backward to a character on the line (`F`).
+    FindCharBack(String),
+    /// In-line find: move forward to just before a character (`t`).
+    TillChar(String),
+    /// In-line find: move backward to just after a character (`T`).
+    TillCharBack(String),
+    /// In-line find: repeat the last find in its direction (`;`).
+    RepeatFind,
+    /// In-line find: repeat the last find in the opposite direction (`,`).
+    RepeatFindBack,
 }
 
 /// One keystroke handed to the editor plugins.
@@ -323,6 +356,10 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "Cut" => Some(EditorOp::Cut),
             "Paste" => Some(EditorOp::Paste),
             "PastePop" => Some(EditorOp::PastePop),
+            "SearchNext" => Some(EditorOp::SearchNext),
+            "SearchPrev" => Some(EditorOp::SearchPrev),
+            "RepeatFind" => Some(EditorOp::RepeatFind),
+            "RepeatFindBack" => Some(EditorOp::RepeatFindBack),
             _ => None,
         };
     }
@@ -334,6 +371,11 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "SelectAround" => Some(EditorOp::SelectAround(payload.into_string().ok()?)),
         "ReplaceSelection" => Some(EditorOp::ReplaceSelection(payload.into_string().ok()?)),
         "Register" => Some(EditorOp::Register(payload.into_string().ok()?)),
+        "Search" => Some(EditorOp::Search(payload.into_string().ok()?)),
+        "SearchBack" => Some(EditorOp::SearchBack(payload.into_string().ok()?)),
+        "FindCharBack" => Some(EditorOp::FindCharBack(payload.into_string().ok()?)),
+        "TillChar" => Some(EditorOp::TillChar(payload.into_string().ok()?)),
+        "TillCharBack" => Some(EditorOp::TillCharBack(payload.into_string().ok()?)),
         "Surround" => {
             let pair = payload.try_cast::<Array>()?;
             let open = pair.first()?.clone().into_string().ok()?;
@@ -661,16 +703,55 @@ fn apply(
                     changed = true;
                 }
             }
-            EditorOp::FindChar(target) => {
-                if let Some(needle) = target.chars().next() {
-                    let end = line_end(&text, caret);
-                    let mut index = caret + 1;
-                    while index < end {
-                        if text[index] == needle {
-                            caret = index;
-                            break;
-                        }
-                        index += 1;
+            EditorOp::FindChar(target) => find_char(&mut caret, &text, &target, FindKind::Find),
+            EditorOp::FindCharBack(target) => {
+                find_char(&mut caret, &text, &target, FindKind::FindBack)
+            }
+            EditorOp::TillChar(target) => find_char(&mut caret, &text, &target, FindKind::Till),
+            EditorOp::TillCharBack(target) => {
+                find_char(&mut caret, &text, &target, FindKind::TillBack)
+            }
+            EditorOp::RepeatFind => {
+                if let Some((needle, kind)) = LAST_FIND.with(Cell::get)
+                    && let Some(index) = find_on_line(&text, caret, needle, kind)
+                {
+                    caret = index;
+                }
+            }
+            EditorOp::RepeatFindBack => {
+                if let Some((needle, kind)) = LAST_FIND.with(Cell::get)
+                    && let Some(index) = find_on_line(&text, caret, needle, opposite_find(kind))
+                {
+                    caret = index;
+                }
+            }
+            EditorOp::Search(needle) => {
+                let chars: Vec<char> = needle.chars().collect();
+                if let Some(index) = find_match(&text, caret, &chars, true) {
+                    caret = index;
+                }
+                LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, true)));
+            }
+            EditorOp::SearchBack(needle) => {
+                let chars: Vec<char> = needle.chars().collect();
+                if let Some(index) = find_match(&text, caret, &chars, false) {
+                    caret = index;
+                }
+                LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, false)));
+            }
+            EditorOp::SearchNext => {
+                if let Some((needle, forward)) = LAST_SEARCH.with(|cell| cell.borrow().clone()) {
+                    let chars: Vec<char> = needle.chars().collect();
+                    if let Some(index) = find_match(&text, caret, &chars, forward) {
+                        caret = index;
+                    }
+                }
+            }
+            EditorOp::SearchPrev => {
+                if let Some((needle, forward)) = LAST_SEARCH.with(|cell| cell.borrow().clone()) {
+                    let chars: Vec<char> = needle.chars().collect();
+                    if let Some(index) = find_match(&text, caret, &chars, !forward) {
+                        caret = index;
                     }
                 }
             }
@@ -850,6 +931,66 @@ fn apply(
         state.set_buffer_text(kind, &id, value.clone());
     }
     changed
+}
+
+/// Moves the caret to a character on the current line, storing the find so `;`
+/// and `,` can repeat it.
+fn find_char(caret: &mut usize, text: &[char], target: &str, kind: FindKind) {
+    if let Some(needle) = target.chars().next() {
+        if let Some(index) = find_on_line(text, *caret, needle, kind) {
+            *caret = index;
+        }
+        LAST_FIND.with(|cell| cell.set(Some((needle, kind))));
+    }
+}
+
+/// The caret position an in-line find lands on, searching only the caret's line.
+fn find_on_line(text: &[char], caret: usize, needle: char, kind: FindKind) -> Option<usize> {
+    let lo = line_start(text, caret);
+    let hi = line_end(text, caret);
+    match kind {
+        FindKind::Find => (caret + 1..hi).find(|index| text[*index] == needle),
+        FindKind::Till => (caret + 1..hi)
+            .find(|index| text[*index] == needle && *index > caret + 1)
+            .map(|index| index - 1),
+        FindKind::FindBack => (lo..caret).rev().find(|index| text[*index] == needle),
+        FindKind::TillBack => (lo..caret)
+            .rev()
+            .find(|index| text[*index] == needle && index + 1 < caret)
+            .map(|index| index + 1),
+    }
+}
+
+/// The opposite direction of a find, for `,`.
+fn opposite_find(kind: FindKind) -> FindKind {
+    match kind {
+        FindKind::Find => FindKind::FindBack,
+        FindKind::FindBack => FindKind::Find,
+        FindKind::Till => FindKind::TillBack,
+        FindKind::TillBack => FindKind::Till,
+    }
+}
+
+/// The index of the next match of `needle` from the caret, wrapping around the
+/// buffer. Searches forward or backward; returns none when there is no match.
+fn find_match(text: &[char], caret: usize, needle: &[char], forward: bool) -> Option<usize> {
+    if needle.is_empty() || needle.len() > text.len() {
+        return None;
+    }
+    let last = text.len() - needle.len();
+    let matches = |index: usize| text[index..index + needle.len()] == *needle;
+    if forward {
+        let start = caret.min(last);
+        (start + 1..=last)
+            .find(|index| matches(*index))
+            .or_else(|| (0..=start).find(|index| matches(*index)))
+    } else {
+        let start = caret.min(last);
+        (0..start)
+            .rev()
+            .find(|index| matches(*index))
+            .or_else(|| (start..=last).rev().find(|index| matches(*index)))
+    }
 }
 
 /// Pushes yanked text onto the kill-ring, and into the pending named register

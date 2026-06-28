@@ -43,8 +43,11 @@
 // i/a select a text object, and S wraps it (S) ' " ( [ { < `).
 //
 // Yank and paste: yy yanks the line, yiw / yi" yank an object, y in visual yanks
-// the selection; p / P paste. "a before a yank or paste uses register a. Edit
-// this live to change anything.
+// the selection; p / P paste. "a before a yank or paste uses register a.
+//
+// Search and find: * / # jump to the next/previous match of the word under the
+// caret, n / N repeat it; f / F / t / T jump to a character on the line and ; / ,
+// repeat that. Edit this live to change anything.
 
 fn leader_menu() {
     #{ title: "Leader", items: [
@@ -285,6 +288,15 @@ fn on_key() {
             if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
             return;
         }
+        if vpending == "f" || vpending == "F" || vpending == "t" || vpending == "T" {
+            let kind = vpending;
+            state.vpending = "";
+            if kind == "f" { ops.push(#{ FindChar: key }); }
+            else if kind == "F" { ops.push(#{ FindCharBack: key }); }
+            else if kind == "t" { ops.push(#{ TillChar: key }); }
+            else if kind == "T" { ops.push(#{ TillCharBack: key }); }
+            return;
+        }
         if key == "h" || key == "ArrowLeft" { ops.push(#{ Move: -1 }); }
         else if key == "l" || key == "ArrowRight" { ops.push(#{ Move: 1 }); }
         else if key == "j" || key == "ArrowDown" { ops.push(#{ MoveLine: 1 }); }
@@ -294,6 +306,14 @@ fn on_key() {
         else if key == "w" { ops.push("NextWord"); }
         else if key == "b" { ops.push("PrevWord"); }
         else if key == "o" { ops.push("SwapEnds"); }
+        else if key == "f" { state.vpending = "f"; }
+        else if key == "F" { state.vpending = "F"; }
+        else if key == "t" { state.vpending = "t"; }
+        else if key == "T" { state.vpending = "T"; }
+        else if key == ";" { ops.push("RepeatFind"); }
+        else if key == "," { ops.push("RepeatFindBack"); }
+        else if key == "n" { ops.push("SearchNext"); }
+        else if key == "N" { ops.push("SearchPrev"); }
         else if key == "i" { state.vpending = "i"; }
         else if key == "a" { state.vpending = "a"; }
         else if key == "g" { state.vpending = "g"; }
@@ -566,6 +586,16 @@ fn on_key() {
         ops.push(#{ Register: key });
         return;
     }
+    if pending == "f" || pending == "F" || pending == "t" || pending == "T" {
+        ops.push("Consume");
+        let kind = pending;
+        state.pending = "";
+        if kind == "f" { ops.push(#{ FindChar: key }); }
+        else if kind == "F" { ops.push(#{ FindCharBack: key }); }
+        else if kind == "t" { ops.push(#{ TillChar: key }); }
+        else if kind == "T" { ops.push(#{ TillCharBack: key }); }
+        return;
+    }
     if pending == "g" {
         ops.push("Consume");
         state.pending = "";
@@ -591,6 +621,16 @@ fn on_key() {
     else if key == "$" { ops.push("LineEnd"); }
     else if key == "w" { ops.push("NextWord"); }
     else if key == "b" { ops.push("PrevWord"); }
+    else if key == "f" { state.pending = "f"; }
+    else if key == "F" { state.pending = "F"; }
+    else if key == "t" { state.pending = "t"; }
+    else if key == "T" { state.pending = "T"; }
+    else if key == ";" { ops.push("RepeatFind"); }
+    else if key == "," { ops.push("RepeatFindBack"); }
+    else if key == "n" { ops.push("SearchNext"); }
+    else if key == "N" { ops.push("SearchPrev"); }
+    else if key == "*" { if word != "" { ops.push(#{ Search: word }); } }
+    else if key == "#" { if word != "" { ops.push(#{ SearchBack: word }); } }
     else if key == "g" { state.pending = "g"; }
     else if key == "x" { ops.push(#{ DeleteForward: 1 }); }
     else if key == "X" { ops.push(#{ DeleteBackward: 1 }); }
