@@ -261,9 +261,12 @@ pub fn App() -> impl IntoView {
             return;
         };
         state.editing.tab_drag.set(None);
-        if let Some((to_pane, to_index)) = drag.target
-            && drag.started
-        {
+        if !drag.started {
+            // A press that never left the dead zone is a plain click: focus the
+            // tab here rather than leaning on the `click` event, which the
+            // pointerdown preventDefault can swallow in the webview.
+            state.focus_tab(drag.from_pane, drag.from_index);
+        } else if let Some((to_pane, to_index)) = drag.target {
             state.move_tab_across(drag.from_pane, drag.from_index, to_pane, to_index);
         }
     });

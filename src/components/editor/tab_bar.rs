@@ -28,8 +28,17 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                 .is_some_and(|drag| drag.started && drag.target == Some((pane_key, tab_count())))
         })
     };
+    // Tints the whole strip while a drag is aimed at this pane, so the
+    // destination reads as a dock zone, not just a one-pixel insertion line.
+    let bar_target = move || {
+        state.editing.tab_drag.with(|drag| {
+            drag.as_ref().is_some_and(|drag| {
+                drag.started && drag.target.map(|(pane, _)| pane) == Some(pane_key)
+            })
+        })
+    };
     view! {
-        <div class="tab-bar" data-pane=pane_key>
+        <div class="tab-bar" class:drop-target=bar_target data-pane=pane_key>
             {move || {
                 let current_pane = pane();
                 let active = current_pane.as_ref().map(|pane| pane.active).unwrap_or(0);
@@ -63,6 +72,11 @@ pub(super) fn TabBar(state: EditorState, pane_key: usize) -> impl IntoView {
                                     if event.button() != 0 {
                                         return;
                                     }
+                                    // Same reason the pane divider does: without it
+                                    // WebView2 starts its own press gesture and the
+                                    // window never sees the pointermove that arms the
+                                    // drag, so no preview or drop targets appear.
+                                    event.prevent_default();
                                     state
                                         .editing
                                         .tab_drag
