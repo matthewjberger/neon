@@ -1295,24 +1295,29 @@ fn line_end(text: &[char], caret: usize) -> usize {
 }
 
 fn move_line(text: &[char], caret: usize, delta: i64) -> usize {
-    let column = caret - line_start(text, caret);
-    if delta < 0 {
-        let start = line_start(text, caret);
-        if start == 0 {
-            return caret;
-        }
-        let previous_start = line_start(text, start - 1);
-        let previous_end = start - 1;
-        (previous_start + column).min(previous_end)
-    } else {
-        let end = line_end(text, caret);
-        if end >= text.len() {
-            return caret;
-        }
-        let next_start = end + 1;
-        let next_end = line_end(text, next_start);
-        (next_start + column).min(next_end)
+    if delta == 0 {
+        return caret;
     }
+    let column = caret - line_start(text, caret);
+    let mut line_begin = line_start(text, caret);
+    let steps = delta.unsigned_abs() as usize;
+    if delta < 0 {
+        for _ in 0..steps {
+            if line_begin == 0 {
+                break;
+            }
+            line_begin = line_start(text, line_begin - 1);
+        }
+    } else {
+        for _ in 0..steps {
+            let end = line_end(text, line_begin);
+            if end >= text.len() {
+                break;
+            }
+            line_begin = end + 1;
+        }
+    }
+    (line_begin + column).min(line_end(text, line_begin))
 }
 
 fn is_word(character: char) -> bool {
