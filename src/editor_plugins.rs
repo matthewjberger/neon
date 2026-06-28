@@ -24,7 +24,19 @@ thread_local! {
     /// extend the textarea selection from it to the caret, which is how visual
     /// mode works without the plugin tracking the selection itself.
     static MARK: Cell<Option<usize>> = const { Cell::new(None) };
+    /// The kill-ring: every `Copy`/`Cut` pushes here, `Paste` reads the top.
+    static KILL_RING: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// Named registers, written by a `Register` op before a yank or paste.
+    static REGISTERS: RefCell<HashMap<char, String>> = RefCell::new(HashMap::new());
+    /// The register a `Register` op named, consumed by the next yank or paste.
+    static PENDING_REGISTER: Cell<Option<char>> = const { Cell::new(None) };
+    /// The last charwise paste `(start, length, ring index)`, so `PastePop` can
+    /// swap it for the previous ring entry, an Emacs-style yank-pop.
+    static LAST_PASTE: Cell<Option<(usize, usize, usize)>> = const { Cell::new(None) };
 }
+
+/// The most entries the kill-ring keeps before the oldest falls off.
+const KILL_RING_LIMIT: usize = 32;
 
 /// A rhai engine with the depth and operation limits lifted, so a plugin with a
 /// long key dispatch (like vim) compiles. A bare `Engine::new()` rejects it as
@@ -95,6 +107,16 @@ enum EditorOp {
     /// Region: wrap the selection (or the word under the caret when there is no
     /// selection) with an opening and closing string.
     Surround(String, String),
+    /// Kill-ring: copy the selection, or the current line when there is none.
+    Copy,
+    /// Kill-ring: copy then delete the selection.
+    Cut,
+    /// Kill-ring: insert the top of the ring (or the named register) at the caret.
+    Paste,
+    /// Kill-ring: replace the last paste with the previous ring entry.
+    PastePop,
+    /// Kill-ring: name the register the next yank or paste uses.
+    Register(String),
 }
 
 /// One keystroke handed to the editor plugins.
@@ -297,6 +319,10 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "SelectWord" => Some(EditorOp::SelectWord),
             "SelectAll" => Some(EditorOp::SelectAll),
             "DeleteSelection" => Some(EditorOp::DeleteSelection),
+            "Copy" => Some(EditorOp::Copy),
+            "Cut" => Some(EditorOp::Cut),
+            "Paste" => Some(EditorOp::Paste),
+            "PastePop" => Some(EditorOp::PastePop),
             _ => None,
         };
     }
@@ -307,6 +333,7 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "SelectInner" => Some(EditorOp::SelectInner(payload.into_string().ok()?)),
         "SelectAround" => Some(EditorOp::SelectAround(payload.into_string().ok()?)),
         "ReplaceSelection" => Some(EditorOp::ReplaceSelection(payload.into_string().ok()?)),
+        "Register" => Some(EditorOp::Register(payload.into_string().ok()?)),
         "Surround" => {
             let pair = payload.try_cast::<Array>()?;
             let open = pair.first()?.clone().into_string().ok()?;
@@ -715,6 +742,85 @@ fn apply(
                 changed = true;
                 mark = None;
             }
+            EditorOp::Register(name) => {
+                PENDING_REGISTER.with(|cell| cell.set(name.chars().next()));
+            }
+            EditorOp::Copy => {
+                let yanked = match selection_range(mark, caret) {
+                    Some((start, end)) => {
+                        caret = start;
+                        mark = None;
+                        text[start..end].iter().collect()
+                    }
+                    None => {
+                        let start = line_start(&text, caret);
+                        let mut end = line_end(&text, caret);
+                        if end < text.len() {
+                            end += 1;
+                        }
+                        text[start..end].iter().collect()
+                    }
+                };
+                store_yank(yanked);
+                LAST_PASTE.with(|cell| cell.set(None));
+            }
+            EditorOp::Cut => {
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    store_yank(text[start..end].iter().collect());
+                    if end > start {
+                        text.drain(start..end);
+                        caret = start;
+                        changed = true;
+                    }
+                    mark = None;
+                    LAST_PASTE.with(|cell| cell.set(None));
+                }
+            }
+            EditorOp::Paste => {
+                let (paste, ring_index) = paste_source();
+                if !paste.is_empty() {
+                    let inserted: Vec<char> = paste.chars().collect();
+                    let count = inserted.len();
+                    if let Some((start, end)) = selection_range(mark, caret) {
+                        text.splice(start..end, inserted);
+                        caret = start + count;
+                        mark = None;
+                        LAST_PASTE.with(|cell| cell.set(None));
+                    } else if paste.ends_with('\n') {
+                        let mut at = line_end(&text, caret);
+                        if at < text.len() {
+                            at += 1;
+                        } else {
+                            text.push('\n');
+                            at = text.len();
+                        }
+                        text.splice(at..at, inserted);
+                        caret = at;
+                        LAST_PASTE.with(|cell| cell.set(None));
+                    } else {
+                        text.splice(caret..caret, inserted);
+                        LAST_PASTE
+                            .with(|cell| cell.set(ring_index.map(|index| (caret, count, index))));
+                        caret += count;
+                    }
+                    changed = true;
+                }
+            }
+            EditorOp::PastePop => {
+                if let Some((start, length, index)) = LAST_PASTE.with(Cell::get)
+                    && index > 0
+                    && let Some(replacement) =
+                        KILL_RING.with(|ring| ring.borrow().get(index - 1).cloned())
+                {
+                    let end = (start + length).min(text.len());
+                    let inserted: Vec<char> = replacement.chars().collect();
+                    let count = inserted.len();
+                    text.splice(start..end, inserted);
+                    caret = start + count;
+                    LAST_PASTE.with(|cell| cell.set(Some((start, count, index - 1))));
+                    changed = true;
+                }
+            }
         }
     }
 
@@ -744,6 +850,42 @@ fn apply(
         state.set_buffer_text(kind, &id, value.clone());
     }
     changed
+}
+
+/// Pushes yanked text onto the kill-ring, and into the pending named register
+/// when one was set.
+fn store_yank(yanked: String) {
+    if yanked.is_empty() {
+        return;
+    }
+    if let Some(register) = PENDING_REGISTER.with(Cell::take) {
+        REGISTERS.with(|registers| {
+            registers.borrow_mut().insert(register, yanked.clone());
+        });
+    }
+    KILL_RING.with(|ring| {
+        let mut ring = ring.borrow_mut();
+        ring.push(yanked);
+        while ring.len() > KILL_RING_LIMIT {
+            ring.remove(0);
+        }
+    });
+}
+
+/// The text a paste inserts and its ring index (for yank-pop), reading the named
+/// register when one is pending, otherwise the top of the kill-ring.
+fn paste_source() -> (String, Option<usize>) {
+    if let Some(register) = PENDING_REGISTER.with(Cell::take) {
+        let text = REGISTERS.with(|registers| registers.borrow().get(&register).cloned());
+        return (text.unwrap_or_default(), None);
+    }
+    KILL_RING.with(|ring| {
+        let ring = ring.borrow();
+        match ring.last() {
+            Some(text) => (text.clone(), Some(ring.len() - 1)),
+            None => (String::new(), None),
+        }
+    })
 }
 
 /// The ordered selection range `(start, end)` for an active mark, or none.

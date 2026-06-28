@@ -40,7 +40,11 @@
 // (inner word), di" / ci( (inner pair), daw / da{ (around), plus dw/db/d$ and
 // cc/cw. v starts a charwise selection, V a linewise one; in visual the motions
 // extend it and d/c/x/s act on it, > / < indent, u / U change case, gc comments,
-// i/a select a text object, and S wraps it (S) ' " ( [ { < `). Edit this live.
+// i/a select a text object, and S wraps it (S) ' " ( [ { < `).
+//
+// Yank and paste: yy yanks the line, yiw / yi" yank an object, y in visual yanks
+// the selection; p / P paste. "a before a yank or paste uses register a. Edit
+// this live to change anything.
 
 fn leader_menu() {
     #{ title: "Leader", items: [
@@ -294,8 +298,10 @@ fn on_key() {
         else if key == "a" { state.vpending = "a"; }
         else if key == "g" { state.vpending = "g"; }
         else if key == "S" { state.vpending = "S"; }
-        else if key == "d" || key == "x" { ops.push("DeleteSelection"); ops.push(#{ SetMode: "normal" }); }
-        else if key == "c" || key == "s" { ops.push("DeleteSelection"); ops.push(#{ SetMode: "insert" }); }
+        else if key == "y" { ops.push("Copy"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "p" || key == "P" { ops.push("Paste"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "d" || key == "x" { ops.push("Cut"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "c" || key == "s" { ops.push("Cut"); ops.push(#{ SetMode: "insert" }); }
         else if key == ">" { ops.push("Indent"); ops.push(#{ SetMode: "normal" }); }
         else if key == "<" { ops.push("Outdent"); ops.push(#{ SetMode: "normal" }); }
         else if key == "u" { ops.push("LowerCaseWord"); ops.push(#{ SetMode: "normal" }); }
@@ -535,6 +541,31 @@ fn on_key() {
         ops.push(#{ SetMode: "insert" });
         return;
     }
+    if pending == "y" {
+        ops.push("Consume");
+        if key == "i" { state.pending = "yi"; }
+        else if key == "a" { state.pending = "ya"; }
+        else {
+            state.pending = "";
+            if key == "y" { ops.push("Copy"); }
+            else if key == "w" { ops.push("SelectWord"); ops.push("Copy"); }
+        }
+        return;
+    }
+    if pending == "yi" || pending == "ya" {
+        ops.push("Consume");
+        let around = pending == "ya";
+        state.pending = "";
+        if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
+        ops.push("Copy");
+        return;
+    }
+    if pending == "\"" {
+        ops.push("Consume");
+        state.pending = "";
+        ops.push(#{ Register: key });
+        return;
+    }
     if pending == "g" {
         ops.push("Consume");
         state.pending = "";
@@ -570,6 +601,9 @@ fn on_key() {
     else if key == "u" { ops.push(#{ RunCommand: "undo" }); }
     else if key == "d" { state.pending = "d"; }
     else if key == "c" { state.pending = "c"; }
+    else if key == "y" { state.pending = "y"; }
+    else if key == "p" || key == "P" { ops.push("Paste"); }
+    else if key == "\"" { state.pending = "\""; }
     else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
     else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }

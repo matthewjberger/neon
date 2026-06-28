@@ -37,6 +37,10 @@
 //   #{ Surround: ["(", ")"] }       wrap the selection (or the word) in a pair
 //   "Indent" "Outdent" act on the selected lines when a selection is active
 //
+// Kill-ring and registers:
+//   "Copy" "Cut" "Paste" "PastePop"  yank, delete-yank, paste, cycle the ring
+//   #{ Register: "a" }               name the register the next yank/paste uses
+//
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"
 //   #{ RunCommand: "rename-symbol" }      "code-action" "hover" "jump-symbol"

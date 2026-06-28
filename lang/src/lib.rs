@@ -281,6 +281,18 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_yank_and_paste() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "y");
+        let yank = run_key(&engine, &ast, &mut state_map, "y");
+        assert!(has_string_op(&yank, "Copy"), "yy did not copy");
+        let paste = run_key(&engine, &ast, &mut state_map, "p");
+        assert!(has_string_op(&paste, "Paste"), "p did not paste");
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (
