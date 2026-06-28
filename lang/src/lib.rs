@@ -229,7 +229,6 @@ mod tests {
     #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
-            ("emacs", include_str!("../../editor_stdlib/emacs.rhai")),
             (
                 "auto_pairs",
                 include_str!("../../editor_stdlib/auto_pairs.rhai"),

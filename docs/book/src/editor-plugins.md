@@ -92,7 +92,8 @@ fn on_key() {
 
 A modal layer should leave modified chords to the non-modal plugins. The shipped
 layers return early on `ctrl` or `alt` in normal mode, and handle `Escape` in
-insert mode, so Emacs keys and the like stack cleanly on top.
+insert mode, so the chord-based plugins (line tools, word delete) stack cleanly
+on top.
 
 ## Only one modal layer
 

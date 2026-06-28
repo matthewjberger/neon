@@ -153,13 +153,6 @@ pub fn catalog() -> Vec<CatalogEntry> {
             source: EDITOR_TEMPLATE,
         },
         CatalogEntry {
-            id: "emacs",
-            name: "Emacs Keys",
-            kind: PluginKind::Editor,
-            description: "Non-modal Ctrl and Alt motions and kills: Ctrl+A/E/B/N/P/D/K, Alt+F/B/D.",
-            source: EMACS,
-        },
-        CatalogEntry {
             id: "auto-pairs",
             name: "Auto Pairs",
             kind: PluginKind::Editor,
@@ -260,7 +253,7 @@ pub fn category(entry: &CatalogEntry) -> &'static str {
             }
         }
         PluginKind::Editor => match entry.id {
-            "spacemacs" | "vim" | "emacs" => "Keybinding layers",
+            "spacemacs" | "vim" => "Keybinding layers",
             "template-editor" => "Starters",
             "comment-toggle" | "commentary" => "Comments",
             "jump-to-char" | "smart-home" | "blank-lines" => "Motions",
@@ -352,7 +345,6 @@ pub fn default_editor_plugins() -> Vec<PluginSource> {
 const SPACEMACS: &str = include_str!("../editor_stdlib/spacemacs.rhai");
 const VIM_SOURCE: &str = include_str!("../editor_stdlib/vim.rhai");
 const EDITOR_TEMPLATE: &str = include_str!("../editor_stdlib/editor_template.rhai");
-const EMACS: &str = include_str!("../editor_stdlib/emacs.rhai");
 const AUTO_PAIRS: &str = include_str!("../editor_stdlib/auto_pairs.rhai");
 const BETTER_ESCAPE: &str = include_str!("../editor_stdlib/better_escape.rhai");
 const COMMENT_TOGGLE: &str = include_str!("../editor_stdlib/line_comment.rhai");

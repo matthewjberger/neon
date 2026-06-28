@@ -33,8 +33,8 @@ caret back one, the Vim way.
 
 Vim and Spacemacs each claim the whole keyboard in normal mode, so neon treats
 them as exclusive. Enabling one disables the other
-(`plugins::enforce_modal_exclusivity`). The non-modal layers (Emacs keys, auto
-pairs, and so on) stack freely on top.
+(`plugins::enforce_modal_exclusivity`). The non-modal layers (auto pairs, line
+tools, and so on) stack freely on top.
 
 The leader is the heart of the keymap. The next chapter,
 [The Spacemacs Leader](spacemacs-leader.md), walks the whole tree.
