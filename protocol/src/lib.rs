@@ -386,6 +386,42 @@ pub enum LspServerMessage {
     Exited { code: Option<i32> },
 }
 
+/// One highlighted run of source: a half-open UTF-8 byte range over the
+/// request's `text` and the CSS class the page paints it with. The bridge emits
+/// the runs in order and may leave gaps, which the page renders as plain text.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HighlightSpan {
+    pub start: u32,
+    pub end: u32,
+    pub class: String,
+}
+
+/// Page to the desktop syntax-highlight bridge. Tree-sitter and its grammars are
+/// C, so they run natively in the shell rather than in the page's wasm. The page
+/// sends a buffer's language and source and gets back token spans, the same
+/// request/response shape every other desktop bridge uses.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum HighlightClientMessage {
+    /// Highlight one buffer. The reply carries the same `request_id`, so the page
+    /// can drop a stale response after a newer edit.
+    Highlight {
+        request_id: u32,
+        language: String,
+        text: String,
+    },
+}
+
+/// Desktop syntax-highlight bridge to the page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum HighlightServerMessage {
+    /// The token spans for a request. Empty when the language has no grammar, so
+    /// the page falls back to its own scanner.
+    Tokens {
+        request_id: u32,
+        spans: Vec<HighlightSpan>,
+    },
+}
+
 /// Page to the desktop terminal: open a real PTY, send keystrokes, and resize.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TerminalClientMessage {

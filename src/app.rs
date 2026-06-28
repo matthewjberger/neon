@@ -45,6 +45,8 @@ pub fn App() -> impl IntoView {
     crate::fs::start(state);
     crate::ipc::notify_host("enable-terminal");
     crate::terminal::start(state);
+    crate::ipc::notify_host("enable-highlight");
+    crate::treesitter::start(state);
 
     theme::apply_theme(&state.theme.get_untracked());
 

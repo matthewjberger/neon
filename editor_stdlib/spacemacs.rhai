@@ -8,25 +8,26 @@
 //   SPC /            search the project
 //   SPC ;            toggle comment on the line
 //   SPC ?            help and keybindings
-//   SPC b  b/d/n/p   buffers: list / close / next / previous
-//   SPC f  f/s/S/t/n files: open folder / save / save all / tree / new
+//   SPC b  b/d/n/p/R buffers: list / close / next / previous / revert
+//   SPC f  f/s/S/r   files: open folder / save / save all / revert
+//          t/n/N/R/D tree / new file / new plugin / rename / delete
 //   SPC w  v/s/-/d   windows: split right / below / below / close split
 //          h/l/j/k   focus previous / next / next / previous
-//          w/W/=/x   focus other / previous / balance / close split
-//   SPC s  s/p///j   search: find buffer / project / project / jump word
+//          w/W/=/x/n focus other / previous / balance / close split / new window
+//   SPC s  s/p/r/j/J search: find buffer / project / references / symbol / workspace
 //   SPC j  j/l/w/i/+ jump: char / line / word / symbol / format
 //   SPC g  g/t/i/r/R/s/S  goto: definition (also "gd") / type / impl /
 //                         references / rename / symbol / workspace symbols
 //   SPC h  h/s/k/t   help: hover (also "K") / signature / keybindings / tour
 //   SPC a            code action (also SPC x .)
 //   SPC c  c/b/t/r/k/o  cargo: check / build / test / run / interrupt / terminal
-//   SPC e  n/p/e/l   errors: next / previous / problems list / rust-analyzer log
 //   SPC x  ;/d/j/k   text: comment / duplicate / move down / move up
 //   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
+//          i/R/.     organize imports / refactor / code action
 //          J/>/<     join lines / indent / outdent
-//   SPC t  p/c/r/a/o/l  toggles: preview / console / reference / Claude /
-//                       control panel / rust-analyzer log
-//   SPC e  l         errors: rust-analyzer log
+//   SPC t  p/c/r/a/o/l/f  toggles: preview / console / reference / Claude /
+//                       control panel / rust-analyzer log / format on save
+//   SPC e  n/p/f/e/l errors: next / previous / quick fix / problems / log
 //   SPC p  f/t//     project: search / files / search
 //   SPC P  n/m/i     plugins: new / manager / installed
 //   SPC r            run or pause     SPC T  next theme
@@ -67,8 +68,12 @@ fn file_menu() {
         #{ key: "f", label: "Open folder" },
         #{ key: "s", label: "Save" },
         #{ key: "S", label: "Save all" },
+        #{ key: "r", label: "Revert file" },
         #{ key: "t", label: "File tree" },
-        #{ key: "n", label: "New plugin" },
+        #{ key: "n", label: "New file" },
+        #{ key: "N", label: "New plugin" },
+        #{ key: "R", label: "Rename file" },
+        #{ key: "D", label: "Delete file" },
     ] };
 }
 
@@ -78,6 +83,7 @@ fn buffer_menu() {
         #{ key: "d", label: "Close tab" },
         #{ key: "n", label: "Next tab" },
         #{ key: "p", label: "Previous tab" },
+        #{ key: "R", label: "Revert buffer" },
     ] };
 }
 
@@ -96,6 +102,7 @@ fn window_menu() {
         #{ key: "w", label: "Focus other" },
         #{ key: "W", label: "Focus previous" },
         #{ key: "=", label: "Balance splits" },
+        #{ key: "n", label: "New window" },
     ] };
 }
 
@@ -104,6 +111,7 @@ fn search_menu() {
         #{ key: "s", label: "Find in buffer" },
         #{ key: "p", label: "Search project" },
         #{ key: "/", label: "Search project" },
+        #{ key: "r", label: "Find references" },
         #{ key: "j", label: "Jump to symbol" },
         #{ key: "J", label: "Workspace symbols" },
     ] };
@@ -158,6 +166,8 @@ fn text_menu() {
         #{ key: "s", label: "Sort lines" },
         #{ key: "w", label: "Delete trailing space" },
         #{ key: "r", label: "Rename symbol" },
+        #{ key: "i", label: "Organize imports" },
+        #{ key: "R", label: "Refactor (code action)" },
         #{ key: ".", label: "Code action" },
     ] };
 }
@@ -170,6 +180,7 @@ fn toggle_menu() {
         #{ key: "a", label: "Claude" },
         #{ key: "o", label: "Control panel" },
         #{ key: "l", label: "rust-analyzer log" },
+        #{ key: "f", label: "Format on save" },
         #{ key: "t", label: "Next theme" },
     ] };
 }
@@ -187,6 +198,7 @@ fn error_menu() {
     #{ title: "+Errors", items: [
         #{ key: "n", label: "Next error" },
         #{ key: "p", label: "Previous error" },
+        #{ key: "f", label: "Quick fix" },
         #{ key: "e", label: "List problems" },
         #{ key: "l", label: "rust-analyzer log" },
     ] };
@@ -265,8 +277,12 @@ fn on_key() {
         if key == "f" { ops.push(#{ RunCommand: "open-folder" }); }
         else if key == "s" { ops.push(#{ RunCommand: "save-file" }); }
         else if key == "S" { ops.push(#{ RunCommand: "save-all" }); }
+        else if key == "r" { ops.push(#{ RunCommand: "revert-file" }); }
         else if key == "t" { ops.push(#{ RunCommand: "show-files" }); }
-        else if key == "n" { ops.push(#{ RunCommand: "new-plugin" }); }
+        else if key == "n" { ops.push(#{ RunCommand: "new-file" }); }
+        else if key == "N" { ops.push(#{ RunCommand: "new-plugin" }); }
+        else if key == "R" { ops.push(#{ RunCommand: "rename-entry" }); }
+        else if key == "D" { ops.push(#{ RunCommand: "delete-entry" }); }
         return;
     }
     if pending == "SPC b" {
@@ -277,6 +293,7 @@ fn on_key() {
         else if key == "d" { ops.push(#{ RunCommand: "close-tab" }); }
         else if key == "n" { ops.push(#{ RunCommand: "next-tab" }); }
         else if key == "p" { ops.push(#{ RunCommand: "prev-tab" }); }
+        else if key == "R" { ops.push(#{ RunCommand: "revert-file" }); }
         return;
     }
     if pending == "SPC w" {
@@ -290,6 +307,7 @@ fn on_key() {
         else if key == "h" || key == "k" || key == "W" { ops.push(#{ RunCommand: "focus-prev" }); }
         else if key == "l" || key == "j" { ops.push(#{ RunCommand: "focus-next" }); }
         else if key == "=" { ops.push(#{ RunCommand: "balance-splits" }); }
+        else if key == "n" { ops.push(#{ RunCommand: "new-window" }); }
         return;
     }
     if pending == "SPC s" {
@@ -298,6 +316,7 @@ fn on_key() {
         state.pending = "";
         if key == "s" { ops.push(#{ RunCommand: "find" }); }
         else if key == "p" || key == "/" { ops.push(#{ RunCommand: "show-search" }); }
+        else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
         else if key == "j" { ops.push(#{ RunCommand: "jump-symbol" }); }
         else if key == "J" { ops.push(#{ RunCommand: "workspace-symbols" }); }
         return;
@@ -364,6 +383,8 @@ fn on_key() {
         else if key == "s" { ops.push("SortLines"); }
         else if key == "w" { ops.push("DeleteTrailingWhitespace"); }
         else if key == "r" { ops.push(#{ RunCommand: "rename-symbol" }); }
+        else if key == "i" { ops.push(#{ RunCommand: "organize-imports" }); }
+        else if key == "R" { ops.push(#{ RunCommand: "code-action" }); }
         else if key == "." { ops.push(#{ RunCommand: "code-action" }); }
         return;
     }
@@ -377,6 +398,7 @@ fn on_key() {
         else if key == "a" { ops.push(#{ RunCommand: "toggle-chat" }); }
         else if key == "o" { ops.push(#{ RunCommand: "toggle-control-panel" }); }
         else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
+        else if key == "f" { ops.push(#{ RunCommand: "toggle-format-on-save" }); }
         else if key == "t" { ops.push(#{ RunCommand: "next-theme" }); }
         return;
     }
@@ -386,6 +408,7 @@ fn on_key() {
         state.pending = "";
         if key == "n" { ops.push(#{ RunCommand: "next-error" }); }
         else if key == "p" { ops.push(#{ RunCommand: "prev-error" }); }
+        else if key == "f" { ops.push(#{ RunCommand: "code-action" }); }
         else if key == "e" { ops.push(#{ RunCommand: "toggle-problems" }); }
         else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
         return;

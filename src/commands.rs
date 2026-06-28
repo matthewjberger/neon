@@ -32,6 +32,7 @@ pub enum EditorCommand {
     DeleteEntry,
     SaveFile,
     SaveAll,
+    RevertFile,
     CloseTab,
     NextTab,
     PrevTab,
@@ -54,6 +55,7 @@ pub enum EditorCommand {
     SignatureHelp,
     Rename,
     CodeAction,
+    OrganizeImports,
     FormatDocument,
     NextError,
     PrevError,
@@ -121,6 +123,7 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("new-file", Some("New file"), NewFile),
         ("save-file", Some("Save file"), SaveFile),
         ("save-all", Some("Save all"), SaveAll),
+        ("revert-file", Some("Revert file"), RevertFile),
         ("close-tab", Some("Close tab"), CloseTab),
         ("next-tab", Some("Next tab"), NextTab),
         ("prev-tab", Some("Previous tab"), PrevTab),
@@ -153,6 +156,11 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("signature-help", Some("Signature help"), SignatureHelp),
         ("rename-symbol", Some("Rename symbol"), Rename),
         ("code-action", Some("Code action"), CodeAction),
+        (
+            "organize-imports",
+            Some("Organize imports"),
+            OrganizeImports,
+        ),
         ("format-document", Some("Format document"), FormatDocument),
         ("next-error", Some("Next error"), NextError),
         ("prev-error", Some("Previous error"), PrevError),
@@ -242,6 +250,20 @@ pub fn palette_items(state: EditorState) -> Vec<(String, EditorCommand)> {
     items
 }
 
+/// The file a tree action targets: the right-clicked entry when the menu set
+/// one, otherwise the focused file buffer, so the leader's rename and delete act
+/// on the file being edited without a right-click.
+fn entry_target(state: EditorState) -> Option<(String, bool)> {
+    if let Some(target) = state.editing.context_target.get_untracked() {
+        return Some(target);
+    }
+    let buffer = state.focused_buffer();
+    if buffer.kind == PluginKind::File {
+        return buffer.id.map(|path| (path, false));
+    }
+    None
+}
+
 /// The parent directory of a path, splitting on either separator.
 fn parent_of(path: &str) -> String {
     match path.rfind(['\\', '/']) {
@@ -302,7 +324,7 @@ pub fn run(
             }
         }
         EditorCommand::RenameEntry => {
-            if let Some((from, _)) = state.editing.context_target.get_untracked() {
+            if let Some((from, _)) = entry_target(state) {
                 let value = crate::state::basename(&from).to_string();
                 state.editing.prompt.set(Some(Prompt {
                     title: "Rename".to_string(),
@@ -312,7 +334,7 @@ pub fn run(
             }
         }
         EditorCommand::DeleteEntry => {
-            if let Some((path, _)) = state.editing.context_target.get_untracked() {
+            if let Some((path, _)) = entry_target(state) {
                 let title = format!("Delete {}? Enter to confirm", crate::state::basename(&path));
                 state.editing.prompt.set(Some(Prompt {
                     title,
@@ -333,6 +355,7 @@ pub fn run(
                     let text = state.buffer_source(PluginKind::File, &Some(path.clone()));
                     crate::fs::write_file(&path, text);
                 }
+                crate::lsp::did_save(state, &path);
             }
         }
         EditorCommand::SaveAll => {
@@ -343,6 +366,14 @@ pub fn run(
                 .filter_map(|file| file.dirty.then_some((file.path, file.text)))
             {
                 crate::fs::write_file(&path, text);
+            }
+        }
+        EditorCommand::RevertFile => {
+            let buffer = state.focused_buffer();
+            if buffer.kind == PluginKind::File
+                && let Some(path) = buffer.id
+            {
+                crate::fs::read_file(&path);
             }
         }
         EditorCommand::CloseTab => state.close_focused_tab(),
@@ -373,6 +404,7 @@ pub fn run(
         EditorCommand::SignatureHelp => crate::lsp::request_signature_help(state),
         EditorCommand::Rename => crate::lsp::start_rename(state),
         EditorCommand::CodeAction => crate::lsp::request_code_actions(state),
+        EditorCommand::OrganizeImports => crate::lsp::organize_imports(state),
         EditorCommand::FormatDocument => crate::lsp::format_document(state),
         EditorCommand::NextError => crate::lsp::goto_diagnostic(state, true),
         EditorCommand::PrevError => crate::lsp::goto_diagnostic(state, false),

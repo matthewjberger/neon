@@ -89,6 +89,10 @@ pub struct CompletionEntry {
     pub insert: String,
     pub detail: String,
     pub kind: String,
+    /// The server's `additionalTextEdits` for this item, applied alongside the
+    /// insert on accept. This is what lands an auto-import `use` line when a
+    /// completion pulls in a name from another module.
+    pub additional_edits: Vec<serde_json::Value>,
 }
 
 /// The completion popup: the candidates, the caret pixel anchor, and the typed
@@ -313,6 +317,9 @@ pub struct EditingState {
     pub cursors: RwSignal<Vec<u32>>,
     /// A tick bumped when the editor scrolls, so caret overlays reposition.
     pub scroll: RwSignal<u32>,
+    /// A tick bumped when fresh tree-sitter spans land, so the highlight overlay
+    /// repaints with them in place of the built-in scanner's runs.
+    pub highlight: RwSignal<u32>,
     /// Active jump mode (avy-style labeled motion), when on.
     pub jump: RwSignal<Option<JumpState>>,
     /// The leader menu an editor plugin published for the pending prefix, shown
@@ -342,6 +349,7 @@ impl EditingState {
             status: RwSignal::new(String::new()),
             cursors: RwSignal::new(Vec::new()),
             scroll: RwSignal::new(0),
+            highlight: RwSignal::new(0),
             jump: RwSignal::new(None),
             leader: RwSignal::new(None),
             find_open: RwSignal::new(false),

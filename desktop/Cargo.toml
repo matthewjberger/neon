@@ -36,6 +36,13 @@ agent = [
     "dep:portable-pty",
     "dep:vt100",
     "dep:dirs",
+    "dep:tree-sitter",
+    "dep:tree-sitter-highlight",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-json",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-css",
+    "dep:tree-sitter-toml-ng",
 ]
 
 [dependencies]
@@ -68,3 +75,13 @@ hearsay = { version = "0.1", features = [
     "spawn",
     "websockets",
 ], optional = true }
+# Tree-sitter and its grammars are Rust crates that bundle their C parser and
+# build it with `cc`, so they keep the "every dependency is a Rust crate, no
+# npm" rule while running natively in the shell, off the page's wasm.
+tree-sitter = { version = "0.25", optional = true }
+tree-sitter-highlight = { version = "0.25", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-json = { version = "0.24", optional = true }
+tree-sitter-javascript = { version = "0.23", optional = true }
+tree-sitter-css = { version = "0.23", optional = true }
+tree-sitter-toml-ng = { version = "0.7", optional = true }

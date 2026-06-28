@@ -14,10 +14,15 @@ the product grows.
 
 - **All Rust, no npm.** Every dependency is a Rust crate. The only JavaScript is
   the per-worker bootstrap (`runtime/worker.js`, `runtime/lang_worker.js`), a few
-  lines each, with no packages. This rules out CodeMirror and tree-sitter (npm
-  and C respectively). Highlighting is a hand-written multi-language scanner in
-  Rust (rust, toml, json, javascript, rhai), with rhai commands colored from the
-  manifest; richer language intelligence comes from LSP, not a bundled grammar.
+  lines each, with no packages. This rules out CodeMirror (npm), and keeps the
+  page's wasm free of C: tree-sitter and its grammars are C, so they run natively
+  in the desktop shell (`desktop/src/highlight.rs`, all Rust crates that bundle
+  their parser) and reach the page over a websocket bridge, the same shape as the
+  rust-analyzer and filesystem bridges. The page asks the shell to parse a buffer
+  and paints the token spans it gets back. Until they arrive, in a plain browser
+  with no shell, and for rhai, it falls back to a hand-written multi-language
+  scanner in Rust (`src/highlight.rs`) that colors rhai commands from the
+  manifest; richer language intelligence comes from LSP.
 - **Data-oriented, not OOP.** State is a `Copy` struct of signals, behavior is
   free functions, components are plain functions. Nothing is an object that owns
   the app, the engine, or the workers.

@@ -7,7 +7,7 @@
 use leptos::prelude::*;
 use serde_json::{Value, json};
 
-use super::edits::{apply_workspace_edit, splice_utf16};
+use super::edits::{apply_workspace_edit, offset_of, splice_utf16};
 use super::text::{caret_pixel, line_character, word_at, word_prefix};
 use super::transport::{file_uri, send_request_id};
 use super::{Pending, client, next_id, ready, track};
@@ -270,6 +270,31 @@ pub fn request_code_actions(state: EditorState) {
     );
 }
 
+/// Requests the organize-imports source action for the focused file and applies
+/// it directly, the comprehensive-LSP counterpart to formatting.
+pub fn organize_imports(state: EditorState) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    track(id, Pending::OrganizeImports);
+    send_request_id(
+        id,
+        "textDocument/codeAction",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "range": {
+                "start": { "line": line, "character": character },
+                "end": { "line": line, "character": character },
+            },
+            "context": {
+                "diagnostics": [],
+                "only": ["source.organizeImports"],
+            },
+        }),
+    );
+}
+
 fn covers_line(diagnostic: &Value, line: u32) -> bool {
     let start = diagnostic
         .pointer("/range/start/line")
@@ -429,7 +454,9 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     );
 }
 
-/// Accepts a completion candidate, replacing the typed prefix.
+/// Accepts a completion candidate, replacing the typed prefix and applying any
+/// `additionalTextEdits` the server attached (an auto-import `use` line, say) in
+/// the same change, with the caret tracked across edits that land above it.
 pub fn accept_completion(state: EditorState, index: usize) {
     let Some(menu) = state.lsp.completion.get_untracked() else {
         return;
@@ -444,9 +471,37 @@ pub fn accept_completion(state: EditorState, index: usize) {
     let caret = element.selection_start().ok().flatten().unwrap_or(0);
     let prefix_units = menu.prefix.encode_utf16().count() as u32;
     let start = caret.saturating_sub(prefix_units);
-    let replaced = splice_utf16(&value, start, caret, &entry.insert);
+
+    // The prefix replacement plus the server's extra edits, all as UTF-16 ranges
+    // over the same text so they splice together cleanly.
+    let mut edits: Vec<(u32, u32, String)> = vec![(start, caret, entry.insert.clone())];
+    for raw in &entry.additional_edits {
+        if let Some(resolved) = resolve_text_edit(&value, raw) {
+            edits.push(resolved);
+        }
+    }
+
+    // The caret lands after the inserted text, pushed right by every extra edit
+    // that resolves before the insertion point (the import lines above it).
+    let insert_units = entry.insert.encode_utf16().count() as i64;
+    let shift: i64 = edits
+        .iter()
+        .skip(1)
+        .filter(|(_, end, _)| *end <= start)
+        .map(|(edit_start, edit_end, text)| {
+            text.encode_utf16().count() as i64 - (*edit_end as i64 - *edit_start as i64)
+        })
+        .sum();
+    let new_caret = (start as i64 + insert_units + shift).max(0) as u32;
+
+    // Splice from the end so earlier offsets stay valid as later ones change.
+    edits.sort_by_key(|(edit_start, _, _)| std::cmp::Reverse(*edit_start));
+    let mut replaced = value;
+    for (edit_start, edit_end, text) in &edits {
+        replaced = splice_utf16(&replaced, *edit_start, *edit_end, text);
+    }
+
     element.set_value(&replaced);
-    let new_caret = start + entry.insert.encode_utf16().count() as u32;
     let _ = element.set_selection_range(new_caret, new_caret);
     let _ = element.focus();
     client(|client| client.suppress_completion = true);
@@ -454,4 +509,23 @@ pub fn accept_completion(state: EditorState, index: usize) {
         let _ = element.dispatch_event(&event);
     }
     state.lsp.completion.set(None);
+}
+
+/// Resolves one LSP text edit to a UTF-16 `(start, end, new_text)` range over
+/// `value`, the form [`accept_completion`] splices.
+fn resolve_text_edit(value: &str, edit: &Value) -> Option<(u32, u32, String)> {
+    let start = offset_of(
+        value,
+        edit.pointer("/range/start/line").and_then(Value::as_u64)? as u32,
+        edit.pointer("/range/start/character")
+            .and_then(Value::as_u64)? as u32,
+    );
+    let end = offset_of(
+        value,
+        edit.pointer("/range/end/line").and_then(Value::as_u64)? as u32,
+        edit.pointer("/range/end/character")
+            .and_then(Value::as_u64)? as u32,
+    );
+    let new_text = edit.get("newText").and_then(Value::as_str)?.to_string();
+    Some((start, end, new_text))
 }

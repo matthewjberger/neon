@@ -116,6 +116,24 @@ pub fn EditorPane(
         }
     });
 
+    // Ask the desktop shell to parse the focused file with tree-sitter whenever
+    // its text changes. The spans arrive over the highlight bridge and bump the
+    // repaint tick the overlay subscribes to.
+    Effect::new(move |_| {
+        // Re-fire when the bridge connects (the tick bumps on socket open), not
+        // only when the text changes, so a buffer open before the shell is up
+        // still gets parsed.
+        state.editing.highlight.get();
+        if active_kind() != PluginKind::File {
+            return;
+        }
+        let Some(path) = active_id() else {
+            return;
+        };
+        let text = source();
+        crate::treesitter::request(language_for_path(&path), text);
+    });
+
     let on_focus = move |_| {
         state.focused_key.set(pane_key);
         if let Some(element) = textarea.get() {
@@ -200,6 +218,7 @@ pub fn EditorPane(
                             let text = source();
                             let set = command_set.get();
                             state.editing.scroll.get();
+                            state.editing.highlight.get();
                             let language = match active_kind() {
                                 PluginKind::File => active_id()
                                     .as_deref()
@@ -212,12 +231,33 @@ pub fn EditorPane(
                             let before: String = segments[..first].concat();
                             let window: String = segments[first..last].concat();
                             let after: String = segments[last..].concat();
+                            let window_start = before.len();
+                            let window_end = window_start + window.len();
                             let mut views = Vec::new();
                             if !before.is_empty() {
                                 views.push(view! { <span>{before}</span> }.into_any());
                             }
-                            for (class, run) in highlight(&window, language, &set) {
-                                views.push(view! { <span class=class>{run}</span> }.into_any());
+                            // Tree-sitter spans from the desktop shell when they are
+                            // cached for this exact text; the built-in scanner until
+                            // they land, in a browser with no shell, and for rhai.
+                            match crate::treesitter::runs_for(
+                                language,
+                                &text,
+                                window_start,
+                                window_end,
+                            ) {
+                                Some(runs) => {
+                                    for (class, run) in runs {
+                                        views
+                                            .push(view! { <span class=class>{run}</span> }.into_any());
+                                    }
+                                }
+                                None => {
+                                    for (class, run) in highlight(&window, language, &set) {
+                                        views
+                                            .push(view! { <span class=class>{run}</span> }.into_any());
+                                    }
+                                }
                             }
                             if !after.is_empty() {
                                 views.push(view! { <span>{after}</span> }.into_any());

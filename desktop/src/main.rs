@@ -11,6 +11,8 @@ mod chat;
 #[cfg(feature = "agent")]
 mod fs;
 #[cfg(feature = "agent")]
+mod highlight;
+#[cfg(feature = "agent")]
 mod lsp;
 #[cfg(feature = "networking")]
 mod network;
@@ -115,6 +117,7 @@ impl ApplicationHandler for App {
             }
             "enable-fs" => fs::start(),
             "enable-lsp" => lsp::start(),
+            "enable-highlight" => highlight::start(),
             "enable-terminal" => pty::start(),
             _ => {}
         });

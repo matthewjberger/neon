@@ -10,7 +10,10 @@
 //!   signal writes.
 //! - `lang.rs` spawns the language worker and routes compile-check requests.
 //! - `state.rs` is all page state as `Copy` signals.
-//! - `highlight.rs` is the rhai syntax scanner the editor overlay paints with.
+//! - `highlight.rs` is the built-in multi-language scanner the editor overlay
+//!   paints with, and the fallback when the tree-sitter bridge is absent.
+//! - `treesitter.rs` is the page side of the native tree-sitter bridge: it asks
+//!   the desktop shell to parse a buffer and caches the token spans it returns.
 //! - `plugins.rs` is the plugin model and its local-storage persistence.
 //! - `components/` holds the viewport, code editor, plugin panel, console,
 //!   reference, toolbar, chat, and loader.
@@ -40,6 +43,7 @@ mod terminal;
 mod theme;
 mod tiles;
 mod tour;
+mod treesitter;
 mod undo;
 
 pub use app::App;

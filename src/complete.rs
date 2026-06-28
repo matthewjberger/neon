@@ -77,6 +77,7 @@ pub fn rhai_complete(state: EditorState) {
                 insert: label.to_string(),
                 detail: String::new(),
                 kind: kind.to_string(),
+                additional_edits: Vec::new(),
             });
         }
     };

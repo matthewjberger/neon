@@ -28,9 +28,9 @@ use edits::{RangeEdit, apply_edits_to_file, apply_workspace_edit, parse_edits};
 use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
-    request_code_actions, request_completion, request_hover_at, request_hover_at_caret,
-    request_locations, request_references, request_signature_help, request_symbols,
-    request_workspace_symbols, start_rename, submit_rename,
+    organize_imports, request_code_actions, request_completion, request_hover_at,
+    request_hover_at_caret, request_locations, request_references, request_signature_help,
+    request_symbols, request_workspace_symbols, start_rename, submit_rename,
 };
 use transport::{connect, file_uri, notify, path_from_uri, send_raw, send_request};
 
@@ -44,6 +44,7 @@ enum Pending {
     Symbols { path: String },
     Rename,
     CodeActions,
+    OrganizeImports,
     ResolveAction,
     Command,
 }
@@ -128,6 +129,116 @@ fn track(id: i64, pending: Pending) {
     });
 }
 
+/// The full set of symbol and completion-item kinds, so the server is free to
+/// answer with any of them rather than just the LSP 1.0 subset.
+const SYMBOL_KINDS: [u64; 26] = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+];
+const COMPLETION_KINDS: [u64; 25] = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+];
+
+/// The `initialize` request, advertising the full client surface the editor
+/// actually consumes: completion with snippets and resolve, hover and signature
+/// help in markdown, the four goto kinds with link support, hierarchical symbols,
+/// code actions with literal and resolve support, prepare-aware rename, rich
+/// diagnostics, and work-done progress. Advertising these is what makes
+/// rust-analyzer offer auto-imports, quick-fixes, and indexing progress at all.
+fn initialize_params(state: EditorState) -> Value {
+    json!({
+        "processId": Value::Null,
+        "rootUri": state.explorer.root.get_untracked().map(|root| file_uri(&root)),
+        "capabilities": {
+            "general": { "positionEncodings": ["utf-16"] },
+            "workspace": {
+                "applyEdit": true,
+                "workspaceEdit": {
+                    "documentChanges": true,
+                    "resourceOperations": ["create", "rename", "delete"],
+                    "failureHandling": "abort",
+                },
+                "configuration": true,
+                "didChangeConfiguration": { "dynamicRegistration": true },
+                "didChangeWatchedFiles": { "dynamicRegistration": true },
+                "executeCommand": { "dynamicRegistration": true },
+                "workspaceFolders": true,
+                "symbol": { "symbolKind": { "valueSet": SYMBOL_KINDS } },
+            },
+            "textDocument": {
+                "synchronization": {
+                    "didSave": true,
+                    "willSave": false,
+                    "willSaveWaitUntil": false,
+                    "dynamicRegistration": false,
+                },
+                "publishDiagnostics": {
+                    "relatedInformation": true,
+                    "tagSupport": { "valueSet": [1, 2] },
+                    "codeDescriptionSupport": true,
+                    "dataSupport": true,
+                },
+                "completion": {
+                    "dynamicRegistration": false,
+                    "contextSupport": true,
+                    "completionItem": {
+                        "snippetSupport": false,
+                        "documentationFormat": ["markdown", "plaintext"],
+                        "deprecatedSupport": true,
+                        "preselectSupport": true,
+                        "labelDetailsSupport": true,
+                        "resolveSupport": { "properties": ["documentation", "detail"] },
+                    },
+                    "completionItemKind": { "valueSet": COMPLETION_KINDS },
+                },
+                "hover": { "contentFormat": ["markdown", "plaintext"] },
+                "signatureHelp": {
+                    "signatureInformation": {
+                        "documentationFormat": ["markdown", "plaintext"],
+                        "parameterInformation": { "labelOffsetSupport": true },
+                        "activeParameterSupport": true,
+                    },
+                },
+                "definition": { "linkSupport": true },
+                "typeDefinition": { "linkSupport": true },
+                "implementation": { "linkSupport": true },
+                "declaration": { "linkSupport": true },
+                "references": {},
+                "documentHighlight": {},
+                "documentSymbol": {
+                    "hierarchicalDocumentSymbolSupport": true,
+                    "symbolKind": { "valueSet": SYMBOL_KINDS },
+                },
+                "codeAction": {
+                    "dynamicRegistration": false,
+                    "isPreferredSupport": true,
+                    "dataSupport": true,
+                    "resolveSupport": { "properties": ["edit"] },
+                    "codeActionLiteralSupport": {
+                        "codeActionKind": {
+                            "valueSet": [
+                                "", "quickfix", "refactor", "refactor.extract",
+                                "refactor.inline", "refactor.rewrite", "source",
+                                "source.organizeImports", "source.fixAll",
+                            ],
+                        },
+                    },
+                },
+                "rename": { "prepareSupport": true, "dynamicRegistration": false },
+                "formatting": {},
+                "rangeFormatting": {},
+                "foldingRange": { "lineFoldingOnly": true },
+                "selectionRange": {},
+                "callHierarchy": {},
+            },
+            "window": {
+                "workDoneProgress": true,
+                "showMessage": {},
+                "showDocument": { "support": false },
+            },
+        },
+    })
+}
+
 /// Shows the consent toast for a Rust file, unless the server is already running.
 pub fn did_open(state: EditorState, path: &str) {
     if language_for_path(path) != "rust" {
@@ -171,6 +282,26 @@ pub fn did_change(state: EditorState, path: &str) {
         json!({
             "textDocument": { "uri": file_uri(path), "version": version },
             "contentChanges": [{ "text": text }],
+        }),
+    );
+}
+
+/// Notifies the server a file was saved, carrying its text so server-side
+/// save hooks (rust-analyzer's check-on-save) run against the saved content.
+pub fn did_save(state: EditorState, path: &str) {
+    if !ready() {
+        return;
+    }
+    let open = client(|client| client.versions.contains_key(path));
+    if !open {
+        return;
+    }
+    let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
+    notify(
+        "textDocument/didSave",
+        json!({
+            "textDocument": { "uri": file_uri(path) },
+            "text": text,
         }),
     );
 }
@@ -225,11 +356,17 @@ fn to_entry(item: &Value) -> Option<CompletionEntry> {
         .unwrap_or_default()
         .to_string();
     let kind = completion_kind(item.get("kind").and_then(Value::as_u64)).to_string();
+    let additional_edits = item
+        .get("additionalTextEdits")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     Some(CompletionEntry {
         label,
         insert,
         detail,
         kind,
+        additional_edits,
     })
 }
 
@@ -389,6 +526,19 @@ fn apply_code_actions(state: EditorState, value: &Value) {
     state.lsp.code_actions.set(titles);
 }
 
+/// Applies the first organize-imports action the server returns, sorting and
+/// merging the file's `use` declarations without opening the action picker.
+fn apply_organize_imports(state: EditorState, value: &Value) {
+    let Some(action) = value
+        .get("result")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+    else {
+        return;
+    };
+    run_code_action(state, action.clone());
+}
+
 fn apply_signature(state: EditorState, value: &Value, x: f64, y: f64) {
     let result = value.get("result");
     let signatures = result
@@ -456,19 +606,7 @@ fn handle(state: EditorState, message: LspServerMessage) {
                 client.versions.clear();
                 client.pending.clear();
             });
-            send_request(
-                "initialize",
-                json!({
-                    "processId": Value::Null,
-                    "rootUri": state.explorer.root.get_untracked().map(|root| file_uri(&root)),
-                    "capabilities": {
-                        "textDocument": {
-                            "synchronization": { "didSave": false },
-                            "publishDiagnostics": {},
-                        }
-                    },
-                }),
-            );
+            send_request("initialize", initialize_params(state));
         }
         LspServerMessage::Rpc { json } => {
             if let Ok(value) = serde_json::from_str::<Value>(&json) {
@@ -501,6 +639,43 @@ fn handle_rpc(state: EditorState, value: Value) {
             }
             return;
         }
+        // rust-analyzer pulls its settings; answer with nulls so it uses its
+        // defaults instead of blocking on a reply that never comes.
+        Some("workspace/configuration") => {
+            let count = value
+                .pointer("/params/items")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0);
+            let result = vec![Value::Null; count];
+            if let Some(id) = value.get("id") {
+                send_raw(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+            }
+            return;
+        }
+        // Dynamic (un)registration and progress tokens: acknowledge so the server
+        // proceeds. We register nothing of our own to act on.
+        Some("client/registerCapability")
+        | Some("client/unregisterCapability")
+        | Some("window/workDoneProgress/create")
+        | Some("window/showMessageRequest") => {
+            if let Some(id) = value.get("id") {
+                send_raw(json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }));
+            }
+            return;
+        }
+        // Indexing and build progress, and the server's own messages, into the
+        // LSP log so the status is visible while rust-analyzer warms up.
+        Some("$/progress") => {
+            log_progress(state, &value);
+            return;
+        }
+        Some("window/showMessage") | Some("window/logMessage") => {
+            if let Some(message) = value.pointer("/params/message").and_then(Value::as_str) {
+                log(state, message.to_string());
+            }
+            return;
+        }
         _ => {}
     }
     let Some(id) = value.get("id").and_then(Value::as_i64) else {
@@ -521,6 +696,7 @@ fn handle_rpc(state: EditorState, value: Value) {
                 }
             }
             Pending::CodeActions => apply_code_actions(state, &value),
+            Pending::OrganizeImports => apply_organize_imports(state, &value),
             Pending::ResolveAction => {
                 if let Some(result) = value.get("result").filter(|result| result.is_object()) {
                     run_code_action(state, result.clone());
@@ -536,10 +712,39 @@ fn handle_rpc(state: EditorState, value: Value) {
     }
     if id == 1 && value.get("result").is_some() {
         notify("initialized", json!({}));
+        notify(
+            "workspace/didChangeConfiguration",
+            json!({ "settings": {} }),
+        );
         client(|client| client.ready = true);
         for path in open_rust_files(state) {
             open_document(state, &path);
         }
+    }
+}
+
+/// Turns a `$/progress` notification into one log line: the work's title and the
+/// percentage or message it reports, so a long index reads as progress.
+fn log_progress(state: EditorState, value: &Value) {
+    let payload = value.pointer("/params/value");
+    let Some(payload) = payload else {
+        return;
+    };
+    let kind = payload.get("kind").and_then(Value::as_str).unwrap_or("");
+    let title = payload.get("title").and_then(Value::as_str);
+    let message = payload.get("message").and_then(Value::as_str);
+    let percentage = payload.get("percentage").and_then(Value::as_u64);
+    let detail = match (message, percentage) {
+        (Some(message), Some(percentage)) => format!("{message} ({percentage}%)"),
+        (Some(message), None) => message.to_string(),
+        (None, Some(percentage)) => format!("{percentage}%"),
+        (None, None) => String::new(),
+    };
+    let label = title.unwrap_or("progress");
+    match kind {
+        "end" => log(state, format!("{label}: done")),
+        _ if detail.is_empty() => {}
+        _ => log(state, format!("{label}: {detail}")),
     }
 }
 

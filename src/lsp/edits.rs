@@ -70,7 +70,7 @@ pub(super) fn apply_edits_to_file(state: EditorState, path: &str, edits: &[Range
     did_change(state, path);
 }
 
-fn offset_of(value: &str, line: u32, character: u32) -> u32 {
+pub(super) fn offset_of(value: &str, line: u32, character: u32) -> u32 {
     let mut current_line = 0;
     let mut offset = 0;
     for unit in value.chars() {
