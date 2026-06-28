@@ -305,6 +305,26 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_count_and_jumps() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "5");
+        let down = run_key(&engine, &ast, &mut state_map, "j");
+        let moved = down.iter().any(|op| {
+            op.clone()
+                .try_cast::<rhai::Map>()
+                .and_then(|map| map.get("MoveLine").cloned())
+                .and_then(|value| value.as_int().ok())
+                .map(|delta| delta == 5)
+                .unwrap_or(false)
+        });
+        assert!(moved, "5j did not move five lines");
+        let ops = run_key(&engine, &ast, &mut state_map, ".");
+        assert!(has_string_op(&ops, "Repeat"), ". did not repeat");
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (

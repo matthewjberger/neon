@@ -48,6 +48,10 @@
 //   #{ TillChar: "x" } #{ TillCharBack: "x" }         on-line till (t / T)
 //   "RepeatFind" "RepeatFindBack"    repeat the last find (; / ,)
 //
+// Repeat and jumps:
+//   "Repeat"                         replay the last buffer change (the dot)
+//   #{ Goto: 42 } "BufferStart" "BufferEnd" "Center"
+//
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"
 //   #{ RunCommand: "rename-symbol" }      "code-action" "hover" "jump-symbol"

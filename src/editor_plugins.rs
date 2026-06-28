@@ -38,6 +38,8 @@ thread_local! {
     static LAST_SEARCH: RefCell<Option<(String, bool)>> = const { RefCell::new(None) };
     /// The last in-line find `(char, kind)`, repeated by `RepeatFind`.
     static LAST_FIND: Cell<Option<(char, FindKind)>> = const { Cell::new(None) };
+    /// The op batch of the last buffer change, replayed by `Repeat` (the dot).
+    static LAST_CHANGE: RefCell<Vec<EditorOp>> = const { RefCell::new(Vec::new()) };
 }
 
 /// How an in-line find lands: on the character (`f`/`F`) or just before/after it
@@ -64,6 +66,7 @@ fn make_engine() -> Engine {
 }
 
 /// One editor action a plugin emits.
+#[derive(Clone)]
 enum EditorOp {
     Consume,
     SetMode(String),
@@ -150,6 +153,16 @@ enum EditorOp {
     RepeatFind,
     /// In-line find: repeat the last find in the opposite direction (`,`).
     RepeatFindBack,
+    /// Replay the last buffer change (`.`).
+    Repeat,
+    /// Move the caret to the start of a 1-based line.
+    Goto(i64),
+    /// Move the caret to the start of the buffer (`gg`).
+    BufferStart,
+    /// Move the caret to the last line (`G`).
+    BufferEnd,
+    /// Scroll so the caret line sits at the middle of the view (`zz`).
+    Center,
 }
 
 /// One keystroke handed to the editor plugins.
@@ -179,15 +192,31 @@ pub fn handle_key(
 ) -> KeyOutcome {
     let mode = state.editing.mode.get_untracked();
     let introspection = introspect(textarea);
-    let ops = dispatch(state, event, &mode, &introspection);
+    let mut ops = dispatch(state, event, &mode, &introspection);
     if ops.is_empty() {
         return KeyOutcome {
             consumed: false,
             changed: false,
         };
     }
-    let consumed = ops.iter().any(|op| matches!(op, EditorOp::Consume));
+    // A dot replays the recorded change rather than its own batch, and is never
+    // itself recorded, so repeating a repeat repeats the original change.
+    let is_repeat = ops.iter().any(|op| matches!(op, EditorOp::Repeat));
+    if is_repeat {
+        ops = LAST_CHANGE.with(|cell| cell.borrow().clone());
+        if ops.is_empty() {
+            return KeyOutcome {
+                consumed: true,
+                changed: false,
+            };
+        }
+    }
+    let consumed = is_repeat || ops.iter().any(|op| matches!(op, EditorOp::Consume));
+    let record = if is_repeat { None } else { Some(ops.clone()) };
     let changed = apply(state, id, kind, textarea, ops);
+    if changed && let Some(batch) = record {
+        LAST_CHANGE.with(|cell| *cell.borrow_mut() = batch);
+    }
     KeyOutcome { consumed, changed }
 }
 
@@ -360,6 +389,10 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "SearchPrev" => Some(EditorOp::SearchPrev),
             "RepeatFind" => Some(EditorOp::RepeatFind),
             "RepeatFindBack" => Some(EditorOp::RepeatFindBack),
+            "Repeat" => Some(EditorOp::Repeat),
+            "BufferStart" => Some(EditorOp::BufferStart),
+            "BufferEnd" => Some(EditorOp::BufferEnd),
+            "Center" => Some(EditorOp::Center),
             _ => None,
         };
     }
@@ -373,6 +406,7 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "Register" => Some(EditorOp::Register(payload.into_string().ok()?)),
         "Search" => Some(EditorOp::Search(payload.into_string().ok()?)),
         "SearchBack" => Some(EditorOp::SearchBack(payload.into_string().ok()?)),
+        "Goto" => Some(EditorOp::Goto(payload.as_int().ok()?)),
         "FindCharBack" => Some(EditorOp::FindCharBack(payload.into_string().ok()?)),
         "TillChar" => Some(EditorOp::TillChar(payload.into_string().ok()?)),
         "TillCharBack" => Some(EditorOp::TillCharBack(payload.into_string().ok()?)),
@@ -754,6 +788,31 @@ fn apply(
                         caret = index;
                     }
                 }
+            }
+            EditorOp::Repeat => {}
+            EditorOp::Goto(line) => {
+                let target = (line.max(1) - 1) as usize;
+                let mut offset = 0;
+                let mut current = 0;
+                while offset < text.len() && current < target {
+                    if text[offset] == '\n' {
+                        current += 1;
+                    }
+                    offset += 1;
+                }
+                caret = offset.min(text.len());
+            }
+            EditorOp::BufferStart => caret = 0,
+            EditorOp::BufferEnd => caret = line_start(&text, text.len()),
+            EditorOp::Center => {
+                let line_index = text[..caret.min(text.len())]
+                    .iter()
+                    .filter(|character| **character == '\n')
+                    .count();
+                let line_height = crate::caret::line_height(textarea).max(1.0);
+                let view = textarea.client_height() as f64;
+                let target = (line_index as f64) * line_height - view / 2.0;
+                textarea.set_scroll_top(target.max(0.0) as i32);
             }
             EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.editing.palette_open.set(true),

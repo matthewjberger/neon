@@ -47,7 +47,11 @@
 //
 // Search and find: * / # jump to the next/previous match of the word under the
 // caret, n / N repeat it; f / F / t / T jump to a character on the line and ; / ,
-// repeat that. Edit this live to change anything.
+// repeat that.
+//
+// Repeat and jumps: . replays the last change, a count repeats a motion (5j,
+// 3l), gg / G go to the top / bottom (42G to a line), zz centers the view. Edit
+// this live to change anything.
 
 fn leader_menu() {
     #{ title: "Leader", items: [
@@ -231,6 +235,13 @@ fn plugin_menu() {
         #{ key: "m", label: "Plugin manager" },
         #{ key: "i", label: "Installed" },
     ] };
+}
+
+// A pending count string as an integer, or the fallback when none was typed.
+fn count_or(text, fallback) {
+    if text == "" { return fallback; }
+    let value = parse_int(text);
+    if value < 1 { 1 } else { value }
 }
 
 // The bracket or quote pair a surround key names, or () for an unknown key.
@@ -601,10 +612,25 @@ fn on_key() {
         state.pending = "";
         if key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
         else if key == "c" { ops.push(#{ ToggleComment: "//" }); }
+        else if key == "g" { ops.push("BufferStart"); }
+        return;
+    }
+    if pending == "z" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == "z" { ops.push("Center"); }
         return;
     }
 
     ops.push("Consume");
+    // Count prefix: digits accumulate so 5j, 3l, and 42G repeat or jump. 0 only
+    // counts once a count is going, so a bare 0 is still line start.
+    let count = if "count" in state { state.count } else { "" };
+    state.count = "";
+    if (key == "0" && count != "") || (key.len() == 1 && key >= "1" && key <= "9") {
+        state.count = count + key;
+        return;
+    }
     if key == " " { state.pending = "SPC"; ops.push(#{ ShowMenu: leader_menu() }); }
     else if key == ":" { ops.push(#{ RunCommand: "open-palette" }); }
     else if key == "/" { ops.push(#{ RunCommand: "find" }); }
@@ -613,10 +639,10 @@ fn on_key() {
     else if key == "a" { ops.push(#{ Move: 1 }); ops.push(#{ SetMode: "insert" }); }
     else if key == "A" { ops.push("LineEnd"); ops.push(#{ SetMode: "insert" }); }
     else if key == "o" { ops.push("LineEnd"); ops.push(#{ Insert: "\n" }); ops.push(#{ SetMode: "insert" }); }
-    else if key == "h" || key == "ArrowLeft" { ops.push(#{ Move: -1 }); }
-    else if key == "l" || key == "ArrowRight" { ops.push(#{ Move: 1 }); }
-    else if key == "j" || key == "ArrowDown" { ops.push(#{ MoveLine: 1 }); }
-    else if key == "k" || key == "ArrowUp" { ops.push(#{ MoveLine: -1 }); }
+    else if key == "h" || key == "ArrowLeft" { ops.push(#{ Move: -count_or(count, 1) }); }
+    else if key == "l" || key == "ArrowRight" { ops.push(#{ Move: count_or(count, 1) }); }
+    else if key == "j" || key == "ArrowDown" { ops.push(#{ MoveLine: count_or(count, 1) }); }
+    else if key == "k" || key == "ArrowUp" { ops.push(#{ MoveLine: -count_or(count, 1) }); }
     else if key == "0" { ops.push("LineStart"); }
     else if key == "$" { ops.push("LineEnd"); }
     else if key == "w" { ops.push("NextWord"); }
@@ -644,6 +670,9 @@ fn on_key() {
     else if key == "y" { state.pending = "y"; }
     else if key == "p" || key == "P" { ops.push("Paste"); }
     else if key == "\"" { state.pending = "\""; }
+    else if key == "." { ops.push("Repeat"); }
+    else if key == "G" { if count != "" { ops.push(#{ Goto: count_or(count, 1) }); } else { ops.push("BufferEnd"); } }
+    else if key == "z" { state.pending = "z"; }
     else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
     else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }
