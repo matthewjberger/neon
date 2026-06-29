@@ -332,6 +332,29 @@ async fn run_tool(shared: &Arc<Shared>, name: &str, arguments: Value) -> Result<
             .await?;
             diagnostics_result(response)
         }
+        "propose_edit" => {
+            let buffer = arguments
+                .get("buffer")
+                .and_then(Value::as_str)
+                .ok_or("buffer is required")?
+                .to_string();
+            let text = arguments
+                .get("text")
+                .and_then(Value::as_str)
+                .ok_or("text is required")?
+                .to_string();
+            let correlation_id = shared.correlation();
+            let response = send_request(
+                shared,
+                AgentRequest::ProposeEdit {
+                    correlation_id,
+                    buffer,
+                    text,
+                },
+            )
+            .await?;
+            diagnostics_result(response)
+        }
         "get_api_reference" => {
             let correlation_id = shared.correlation();
             let response =

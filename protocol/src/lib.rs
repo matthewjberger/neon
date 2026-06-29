@@ -555,6 +555,13 @@ pub enum AgentRequest {
         buffer: String,
         text: String,
     },
+    /// Propose a new full text for a buffer for review. The page stages it as a
+    /// diff the user accepts or rejects, rather than applying it outright.
+    ProposeEdit {
+        correlation_id: CorrelationId,
+        buffer: String,
+        text: String,
+    },
     /// List the plugins with their enabled state and ids. The page answers.
     ListPlugins { correlation_id: CorrelationId },
     /// The scripting API: every command (method, fields, reply) and every
@@ -643,6 +650,7 @@ pub fn request_correlation(request: &AgentRequest) -> CorrelationId {
         AgentRequest::GetEditorState { correlation_id }
         | AgentRequest::GetBuffer { correlation_id, .. }
         | AgentRequest::SetBuffer { correlation_id, .. }
+        | AgentRequest::ProposeEdit { correlation_id, .. }
         | AgentRequest::ListPlugins { correlation_id }
         | AgentRequest::GetApiReference { correlation_id }
         | AgentRequest::GetConsole { correlation_id }

@@ -109,6 +109,18 @@ fn handle_request(
                 diagnostics,
             }
         }
+        AgentRequest::ProposeEdit {
+            correlation_id,
+            buffer,
+            text,
+        } => {
+            let diagnostics = crate::check::check(state, &text);
+            state.editing.proposal.set(Some((buffer, text)));
+            AgentResponse::Diagnostics {
+                correlation_id,
+                diagnostics,
+            }
+        }
         AgentRequest::ListPlugins { correlation_id } => AgentResponse::Plugins {
             correlation_id,
             plugins: state.plugins.get_untracked(),

@@ -42,6 +42,18 @@ pub(super) fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool(
+            "propose_edit",
+            "Propose a new full rhai source for a plugin without applying it. The user reviews it as an accept/reject diff in the editor. Returns diagnostics for the proposed source: ok is true when it compiled clean, otherwise the syntax errors and unknown-command warnings.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "buffer": { "type": "string", "description": "plugin id" },
+                    "text": { "type": "string", "description": "proposed rhai source" }
+                },
+                "required": ["buffer", "text"]
+            }),
+        ),
+        tool(
             "list_plugins",
             "List every plugin with its id, name, source, and enabled flag.",
             json!({ "type": "object", "properties": {} }),

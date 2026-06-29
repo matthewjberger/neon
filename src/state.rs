@@ -418,6 +418,9 @@ pub struct EditingState {
     /// The surface's primary caret in client pixels (just below it), so the LSP
     /// completion and hover popups anchor to it instead of the hidden textarea.
     pub surface_caret_pixel: RwSignal<Option<(f64, f64)>>,
+    /// A pending AI edit awaiting review: the buffer id and its proposed full
+    /// text, shown as an accept/reject diff. `None` when nothing is proposed.
+    pub proposal: RwSignal<Option<(String, String)>>,
 }
 
 impl EditingState {
@@ -440,6 +443,7 @@ impl EditingState {
             tab_drag: RwSignal::new(None),
             folds: RwSignal::new(HashMap::new()),
             surface_caret_pixel: RwSignal::new(None),
+            proposal: RwSignal::new(None),
         }
     }
 }

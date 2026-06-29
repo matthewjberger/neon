@@ -6,6 +6,7 @@
 
 pub mod chat;
 pub mod context_menu;
+pub mod diff_review;
 pub mod find;
 pub mod help;
 pub mod jump_overlay;
@@ -22,6 +23,7 @@ use leptos::prelude::*;
 use crate::bridge::Bridge;
 use crate::components::overlays::chat::ChatPane;
 use crate::components::overlays::context_menu::ContextMenuView;
+use crate::components::overlays::diff_review::DiffReview;
 use crate::components::overlays::find::FindBar;
 use crate::components::overlays::help::Help;
 use crate::components::overlays::jump_overlay::JumpOverlay;
@@ -50,6 +52,7 @@ pub fn Overlays(
     state: EditorState,
 ) -> impl IntoView {
     view! {
+        <DiffReview bridge state />
         <FindBar state />
         <CompletionPopup state />
         <HoverCardView state />

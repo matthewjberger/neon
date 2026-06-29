@@ -1975,6 +1975,78 @@ body {
   text-overflow: ellipsis;
 }
 
+/* The AI edit review: a proposed buffer edit shown as an accept/reject diff. */
+.diff-review-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 80;
+}
+
+.diff-review {
+  display: flex;
+  flex-direction: column;
+  width: 70%;
+  max-width: 900px;
+  max-height: 76vh;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.diff-review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.diff-review-header span {
+  flex: 1;
+}
+
+.diff-review-body {
+  overflow: auto;
+  padding: 6px 0;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  white-space: pre;
+}
+
+.diff-line {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.diff-sign {
+  width: 10px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.diff-insert {
+  background: color-mix(in srgb, #3fb950 18%, transparent);
+}
+
+.diff-delete {
+  background: color-mix(in srgb, #f85149 18%, transparent);
+}
+
+.diff-delete .diff-text {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
 /* The multibuffer: excerpts from across files gathered into one scrollable view. */
 .multibuffer {
   display: flex;
