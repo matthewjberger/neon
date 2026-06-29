@@ -63,6 +63,8 @@ pub enum EditorCommand {
     ToggleUndoTree,
     ToggleGit,
     ToggleOutline,
+    CallHierarchy,
+    CallHierarchyOutgoing,
     ToggleSurface,
     NextHunk,
     PrevHunk,
@@ -174,6 +176,12 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("toggle-undo-tree", Some("Toggle undo tree"), ToggleUndoTree),
         ("toggle-git", Some("Toggle source control"), ToggleGit),
         ("toggle-outline", Some("Toggle outline"), ToggleOutline),
+        ("call-hierarchy", Some("Show callers"), CallHierarchy),
+        (
+            "call-hierarchy-outgoing",
+            Some("Show callees"),
+            CallHierarchyOutgoing,
+        ),
         ("next-hunk", Some("Next change"), NextHunk),
         ("prev-hunk", Some("Previous change"), PrevHunk),
         (
@@ -440,6 +448,8 @@ pub fn run(
                 crate::lsp::request_outline(state);
             }
         }
+        EditorCommand::CallHierarchy => crate::lsp::request_call_hierarchy(state, true),
+        EditorCommand::CallHierarchyOutgoing => crate::lsp::request_call_hierarchy(state, false),
         EditorCommand::NextHunk => crate::git::goto_hunk(state, true),
         EditorCommand::PrevHunk => crate::git::goto_hunk(state, false),
         EditorCommand::ToggleSurface => state.editing.surface.update(|on| *on = !*on),

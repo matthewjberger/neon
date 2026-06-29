@@ -32,6 +32,7 @@ use crate::components::overlays::palette::Palette;
 use crate::components::overlays::popups::{CompletionPopup, HoverCardView};
 use crate::components::overlays::prompt::PromptView;
 use crate::components::overlays::which_key::WhichKey;
+use crate::components::panels::call_hierarchy::CallHierarchy;
 use crate::components::panels::control_panel::ControlPanel;
 use crate::components::panels::lsp_panel::{LspConsent, LspLog};
 use crate::components::panels::outline::Outline;
@@ -59,6 +60,7 @@ pub fn Overlays(
         <UndoTree state />
         <SourceControl state />
         <Outline state />
+        <CallHierarchy state />
         <MultiCursorOverlay state />
         <RenamePrompt state />
         <CodeActionMenu state />

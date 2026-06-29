@@ -14,8 +14,8 @@ use serde_json::{Value, json};
 use web_sys::WebSocket;
 
 use crate::state::{
-    CompletionEntry, CompletionMenu, EditorState, HoverCard, OutlineNode, PluginKind, SidebarView,
-    basename, language_for_path,
+    CallHierarchyEntry, CompletionEntry, CompletionMenu, EditorState, HoverCard, OutlineNode,
+    PluginKind, SidebarView, basename, language_for_path,
 };
 
 mod edits;
@@ -28,12 +28,14 @@ use edits::{RangeEdit, apply_edits_to_file, apply_workspace_edit, parse_edits};
 use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
-    organize_imports, request_code_actions, request_completion, request_hover_at,
-    request_hover_at_caret, request_locations, request_outline, request_references,
-    request_signature_help, request_symbols, request_workspace_symbols, start_rename,
-    submit_rename,
+    organize_imports, request_call_hierarchy, request_code_actions, request_completion,
+    request_hover_at, request_hover_at_caret, request_locations, request_outline,
+    request_references, request_signature_help, request_symbols, request_workspace_symbols,
+    start_rename, submit_rename,
 };
-use transport::{connect, file_uri, notify, path_from_uri, send_raw, send_request};
+use transport::{
+    connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
+};
 
 enum Pending {
     Completion { prefix: String, x: f64, y: f64 },
@@ -44,6 +46,8 @@ enum Pending {
     References,
     Symbols { path: String },
     Outline { path: String },
+    CallHierarchyPrepare { incoming: bool },
+    CallHierarchyCalls { incoming: bool },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -546,6 +550,69 @@ fn build_outline(items: &[Value]) -> Vec<OutlineNode> {
         .collect()
 }
 
+/// The first reply of the two-step call-hierarchy gesture. `prepareCallHierarchy`
+/// resolves the symbol under the caret to a `CallHierarchyItem`; we hand that
+/// item straight back as `callHierarchy/incomingCalls` (or `outgoingCalls`) to
+/// list its callers or callees.
+fn apply_call_hierarchy_prepare(value: &Value, incoming: bool) {
+    let Some(item) = value
+        .get("result")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .cloned()
+    else {
+        return;
+    };
+    let method = if incoming {
+        "callHierarchy/incomingCalls"
+    } else {
+        "callHierarchy/outgoingCalls"
+    };
+    let id = next_id();
+    track(id, Pending::CallHierarchyCalls { incoming });
+    send_request_id(id, method, json!({ "item": item }));
+}
+
+/// The second reply: the incoming or outgoing calls. Each entry wraps the related
+/// `CallHierarchyItem` under `from` (callers) or `to` (callees); flatten those to
+/// rows that jump to the related symbol.
+fn apply_call_hierarchy_calls(state: EditorState, value: &Value, incoming: bool) {
+    let key = if incoming { "from" } else { "to" };
+    let entries = value
+        .get("result")
+        .and_then(Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .filter_map(|call| call_hierarchy_entry(call.get(key)?))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    state.lsp.call_hierarchy_incoming.set(incoming);
+    state.lsp.call_hierarchy.set(entries);
+}
+
+fn call_hierarchy_entry(item: &Value) -> Option<CallHierarchyEntry> {
+    let name = item.get("name").and_then(Value::as_str)?.to_string();
+    let detail = item
+        .get("detail")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let path = item.get("uri").and_then(Value::as_str).map(path_from_uri)?;
+    let line = item
+        .pointer("/selectionRange/start/line")
+        .or_else(|| item.pointer("/range/start/line"))
+        .and_then(Value::as_u64)? as u32
+        + 1;
+    Some(CallHierarchyEntry {
+        name,
+        detail,
+        path,
+        line,
+    })
+}
+
 fn apply_code_actions(state: EditorState, value: &Value) {
     let Some(items) = value.get("result").and_then(Value::as_array) else {
         return;
@@ -729,6 +796,12 @@ fn handle_rpc(state: EditorState, value: Value) {
             Pending::References => apply_references(state, &value),
             Pending::Symbols { path } => apply_symbols(state, &value, &path),
             Pending::Outline { path } => apply_outline(state, &value, &path),
+            Pending::CallHierarchyPrepare { incoming } => {
+                apply_call_hierarchy_prepare(&value, incoming)
+            }
+            Pending::CallHierarchyCalls { incoming } => {
+                apply_call_hierarchy_calls(state, &value, incoming)
+            }
             Pending::Rename => {
                 if let Some(result) = value.get("result") {
                     apply_workspace_edit(state, result);

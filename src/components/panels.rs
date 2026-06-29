@@ -2,6 +2,7 @@
 //! problems list, and the rust-analyzer log. Opened into a pane as tiles or
 //! shown as overlays.
 
+pub mod call_hierarchy;
 pub mod console;
 pub mod control_panel;
 pub mod lsp_panel;

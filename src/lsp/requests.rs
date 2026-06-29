@@ -210,6 +210,26 @@ pub fn request_outline(state: EditorState) {
     );
 }
 
+/// Opens the call-hierarchy panel and resolves the symbol under the caret with
+/// `prepareCallHierarchy`; the reply chains into the incoming or outgoing calls.
+pub fn request_call_hierarchy(state: EditorState, incoming: bool) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    state.lsp.call_hierarchy_incoming.set(incoming);
+    state.panels.call_hierarchy.set(true);
+    let id = next_id();
+    track(id, Pending::CallHierarchyPrepare { incoming });
+    send_request_id(
+        id,
+        "textDocument/prepareCallHierarchy",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+        }),
+    );
+}
+
 /// Opens the rename prompt for the symbol at the caret.
 pub fn start_rename(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {

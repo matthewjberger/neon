@@ -139,6 +139,7 @@ fn search_menu() {
         #{ key: "p", label: "Search project" },
         #{ key: "/", label: "Search project" },
         #{ key: "r", label: "Find references" },
+        #{ key: "h", label: "Call hierarchy" },
         #{ key: "j", label: "Jump to symbol" },
         #{ key: "J", label: "Workspace symbols" },
     ] };
@@ -174,6 +175,7 @@ fn goto_menu() {
         #{ key: "i", label: "Go to implementation" },
         #{ key: "r", label: "Find references" },
         #{ key: "R", label: "Rename symbol" },
+        #{ key: "h", label: "Call hierarchy" },
         #{ key: "s", label: "Jump to symbol" },
         #{ key: "S", label: "Workspace symbols" },
     ] };
@@ -478,6 +480,7 @@ fn on_key() {
         if key == "s" { ops.push(#{ RunCommand: "find" }); }
         else if key == "p" || key == "/" { ops.push(#{ RunCommand: "show-search" }); }
         else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
+        else if key == "h" { ops.push(#{ RunCommand: "call-hierarchy" }); }
         else if key == "j" { ops.push(#{ RunCommand: "jump-symbol" }); }
         else if key == "J" { ops.push(#{ RunCommand: "workspace-symbols" }); }
         return;
@@ -502,6 +505,7 @@ fn on_key() {
         else if key == "i" { ops.push(#{ RunCommand: "go-to-implementation" }); }
         else if key == "r" { ops.push(#{ RunCommand: "find-references" }); }
         else if key == "R" { ops.push(#{ RunCommand: "rename-symbol" }); }
+        else if key == "h" { ops.push(#{ RunCommand: "call-hierarchy" }); }
         else if key == "s" { ops.push(#{ RunCommand: "jump-symbol" }); }
         else if key == "S" { ops.push(#{ RunCommand: "workspace-symbols" }); }
         return;

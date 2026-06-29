@@ -217,6 +217,16 @@ pub struct OutlineNode {
     pub children: Vec<OutlineNode>,
 }
 
+/// One row in the call-hierarchy panel: a caller or callee of the queried
+/// symbol, with the location to jump to (its definition's selection range).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallHierarchyEntry {
+    pub name: String,
+    pub detail: String,
+    pub path: String,
+    pub line: u32,
+}
+
 /// The rust-analyzer client surface as the UI sees it: server lifecycle plus
 /// the popups and panels driven by LSP replies. Reached as `state.lsp`.
 #[derive(Clone, Copy)]
@@ -245,6 +255,10 @@ pub struct LspState {
     pub outline: RwSignal<Vec<OutlineNode>>,
     /// The path the outline tree describes, so its rows know where to jump.
     pub outline_path: RwSignal<String>,
+    /// The callers or callees of the queried symbol, for the call-hierarchy panel.
+    pub call_hierarchy: RwSignal<Vec<CallHierarchyEntry>>,
+    /// Whether the call-hierarchy panel is showing callers (`true`) or callees.
+    pub call_hierarchy_incoming: RwSignal<bool>,
     /// The rename prompt's current text, when the rename box is open.
     pub rename: RwSignal<Option<String>>,
     /// Every diagnostic across open files, by path, for the problems panel.
@@ -269,6 +283,8 @@ impl LspState {
             symbol_picker: RwSignal::new(Vec::new()),
             outline: RwSignal::new(Vec::new()),
             outline_path: RwSignal::new(String::new()),
+            call_hierarchy: RwSignal::new(Vec::new()),
+            call_hierarchy_incoming: RwSignal::new(true),
             rename: RwSignal::new(None),
             problems: RwSignal::new(Vec::new()),
             problems_open: RwSignal::new(false),
@@ -403,6 +419,8 @@ pub struct PanelsState {
     pub git: RwSignal<bool>,
     /// Whether the document outline panel is shown.
     pub outline: RwSignal<bool>,
+    /// Whether the call-hierarchy panel is shown.
+    pub call_hierarchy: RwSignal<bool>,
 }
 
 impl PanelsState {
@@ -414,6 +432,7 @@ impl PanelsState {
             undo_tree: RwSignal::new(false),
             git: RwSignal::new(false),
             outline: RwSignal::new(false),
+            call_hierarchy: RwSignal::new(false),
         }
     }
 }
