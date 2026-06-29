@@ -17,7 +17,7 @@ use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
 use crate::highlight::highlight;
-use crate::state::{EditorState, PluginKind, language_for_path};
+use crate::state::{EditorState, InlayHint, PluginKind, language_for_path};
 
 use super::current_buffer;
 
@@ -177,16 +177,21 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
 
     let on_pointerdown = move |event: web_sys::PointerEvent| {
         let extend = event.shift_key();
-        if let Some((line, column)) = cell_at(
-            content.get().map(Into::into),
-            cell(),
-            event.client_x(),
-            event.client_y(),
-        ) {
+        let (_, cell_height) = cell();
+        if let (Some(content_element), Some(text_element)) = (content.get(), text_node.get()) {
+            let content_element: web_sys::HtmlElement = content_element.into();
+            let text_element: web_sys::Element = text_element.into();
+            let rect = content_element.get_bounding_client_rect();
+            let scroll_left = content_element.scroll_left() as f64;
+            let x = event.client_x() as f64 - rect.left() + scroll_left;
+            let y = event.client_y() as f64 - rect.top() + content_element.scroll_top() as f64;
+            let line = (y / cell_height).max(0.0) as usize;
             edit(&move |document| {
                 let line = line.min(document.len_lines().saturating_sub(1));
                 let line_start = document.line_to_char(line);
-                let offset = (line_start + column).min(document.line_end(line));
+                let line_length = document.line_end(line) - line_start;
+                let column = column_at_x(&text_element, &rect, scroll_left, line, x, line_length);
+                let offset = line_start + column;
                 let anchor = if extend {
                     document.primary().anchor
                 } else {
@@ -319,25 +324,26 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                         state.editing.highlight.get();
                         let language = language();
                         let set = command_set.get();
+                        let (id, kind) = buffer();
+                        let hints = if kind == PluginKind::File {
+                            id.and_then(|path| {
+                                    state.lsp.inlay_hints.with(|map| map.get(&path).cloned())
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        };
                         doc.with(|document| {
                             let text = document.text();
                             text.split('\n')
-                                .map(|line| {
-                                    let runs = highlight(line, language, &set);
-                                    view! {
-                                        <div class="surface-line">
-                                            {if runs.is_empty() {
-                                                view! { <span>" "</span> }.into_any()
-                                            } else {
-                                                runs.into_iter()
-                                                    .map(|(class, run)| {
-                                                        view! { <span class=class>{run}</span> }
-                                                    })
-                                                    .collect_view()
-                                                    .into_any()
-                                            }}
-                                        </div>
-                                    }
+                                .enumerate()
+                                .map(|(index, line)| {
+                                    let line_hints = hints
+                                        .iter()
+                                        .filter(|hint| hint.line as usize == index)
+                                        .cloned()
+                                        .collect::<Vec<_>>();
+                                    render_line(line, language, &set, &line_hints)
                                 })
                                 .collect_view()
                         })
@@ -389,22 +395,103 @@ fn metrics(probe: Option<web_sys::HtmlElement>) -> (f64, f64) {
         .unwrap_or((8.0, 18.0))
 }
 
-/// The `(line, column)` nearest a client point, by the monospace cell size. The
-/// caller maps it to a character offset through the document.
-fn cell_at(
-    content: Option<web_sys::HtmlElement>,
-    cell: (f64, f64),
-    client_x: i32,
-    client_y: i32,
-) -> Option<(usize, usize)> {
-    let content = content?;
-    let rect = content.get_bounding_client_rect();
-    let (cell_width, cell_height) = cell;
-    let x = client_x as f64 - rect.left() + content.scroll_left() as f64;
-    let y = client_y as f64 - rect.top() + content.scroll_top() as f64;
-    let line = (y / cell_height).max(0.0) as usize;
-    let column = (x / cell_width).max(0.0).round() as usize;
-    Some((line, column))
+/// The character column on a line whose measured x is nearest a click, found by
+/// bisecting the (monotonic) measured positions so a click lands right even when
+/// inlay hints have shifted the glyphs.
+fn column_at_x(
+    text_element: &web_sys::Element,
+    content_rect: &web_sys::DomRect,
+    scroll_left: f64,
+    line: usize,
+    target_x: f64,
+    line_length: usize,
+) -> usize {
+    if line_length == 0 {
+        return 0;
+    }
+    let at = |column: usize| measure_x(text_element, content_rect, scroll_left, line, column);
+    let mut low = 0_usize;
+    let mut high = line_length;
+    while low < high {
+        let mid = low.midpoint(high + 1);
+        match at(mid) {
+            Some(x) if x <= target_x => low = mid,
+            _ => high = mid - 1,
+        }
+    }
+    let mut best = low;
+    let mut best_distance = f64::MAX;
+    for column in [low, (low + 1).min(line_length)] {
+        if let Some(x) = at(column) {
+            let distance = (x - target_x).abs();
+            if distance < best_distance {
+                best_distance = distance;
+                best = column;
+            }
+        }
+    }
+    best
+}
+
+/// Renders one line: its highlight runs with the line's inlay hints woven in at
+/// their columns as non-editable spans. Hint spans carry `surface-inlay`, which
+/// the column measurement skips, so they shift glyphs visually without moving
+/// the caret's character math.
+fn render_line(
+    line: &str,
+    language: &str,
+    commands: &HashSet<String>,
+    hints: &[InlayHint],
+) -> AnyView {
+    let runs = highlight(line, language, commands);
+    let mut sorted = hints.iter().collect::<Vec<_>>();
+    sorted.sort_by_key(|hint| hint.character);
+    let mut elements: Vec<AnyView> = Vec::new();
+    let mut column = 0_usize;
+    let mut next_hint = 0_usize;
+    for (class, run) in runs {
+        let run_chars = run.chars().collect::<Vec<_>>();
+        let run_end = column + run_chars.len();
+        let mut local = 0_usize;
+        while next_hint < sorted.len() && (sorted[next_hint].character as usize) < run_end {
+            let split = (sorted[next_hint].character as usize).saturating_sub(column);
+            if split >= local {
+                let segment = run_chars[local..split].iter().collect::<String>();
+                if !segment.is_empty() {
+                    elements.push(view! { <span class=class>{segment}</span> }.into_any());
+                }
+                local = split;
+                elements.push(inlay_span(sorted[next_hint]));
+            }
+            next_hint += 1;
+        }
+        let rest = run_chars[local..].iter().collect::<String>();
+        if !rest.is_empty() {
+            elements.push(view! { <span class=class>{rest}</span> }.into_any());
+        }
+        column = run_end;
+    }
+    while next_hint < sorted.len() {
+        elements.push(inlay_span(sorted[next_hint]));
+        next_hint += 1;
+    }
+    if elements.is_empty() {
+        elements.push(view! { <span>" "</span> }.into_any());
+    }
+    view! { <div class="surface-line">{elements}</div> }.into_any()
+}
+
+/// A non-editable inlay-hint span, with the padding the server requested as
+/// surrounding spaces.
+fn inlay_span(hint: &InlayHint) -> AnyView {
+    let mut label = hint.label.clone();
+    if hint.padding_left {
+        label = format!(" {label}");
+    }
+    if hint.padding_right {
+        label = format!("{label} ");
+    }
+    view! { <span class="surface-inlay">{label}</span> }.into_any()
 }
 
 /// The x coordinate (in the content's scroll space) of a character column on a
@@ -431,7 +518,9 @@ fn measure_x(
 /// walking the line's highlight spans (selected by tag so Leptos marker nodes do
 /// not throw off the count). Past the end, lands on the last node's end.
 fn locate_offset(line_element: &web_sys::Element, column: usize) -> Option<(web_sys::Node, u32)> {
-    let spans = line_element.query_selector_all("span").ok()?;
+    let spans = line_element
+        .query_selector_all("span:not(.surface-inlay)")
+        .ok()?;
     let mut remaining = column;
     let mut last: Option<(web_sys::Node, u32)> = None;
     for index in 0..spans.length() {

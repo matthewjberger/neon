@@ -14,8 +14,8 @@ use serde_json::{Value, json};
 use web_sys::WebSocket;
 
 use crate::state::{
-    CompletionEntry, CompletionMenu, EditorState, HierarchyEntry, HoverCard, OutlineNode,
-    PluginKind, SidebarView, basename, language_for_path, lsp_language_for,
+    CompletionEntry, CompletionMenu, EditorState, HierarchyEntry, HoverCard, InlayHint,
+    OutlineNode, PluginKind, SidebarView, basename, language_for_path, lsp_language_for,
 };
 
 mod edits;
@@ -29,9 +29,9 @@ use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
     organize_imports, request_call_hierarchy, request_code_actions, request_completion,
-    request_hover_at, request_hover_at_caret, request_locations, request_outline,
-    request_references, request_signature_help, request_symbols, request_type_hierarchy,
-    request_workspace_symbols, start_rename, submit_rename,
+    request_hover_at, request_hover_at_caret, request_inlay_hints, request_locations,
+    request_outline, request_references, request_signature_help, request_symbols,
+    request_type_hierarchy, request_workspace_symbols, start_rename, submit_rename,
 };
 use transport::{
     connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
@@ -50,6 +50,7 @@ enum Pending {
     CallHierarchyCalls { incoming: bool },
     TypeHierarchyPrepare { supertypes: bool },
     TypeHierarchyCalls { supertypes: bool },
+    InlayHints { path: String },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -238,6 +239,7 @@ fn initialize_params(state: EditorState) -> Value {
                 "selectionRange": {},
                 "callHierarchy": {},
                 "typeHierarchy": {},
+                "inlayHint": { "resolveSupport": { "properties": [] } },
             },
             "window": {
                 "workDoneProgress": true,
@@ -304,6 +306,7 @@ pub fn did_change(state: EditorState, path: &str) {
             "contentChanges": [{ "text": text }],
         }),
     );
+    request_inlay_hints(state, path);
 }
 
 /// Notifies the server a file was saved, carrying its text so server-side
@@ -562,6 +565,60 @@ fn build_outline(items: &[Value]) -> Vec<OutlineNode> {
             })
         })
         .collect()
+}
+
+/// Parses an `inlayHint` reply into the per-file hint list the surface draws.
+/// A hint's label is either a string or an array of parts with `value` fields.
+fn apply_inlay_hints(state: EditorState, value: &Value, path: &str) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let hints = items
+        .iter()
+        .filter_map(|item| {
+            let line = item.pointer("/position/line").and_then(Value::as_u64)? as u32;
+            let character = item
+                .pointer("/position/character")
+                .and_then(Value::as_u64)? as u32;
+            let label = inlay_label(item.get("label")?);
+            if label.is_empty() {
+                return None;
+            }
+            Some(InlayHint {
+                line,
+                character,
+                label,
+                padding_left: item
+                    .get("paddingLeft")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                padding_right: item
+                    .get("paddingRight")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            })
+        })
+        .collect::<Vec<_>>();
+    state.lsp.inlay_hints.update(|map| {
+        map.insert(path.to_string(), hints);
+    });
+}
+
+/// The display text of an inlay-hint label: a bare string, or the joined `value`
+/// fields of its parts.
+fn inlay_label(label: &Value) -> String {
+    if let Some(text) = label.as_str() {
+        return text.to_string();
+    }
+    label
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|part| part.get("value").and_then(Value::as_str))
+                .collect::<String>()
+        })
+        .unwrap_or_default()
 }
 
 /// The first reply of the two-step call-hierarchy gesture. `prepareCallHierarchy`
@@ -856,6 +913,7 @@ fn handle_rpc(state: EditorState, value: Value) {
             Pending::TypeHierarchyCalls { supertypes } => {
                 apply_type_hierarchy_calls(state, &value, supertypes)
             }
+            Pending::InlayHints { path } => apply_inlay_hints(state, &value, &path),
             Pending::Rename => {
                 if let Some(result) = value.get("result") {
                     apply_workspace_edit(state, result);
@@ -934,6 +992,7 @@ fn open_document(state: EditorState, path: &str) {
             }
         }),
     );
+    request_inlay_hints(state, path);
 }
 
 fn apply_diagnostics(state: EditorState, params: &Value) {

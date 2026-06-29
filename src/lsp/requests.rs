@@ -210,6 +210,43 @@ pub fn request_outline(state: EditorState) {
     );
 }
 
+/// Requests the inlay hints for a file's full range into the per-file hint map.
+pub fn request_inlay_hints(state: EditorState, path: &str) {
+    if !ready() {
+        return;
+    }
+    let open = client(|client| client.versions.contains_key(path));
+    if !open {
+        return;
+    }
+    let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
+    let last_line = text.split('\n').count().saturating_sub(1);
+    let last_character = text
+        .split('\n')
+        .next_back()
+        .unwrap_or("")
+        .encode_utf16()
+        .count();
+    let id = next_id();
+    track(
+        id,
+        Pending::InlayHints {
+            path: path.to_string(),
+        },
+    );
+    send_request_id(
+        id,
+        "textDocument/inlayHint",
+        json!({
+            "textDocument": { "uri": file_uri(path) },
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end": { "line": last_line, "character": last_character },
+            },
+        }),
+    );
+}
+
 /// Opens the call-hierarchy panel and resolves the symbol under the caret with
 /// `prepareCallHierarchy`; the reply chains into the incoming or outgoing calls.
 pub fn request_call_hierarchy(state: EditorState, incoming: bool) {

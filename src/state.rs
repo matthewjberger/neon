@@ -206,6 +206,18 @@ impl SceneState {
     }
 }
 
+/// One inlay hint: a label the server wants drawn inline at a position (a type
+/// after a `let`, a parameter name before an argument), with the spacing it asks
+/// for on each side. Rendered as a non-editable span on the surface.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InlayHint {
+    pub line: u32,
+    pub character: u32,
+    pub label: String,
+    pub padding_left: bool,
+    pub padding_right: bool,
+}
+
 /// One node in the document outline: a symbol, its LSP `SymbolKind`, the 0-based
 /// line it starts on, and its nested children (the methods inside an impl, the
 /// variants inside an enum). Built from a hierarchical `documentSymbol` reply.
@@ -258,6 +270,8 @@ pub struct LspState {
     pub outline: RwSignal<Vec<OutlineNode>>,
     /// The path the outline tree describes, so its rows know where to jump.
     pub outline_path: RwSignal<String>,
+    /// Inlay hints per file path, drawn inline on the surface.
+    pub inlay_hints: RwSignal<HashMap<String, Vec<InlayHint>>>,
     /// The callers or callees of the queried symbol, for the call-hierarchy panel.
     pub call_hierarchy: RwSignal<Vec<HierarchyEntry>>,
     /// Whether the call-hierarchy panel is showing callers (`true`) or callees.
@@ -293,6 +307,7 @@ impl LspState {
             symbol_picker: RwSignal::new(Vec::new()),
             outline: RwSignal::new(Vec::new()),
             outline_path: RwSignal::new(String::new()),
+            inlay_hints: RwSignal::new(HashMap::new()),
             call_hierarchy: RwSignal::new(Vec::new()),
             call_hierarchy_incoming: RwSignal::new(true),
             type_hierarchy: RwSignal::new(Vec::new()),

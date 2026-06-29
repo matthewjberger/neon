@@ -2305,6 +2305,15 @@ body {
   height: 19.5px;
 }
 
+.surface-inlay {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  border-radius: 3px;
+  font-size: 0.85em;
+  opacity: 0.85;
+  user-select: none;
+}
+
 .surface-selection {
   position: absolute;
   background: color-mix(in srgb, var(--accent) 26%, transparent);
