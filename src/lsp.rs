@@ -15,7 +15,7 @@ use web_sys::WebSocket;
 
 use crate::state::{
     CallHierarchyEntry, CompletionEntry, CompletionMenu, EditorState, HoverCard, OutlineNode,
-    PluginKind, SidebarView, basename, language_for_path,
+    PluginKind, SidebarView, basename, language_for_path, lsp_language_for,
 };
 
 mod edits;
@@ -245,15 +245,26 @@ fn initialize_params(state: EditorState) -> Value {
     })
 }
 
-/// Shows the consent toast for a Rust file, unless the server is already running.
+/// Shows the consent toast for the first LSP-capable file, unless a server is
+/// already running. The first such file picks the workspace's server family;
+/// files of other families are left to the language worker.
 pub fn did_open(state: EditorState, path: &str) {
-    if language_for_path(path) != "rust" {
+    let Some(family) = lsp_language_for(language_for_path(path)) else {
         return;
-    }
-    if state.lsp.started.get_untracked() {
-        open_document(state, path);
-    } else {
-        state.lsp.consent.set(true);
+    };
+    match state.lsp.language.get_untracked() {
+        Some(active) if active != family => {}
+        Some(_) => {
+            if state.lsp.started.get_untracked() {
+                open_document(state, path);
+            } else {
+                state.lsp.consent.set(true);
+            }
+        }
+        None => {
+            state.lsp.language.set(Some(family.to_string()));
+            state.lsp.consent.set(true);
+        }
     }
 }
 
@@ -874,7 +885,7 @@ fn open_document(state: EditorState, path: &str) {
         json!({
             "textDocument": {
                 "uri": file_uri(path),
-                "languageId": "rust",
+                "languageId": language_for_path(path),
                 "version": 0,
                 "text": text,
             }

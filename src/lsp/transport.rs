@@ -23,8 +23,14 @@ pub(super) fn connect(state: EditorState) {
     let open_state = state;
     let onopen = Closure::<dyn FnMut()>::new(move || {
         if let Some(root) = open_state.explorer.root.get_untracked() {
+            let language = open_state
+                .lsp
+                .language
+                .get_untracked()
+                .unwrap_or_else(|| "rust".to_string());
             send(&LspClientMessage::Start {
                 root_uri: file_uri(&root),
+                language,
             });
         }
     });

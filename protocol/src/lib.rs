@@ -359,11 +359,12 @@ pub enum FsResponse {
 }
 
 /// Page to the desktop language-server bridge. The page is the LSP client; the
-/// desktop spawns and frames the server (rust-analyzer) over stdio.
+/// desktop spawns and frames the server over stdio, choosing it by `language`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LspClientMessage {
-    /// Discover (via rustup) and spawn the server for a workspace root uri.
-    Start { root_uri: String },
+    /// Discover and spawn the server for a workspace root uri and language family
+    /// (`rust`, `typescript`, `python`, `go`, `cpp`).
+    Start { root_uri: String, language: String },
     /// Forward one JSON-RPC message to the server's stdin.
     Rpc { json: String },
     /// Stop the server.

@@ -1,8 +1,10 @@
-//! The language-server bridge: a websocket relay that spawns rust-analyzer and
-//! shuttles LSP JSON-RPC between it and the page, which is the LSP client. The
-//! server speaks `Content-Length` framed messages over stdio, so this frames
-//! outgoing messages and reframes incoming ones into whole JSON payloads. The
-//! server is discovered through rustup, so only rustup and cargo are required.
+//! The language-server bridge: a websocket relay that spawns the language server
+//! for the workspace's language family and shuttles LSP JSON-RPC between it and
+//! the page, which is the LSP client. The server speaks `Content-Length` framed
+//! messages over stdio, so this frames outgoing messages and reframes incoming
+//! ones into whole JSON payloads. Rust is discovered through rustup; the other
+//! servers (typescript-language-server, pyright, gopls, clangd) are taken from
+//! PATH.
 
 use std::process::Stdio;
 use std::sync::Arc;
@@ -94,7 +96,7 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
             continue;
         };
         match message {
-            LspClientMessage::Start { .. } => ensure_server(&shared).await,
+            LspClientMessage::Start { language, .. } => ensure_server(&shared, &language).await,
             LspClientMessage::Rpc { json } => forward_rpc(&shared, &json).await,
             LspClientMessage::Stop => {
                 shared.server_stdin.lock().await.take();
@@ -107,14 +109,14 @@ async fn handle_page(shared: Arc<Shared>, stream: tokio::net::TcpStream) {
     writer.abort();
 }
 
-async fn ensure_server(shared: &Arc<Shared>) {
+async fn ensure_server(shared: &Arc<Shared>, language: &str) {
     {
         if shared.server_stdin.lock().await.is_some() {
             return;
         }
     }
-    let program = match discover().await {
-        Ok(program) => program,
+    let (program, args) = match discover(language).await {
+        Ok(resolved) => resolved,
         Err(error) => {
             send_to_page(shared, &LspServerMessage::Error { message: error }).await;
             return;
@@ -122,6 +124,7 @@ async fn ensure_server(shared: &Arc<Shared>) {
     };
     let mut command = Command::new(&program);
     command
+        .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -142,7 +145,7 @@ async fn ensure_server(shared: &Arc<Shared>) {
     let stderr = child.stderr.take();
     *shared.server_stdin.lock().await = child.stdin.take();
     send_to_page(shared, &LspServerMessage::Started).await;
-    log("rust-analyzer started");
+    log(&format!("{program} started"));
 
     if let Some(stdout) = stdout {
         let stdout_shared = shared.clone();
@@ -215,11 +218,31 @@ async fn forward_rpc(shared: &Arc<Shared>, json: &str) {
     }
 }
 
+/// Resolves the server program and arguments for a language family. Rust goes
+/// through rustup (installing the component if needed); the rest are expected on
+/// PATH, the standard install for each toolchain.
+async fn discover(language: &str) -> Result<(String, Vec<String>), String> {
+    match language {
+        "rust" => Ok((discover_rust_analyzer().await, Vec::new())),
+        "typescript" => Ok((
+            "typescript-language-server".to_string(),
+            vec!["--stdio".to_string()],
+        )),
+        "python" => Ok((
+            "pyright-langserver".to_string(),
+            vec!["--stdio".to_string()],
+        )),
+        "go" => Ok(("gopls".to_string(), Vec::new())),
+        "cpp" => Ok(("clangd".to_string(), Vec::new())),
+        other => Err(format!("no language server configured for {other}")),
+    }
+}
+
 /// Finds rust-analyzer through rustup, installing the component if needed, then
 /// falls back to the binary on PATH.
-async fn discover() -> Result<String, String> {
+async fn discover_rust_analyzer() -> String {
     if let Some(path) = rustup_which().await {
-        return Ok(path);
+        return path;
     }
     let _ = Command::new("rustup")
         .arg("component")
@@ -228,9 +251,9 @@ async fn discover() -> Result<String, String> {
         .status()
         .await;
     if let Some(path) = rustup_which().await {
-        return Ok(path);
+        return path;
     }
-    Ok("rust-analyzer".to_string())
+    "rust-analyzer".to_string()
 }
 
 async fn rustup_which() -> Option<String> {

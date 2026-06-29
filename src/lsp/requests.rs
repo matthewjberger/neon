@@ -11,7 +11,7 @@ use super::edits::{apply_workspace_edit, offset_of, splice_utf16};
 use super::text::{caret_pixel, line_character, word_at, word_prefix};
 use super::transport::{file_uri, send_request_id};
 use super::{Pending, client, next_id, ready, track};
-use crate::state::{EditorState, PluginKind, language_for_path};
+use crate::state::{EditorState, PluginKind, language_for_path, lsp_language_for};
 
 /// Requests completion at the caret of the focused Rust file.
 pub fn request_completion(state: EditorState) {
@@ -28,7 +28,7 @@ pub fn request_completion(state: EditorState) {
     let Some(path) = buffer.id else {
         return;
     };
-    if language_for_path(&path) != "rust" {
+    if lsp_language_for(language_for_path(&path)) != state.lsp.language.get_untracked().as_deref() {
         return;
     }
     let Some(element) = crate::components::overlays::find::active() else {
@@ -431,7 +431,8 @@ pub fn goto_diagnostic(state: EditorState, forward: bool) {
     }
 }
 
-/// The focused Rust file and the caret's zero-based line and character.
+/// The focused file served by the active language server, and the caret's
+/// zero-based line and character.
 fn caret_position(state: EditorState) -> Option<(String, u32, u32)> {
     if !ready() {
         return None;
@@ -441,7 +442,7 @@ fn caret_position(state: EditorState) -> Option<(String, u32, u32)> {
         return None;
     }
     let path = buffer.id?;
-    if language_for_path(&path) != "rust" {
+    if lsp_language_for(language_for_path(&path)) != state.lsp.language.get_untracked().as_deref() {
         return None;
     }
     let element = crate::components::overlays::find::active()?;
@@ -463,7 +464,7 @@ pub fn request_hover_at(state: EditorState, client_x: f64, client_y: f64) {
     let Some(path) = buffer.id else {
         return;
     };
-    if language_for_path(&path) != "rust" {
+    if lsp_language_for(language_for_path(&path)) != state.lsp.language.get_untracked().as_deref() {
         return;
     }
     let Some(element) = crate::components::overlays::find::active() else {

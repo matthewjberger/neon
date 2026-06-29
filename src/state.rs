@@ -233,6 +233,9 @@ pub struct CallHierarchyEntry {
 pub struct LspState {
     /// Whether the language server has been started for this session.
     pub started: RwSignal<bool>,
+    /// The language-server family running for this workspace, if any: the first
+    /// LSP-capable file opened picks it, and all gating checks against it.
+    pub language: RwSignal<Option<String>>,
     /// Whether the consent toast asking to start rust-analyzer is showing.
     pub consent: RwSignal<bool>,
     /// The language-server log lines, for the LSP log panel.
@@ -273,6 +276,7 @@ impl LspState {
     fn new() -> Self {
         Self {
             started: RwSignal::new(false),
+            language: RwSignal::new(None),
             consent: RwSignal::new(false),
             log: RwSignal::new(Vec::new()),
             log_open: RwSignal::new(false),
@@ -701,12 +705,43 @@ pub fn language_for_path(path: &str) -> &'static str {
         "md" | "markdown" => "markdown",
         "json" => "json",
         "rhai" => "rhai",
-        "js" | "mjs" => "javascript",
-        "ts" => "typescript",
+        "js" | "mjs" | "jsx" => "javascript",
+        "ts" | "tsx" => "typescript",
+        "py" | "pyi" => "python",
+        "go" => "go",
+        "c" | "h" => "c",
+        "cc" | "cpp" | "cxx" | "hpp" | "hxx" => "cpp",
         "wgsl" => "wgsl",
         "css" => "css",
         "html" => "html",
         _ => "plaintext",
+    }
+}
+
+/// The display name of the server program for a language family, for the consent
+/// toast and the status bar.
+pub fn lsp_server_name(family: &str) -> &'static str {
+    match family {
+        "rust" => "rust-analyzer",
+        "typescript" => "typescript-language-server",
+        "python" => "pyright",
+        "go" => "gopls",
+        "cpp" => "clangd",
+        _ => "the language server",
+    }
+}
+
+/// The language-server family that handles a file language, if one is wired up.
+/// Languages that share a server (TypeScript and JavaScript, C and C++) map to
+/// the same family key, which the desktop relay turns into a server command.
+pub fn lsp_language_for(language: &str) -> Option<&'static str> {
+    match language {
+        "rust" => Some("rust"),
+        "typescript" | "javascript" => Some("typescript"),
+        "python" => Some("python"),
+        "go" => Some("go"),
+        "c" | "cpp" => Some("cpp"),
+        _ => None,
     }
 }
 

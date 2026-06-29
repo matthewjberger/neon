@@ -32,10 +32,19 @@ pub fn StatusBar(state: EditorState) -> impl IntoView {
             <span
                 class="status-item lsp"
                 class:active=move || state.lsp.started.get()
-                title="Toggle the rust-analyzer log"
+                title="Toggle the language-server log"
                 on:click=move |_| state.lsp.log_open.update(|open| *open = !*open)
             >
-                {move || if state.lsp.started.get() { "rust-analyzer" } else { "LSP off" }}
+                {move || {
+                    if state.lsp.started.get() {
+                        state.lsp.language
+                            .get()
+                            .map(|family| crate::state::lsp_server_name(&family))
+                            .unwrap_or("LSP on")
+                    } else {
+                        "LSP off"
+                    }
+                }}
             </span>
         </div>
     }

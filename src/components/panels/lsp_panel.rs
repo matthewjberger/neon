@@ -1,9 +1,9 @@
 //! The language-server surface: a consent toast that gates starting the server
-//! (it spawns a process), and a log panel showing rust-analyzer's output.
+//! (it spawns a process), and a log panel showing the server's output.
 
 use leptos::prelude::*;
 
-use crate::state::{EditorState, basename};
+use crate::state::{EditorState, basename, lsp_server_name};
 
 #[component]
 pub fn LspConsent(state: EditorState) -> impl IntoView {
@@ -16,7 +16,11 @@ pub fn LspConsent(state: EditorState) -> impl IntoView {
                             .get()
                             .map(|root| basename(&root).to_string())
                             .unwrap_or_else(|| "this folder".to_string());
-                        format!("Start rust-analyzer for {root}?")
+                        let server = state.lsp.language
+                            .get()
+                            .map(|family| lsp_server_name(&family))
+                            .unwrap_or("the language server");
+                        format!("Start {server} for {root}?")
                     }}
                 </span>
                 <button class="tool-button" on:click=move |_| crate::lsp::enable(state)>
