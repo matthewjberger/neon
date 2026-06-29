@@ -6,6 +6,7 @@ pub mod call_hierarchy;
 pub mod console;
 pub mod control_panel;
 pub mod lsp_panel;
+pub mod multibuffer;
 pub mod outline;
 pub mod problems;
 pub mod reference;

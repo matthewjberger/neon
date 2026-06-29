@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::bridge::Bridge;
 use crate::components::panels::console::Console;
+use crate::components::panels::multibuffer::MultiBufferView;
 use crate::components::panels::reference::Reference;
 use crate::components::panels::terminal::Terminal;
 use crate::components::viewport::Viewport;
@@ -25,6 +26,7 @@ pub enum TileContent {
     Console,
     Terminal,
     Reference,
+    MultiBuffer,
 }
 
 impl TileContent {
@@ -44,6 +46,7 @@ impl TileContent {
             TileContent::Console => "Console".to_string(),
             TileContent::Terminal => "Terminal".to_string(),
             TileContent::Reference => "Reference".to_string(),
+            TileContent::MultiBuffer => "Multibuffer".to_string(),
         }
     }
 }
@@ -56,6 +59,7 @@ pub fn body(content: Option<TileContent>, bridge: BridgeSlot, state: EditorState
         Some(TileContent::Console) => view! { <Console bridge state /> }.into_any(),
         Some(TileContent::Terminal) => view! { <Terminal state /> }.into_any(),
         Some(TileContent::Reference) => view! { <Reference state /> }.into_any(),
+        Some(TileContent::MultiBuffer) => view! { <MultiBufferView state /> }.into_any(),
         _ => view! { <div class="editor-empty">"Open a buffer to edit"</div> }.into_any(),
     }
 }

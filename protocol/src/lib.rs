@@ -248,7 +248,7 @@ pub struct DirEntry {
 }
 
 /// One project-search match: the file, the 1-based line, and the line's text.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {
     pub path: String,
     pub line: u32,

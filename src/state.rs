@@ -534,6 +534,18 @@ pub struct EditorState {
     pub editing: EditingState,
     /// Visibility of the docked panels.
     pub panels: PanelsState,
+    /// The open multibuffer: excerpts gathered from across files into one
+    /// editable view. `None` when no multibuffer is open.
+    pub multibuffer: RwSignal<Option<MultiBuffer>>,
+}
+
+/// A multibuffer: excerpts from many files gathered into one view. Each excerpt
+/// names its file and the line it centres on; the view shows context around it
+/// and edits route back to the source file's buffer.
+#[derive(Clone, PartialEq)]
+pub struct MultiBuffer {
+    pub title: String,
+    pub excerpts: Vec<SearchHit>,
 }
 
 /// A custom right-click menu: where it sits and the commands it offers.
@@ -604,6 +616,7 @@ impl EditorState {
             explorer: ExplorerState::new(),
             editing: EditingState::new(),
             panels: PanelsState::new(),
+            multibuffer: RwSignal::new(None),
         }
     }
 

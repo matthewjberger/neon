@@ -69,6 +69,7 @@ pub enum EditorCommand {
     TypeHierarchySubtypes,
     FoldAll,
     UnfoldAll,
+    OpenMultibuffer,
     ToggleSurface,
     NextHunk,
     PrevHunk,
@@ -194,6 +195,11 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ),
         ("fold-all", Some("Fold all regions"), FoldAll),
         ("unfold-all", Some("Unfold all regions"), UnfoldAll),
+        (
+            "open-multibuffer",
+            Some("Open search as multibuffer"),
+            OpenMultibuffer,
+        ),
         ("next-hunk", Some("Next change"), NextHunk),
         ("prev-hunk", Some("Previous change"), PrevHunk),
         (
@@ -472,6 +478,16 @@ pub fn run(
         EditorCommand::CallHierarchyOutgoing => crate::lsp::request_call_hierarchy(state, false),
         EditorCommand::TypeHierarchy => crate::lsp::request_type_hierarchy(state, true),
         EditorCommand::TypeHierarchySubtypes => crate::lsp::request_type_hierarchy(state, false),
+        EditorCommand::OpenMultibuffer => {
+            let excerpts = state.explorer.search_results.get_untracked();
+            if !excerpts.is_empty() {
+                state.multibuffer.set(Some(crate::state::MultiBuffer {
+                    title: "Search results".to_string(),
+                    excerpts,
+                }));
+                state.open_tile(crate::tiles::TileContent::MultiBuffer);
+            }
+        }
         EditorCommand::FoldAll => {
             if let Some(path) = focused_file(state) {
                 let ranges = state.lsp.folding_ranges.with_untracked(|map| {
