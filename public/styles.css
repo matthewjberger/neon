@@ -2272,8 +2272,8 @@ body {
 
 .surface-gutter {
   flex: 0 0 auto;
-  min-width: 44px;
-  padding: 12px 8px 12px 0;
+  min-width: 56px;
+  padding: 12px 8px 12px 6px;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 13px;
   line-height: 1.5;
@@ -2283,6 +2283,30 @@ body {
   border-right: 1px solid var(--panel-border);
   overflow: hidden;
   user-select: none;
+}
+
+.surface-gutter-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 19.5px;
+}
+
+.surface-gutter-row > span:last-child {
+  flex: 1;
+  text-align: right;
+}
+
+.surface-fold {
+  width: 12px;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--text-dim);
+}
+
+.surface-fold:hover {
+  color: var(--text);
 }
 
 .surface-content {

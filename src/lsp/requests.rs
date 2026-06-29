@@ -247,6 +247,29 @@ pub fn request_inlay_hints(state: EditorState, path: &str) {
     );
 }
 
+/// Requests the foldable ranges for a file into the per-file folding map.
+pub fn request_folding_ranges(path: &str) {
+    if !ready() {
+        return;
+    }
+    let open = client(|client| client.versions.contains_key(path));
+    if !open {
+        return;
+    }
+    let id = next_id();
+    track(
+        id,
+        Pending::FoldingRanges {
+            path: path.to_string(),
+        },
+    );
+    send_request_id(
+        id,
+        "textDocument/foldingRange",
+        json!({ "textDocument": { "uri": file_uri(path) } }),
+    );
+}
+
 /// Opens the call-hierarchy panel and resolves the symbol under the caret with
 /// `prepareCallHierarchy`; the reply chains into the incoming or outgoing calls.
 pub fn request_call_hierarchy(state: EditorState, incoming: bool) {

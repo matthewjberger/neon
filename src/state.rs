@@ -272,6 +272,9 @@ pub struct LspState {
     pub outline_path: RwSignal<String>,
     /// Inlay hints per file path, drawn inline on the surface.
     pub inlay_hints: RwSignal<HashMap<String, Vec<InlayHint>>>,
+    /// Foldable line ranges per file path from `foldingRange`, offered as fold
+    /// toggles in the surface gutter.
+    pub folding_ranges: RwSignal<HashMap<String, Vec<(u32, u32)>>>,
     /// The callers or callees of the queried symbol, for the call-hierarchy panel.
     pub call_hierarchy: RwSignal<Vec<HierarchyEntry>>,
     /// Whether the call-hierarchy panel is showing callers (`true`) or callees.
@@ -308,6 +311,7 @@ impl LspState {
             outline: RwSignal::new(Vec::new()),
             outline_path: RwSignal::new(String::new()),
             inlay_hints: RwSignal::new(HashMap::new()),
+            folding_ranges: RwSignal::new(HashMap::new()),
             call_hierarchy: RwSignal::new(Vec::new()),
             call_hierarchy_incoming: RwSignal::new(true),
             type_hierarchy: RwSignal::new(Vec::new()),
@@ -405,6 +409,9 @@ pub struct EditingState {
     pub prompt: RwSignal<Option<Prompt>>,
     /// The tab being dragged with the pointer, when a drag is in progress.
     pub tab_drag: RwSignal<Option<TabDrag>>,
+    /// Folded line ranges per file path: each `(header, end)` hides the lines
+    /// after `header` through `end` on the surface. Toggled from the gutter.
+    pub folds: RwSignal<HashMap<String, Vec<(usize, usize)>>>,
 }
 
 impl EditingState {
@@ -425,6 +432,7 @@ impl EditingState {
             context_target: RwSignal::new(None),
             prompt: RwSignal::new(None),
             tab_drag: RwSignal::new(None),
+            folds: RwSignal::new(HashMap::new()),
         }
     }
 }

@@ -87,6 +87,50 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
 
     let cell = move || metrics(metric.get().map(Into::into));
 
+    // The fold layout: `rows` maps each visual row to a document line, and
+    // `visual_of` maps a document line to the visual row it shows on (a folded
+    // line maps to its header). Recomputed when the line count or folds change.
+    let fold_view = Memo::new(move |_| {
+        let (id, kind) = buffer();
+        let folds = if kind == PluginKind::File {
+            id.and_then(|path| state.editing.folds.with(|map| map.get(&path).cloned()))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let line_count = doc.with(|document| document.len_lines());
+        fold_map(line_count, &folds)
+    });
+
+    // Toggles the fold whose header is `header_line`, looking up its extent in the
+    // server's folding ranges and recording or clearing it for the focused file.
+    let toggle_fold = move |header_line: usize| {
+        let (id, kind) = buffer();
+        let Some(path) = (kind == PluginKind::File).then_some(id).flatten() else {
+            return;
+        };
+        let range = state.lsp.folding_ranges.with(|map| {
+            map.get(&path)
+                .and_then(|ranges| {
+                    ranges
+                        .iter()
+                        .find(|(start, _)| *start as usize == header_line)
+                })
+                .copied()
+        });
+        let Some((start, end)) = range else {
+            return;
+        };
+        state.editing.folds.update(|map| {
+            let entry = map.entry(path.clone()).or_default();
+            if let Some(position) = entry.iter().position(|(s, _)| *s == start as usize) {
+                entry.remove(position);
+            } else {
+                entry.push((start as usize, end as usize));
+            }
+        });
+    };
+
     let on_keydown = move |event: KeyboardEvent| {
         let key = event.key();
         if matches!(
@@ -185,12 +229,25 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             let scroll_left = content_element.scroll_left() as f64;
             let x = event.client_x() as f64 - rect.left() + scroll_left;
             let y = event.client_y() as f64 - rect.top() + content_element.scroll_top() as f64;
-            let line = (y / cell_height).max(0.0) as usize;
+            let visual_row = (y / cell_height).max(0.0) as usize;
+            let rows = fold_view.get().0;
+            let doc_line = rows
+                .get(visual_row)
+                .copied()
+                .or_else(|| rows.last().copied())
+                .unwrap_or(0);
             edit(&move |document| {
-                let line = line.min(document.len_lines().saturating_sub(1));
+                let line = doc_line.min(document.len_lines().saturating_sub(1));
                 let line_start = document.line_to_char(line);
                 let line_length = document.line_end(line) - line_start;
-                let column = column_at_x(&text_element, &rect, scroll_left, line, x, line_length);
+                let column = column_at_x(
+                    &text_element,
+                    &rect,
+                    scroll_left,
+                    visual_row,
+                    x,
+                    line_length,
+                );
                 let offset = line_start + column;
                 let anchor = if extend {
                     document.primary().anchor
@@ -228,8 +285,14 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         let first_line = (scroll_top / cell_height).floor() as usize;
         crate::editor_plugins::set_doc_viewport(visible_lines, first_line);
 
-        let caret_line =
-            doc.with_untracked(|document| document.char_to_line(document.primary().head)) as f64;
+        let caret_doc_line =
+            doc.with_untracked(|document| document.char_to_line(document.primary().head));
+        let caret_line = fold_view.with(|(_, visual_of)| {
+            visual_of
+                .get(caret_doc_line)
+                .copied()
+                .unwrap_or(caret_doc_line)
+        }) as f64;
         let caret_top = caret_line * cell_height;
         let target_top = if let Some(fraction) = crate::editor_plugins::take_doc_scroll_intent() {
             caret_top - (view_height - cell_height) * fraction
@@ -264,14 +327,20 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             measure_x(&text_element, &content_rect, scroll_left, line, column)
         };
 
+        let (rows, visual_of) = fold_view.get();
+
         doc.with(|document| {
             let mut caret_rects = Vec::new();
             let mut box_rects = Vec::new();
             for selection in document.selections() {
                 let head_line = document.char_to_line(selection.head);
                 let head_column = selection.head - document.line_to_char(head_line);
-                if let Some(left) = measure(head_line, head_column) {
-                    caret_rects.push((left, head_line as f64 * cell_height, cell_height));
+                if let Some(left) = measure(visual_of[head_line], head_column) {
+                    caret_rects.push((
+                        left,
+                        visual_of[head_line] as f64 * cell_height,
+                        cell_height,
+                    ));
                 }
                 if selection.is_empty() {
                     continue;
@@ -280,7 +349,11 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                 let end = selection.end();
                 let first_line = document.char_to_line(start);
                 let last_line = document.char_to_line(end);
-                for line in first_line..=last_line {
+                for (offset, &row) in visual_of[first_line..=last_line].iter().enumerate() {
+                    let line = first_line + offset;
+                    if rows.get(row) != Some(&line) {
+                        continue;
+                    }
                     let line_start = document.line_to_char(line);
                     let line_length = document.line_end(line) - line_start;
                     let from = if line == first_line {
@@ -293,11 +366,11 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                     } else {
                         line_length
                     };
-                    if let (Some(left), Some(right)) = (measure(line, from), measure(line, to)) {
+                    if let (Some(left), Some(right)) = (measure(row, from), measure(row, to)) {
                         let trailing = if line == last_line { 0.0 } else { cell_width };
                         box_rects.push((
                             left,
-                            line as f64 * cell_height,
+                            row as f64 * cell_height,
                             (right - left + trailing).max(2.0),
                             cell_height,
                         ));
@@ -314,8 +387,49 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             <div class="surface-metric" node_ref=metric>"0"</div>
             <div class="surface-gutter">
                 {move || {
-                    let count = doc.with(|document| document.len_lines());
-                    (1..=count).map(|number| view! { <div>{number}</div> }).collect_view()
+                    let rows = fold_view.get().0;
+                    let (id, kind) = buffer();
+                    let path = if kind == PluginKind::File { id } else { None };
+                    let foldable = path
+                        .as_ref()
+                        .map(|path| {
+                            state.lsp.folding_ranges.with(|map| {
+                                map.get(path)
+                                    .map(|ranges| {
+                                        ranges.iter().map(|(start, _)| *start as usize).collect()
+                                    })
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .unwrap_or_else(HashSet::new);
+                    let folded = path
+                        .as_ref()
+                        .map(|path| {
+                            state.editing.folds.with(|map| {
+                                map.get(path)
+                                    .map(|folds| folds.iter().map(|(start, _)| *start).collect())
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .unwrap_or_else(HashSet::new);
+                    rows.into_iter()
+                        .map(|doc_line| {
+                            let marker = if !foldable.contains(&doc_line) {
+                                ""
+                            } else if folded.contains(&doc_line) {
+                                "\u{25b8}"
+                            } else {
+                                "\u{25be}"
+                            };
+                            let toggle = move |_| toggle_fold(doc_line);
+                            view! {
+                                <div class="surface-gutter-row">
+                                    <span class="surface-fold" on:click=toggle>{marker}</span>
+                                    <span>{doc_line + 1}</span>
+                                </div>
+                            }
+                        })
+                        .collect_view()
                 }}
             </div>
             <div class="surface-content" node_ref=content>
@@ -333,14 +447,16 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                         } else {
                             Vec::new()
                         };
+                        let rows = fold_view.get().0;
                         doc.with(|document| {
                             let text = document.text();
-                            text.split('\n')
-                                .enumerate()
-                                .map(|(index, line)| {
+                            let lines = text.split('\n').collect::<Vec<_>>();
+                            rows.into_iter()
+                                .map(|doc_line| {
+                                    let line = lines.get(doc_line).copied().unwrap_or("");
                                     let line_hints = hints
                                         .iter()
-                                        .filter(|hint| hint.line as usize == index)
+                                        .filter(|hint| hint.line as usize == doc_line)
                                         .cloned()
                                         .collect::<Vec<_>>();
                                     render_line(line, language, &set, &line_hints)
@@ -431,6 +547,32 @@ fn column_at_x(
         }
     }
     best
+}
+
+/// The fold layout for a document. Returns `rows`, the document line shown on
+/// each visual row in order, and `visual_of`, the visual row a document line maps
+/// to (a folded line maps to the visual row of its header).
+fn fold_map(line_count: usize, folds: &[(usize, usize)]) -> (Vec<usize>, Vec<usize>) {
+    let mut hidden = vec![false; line_count];
+    for &(start, end) in folds {
+        let upper = end.min(line_count.saturating_sub(1));
+        if start < upper {
+            hidden[(start + 1)..=upper].fill(true);
+        }
+    }
+    let mut rows = Vec::new();
+    let mut visual_of = vec![0_usize; line_count];
+    let mut last_visual = 0_usize;
+    for (line, (slot, is_hidden)) in visual_of.iter_mut().zip(&hidden).enumerate() {
+        if *is_hidden {
+            *slot = last_visual;
+        } else {
+            last_visual = rows.len();
+            *slot = rows.len();
+            rows.push(line);
+        }
+    }
+    (rows, visual_of)
 }
 
 /// Renders one line: its highlight runs with the line's inlay hints woven in at

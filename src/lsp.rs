@@ -29,9 +29,10 @@ use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
     organize_imports, request_call_hierarchy, request_code_actions, request_completion,
-    request_hover_at, request_hover_at_caret, request_inlay_hints, request_locations,
-    request_outline, request_references, request_signature_help, request_symbols,
-    request_type_hierarchy, request_workspace_symbols, start_rename, submit_rename,
+    request_folding_ranges, request_hover_at, request_hover_at_caret, request_inlay_hints,
+    request_locations, request_outline, request_references, request_signature_help,
+    request_symbols, request_type_hierarchy, request_workspace_symbols, start_rename,
+    submit_rename,
 };
 use transport::{
     connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
@@ -51,6 +52,7 @@ enum Pending {
     TypeHierarchyPrepare { supertypes: bool },
     TypeHierarchyCalls { supertypes: bool },
     InlayHints { path: String },
+    FoldingRanges { path: String },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -307,6 +309,7 @@ pub fn did_change(state: EditorState, path: &str) {
         }),
     );
     request_inlay_hints(state, path);
+    request_folding_ranges(path);
 }
 
 /// Notifies the server a file was saved, carrying its text so server-side
@@ -601,6 +604,25 @@ fn apply_inlay_hints(state: EditorState, value: &Value, path: &str) {
         .collect::<Vec<_>>();
     state.lsp.inlay_hints.update(|map| {
         map.insert(path.to_string(), hints);
+    });
+}
+
+/// Parses a `foldingRange` reply into the per-file `(start, end)` line ranges the
+/// surface gutter offers as fold toggles.
+fn apply_folding_ranges(state: EditorState, value: &Value, path: &str) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let ranges = items
+        .iter()
+        .filter_map(|item| {
+            let start = item.get("startLine").and_then(Value::as_u64)? as u32;
+            let end = item.get("endLine").and_then(Value::as_u64)? as u32;
+            (end > start).then_some((start, end))
+        })
+        .collect::<Vec<_>>();
+    state.lsp.folding_ranges.update(|map| {
+        map.insert(path.to_string(), ranges);
     });
 }
 
@@ -914,6 +936,7 @@ fn handle_rpc(state: EditorState, value: Value) {
                 apply_type_hierarchy_calls(state, &value, supertypes)
             }
             Pending::InlayHints { path } => apply_inlay_hints(state, &value, &path),
+            Pending::FoldingRanges { path } => apply_folding_ranges(state, &value, &path),
             Pending::Rename => {
                 if let Some(result) = value.get("result") {
                     apply_workspace_edit(state, result);
@@ -993,6 +1016,7 @@ fn open_document(state: EditorState, path: &str) {
         }),
     );
     request_inlay_hints(state, path);
+    request_folding_ranges(path);
 }
 
 fn apply_diagnostics(state: EditorState, params: &Value) {
