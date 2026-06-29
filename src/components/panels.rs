@@ -11,4 +11,5 @@ pub mod problems;
 pub mod reference;
 pub mod source_control;
 pub mod terminal;
+pub mod type_hierarchy;
 pub mod undo_tree;

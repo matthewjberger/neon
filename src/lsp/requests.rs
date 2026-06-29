@@ -230,6 +230,26 @@ pub fn request_call_hierarchy(state: EditorState, incoming: bool) {
     );
 }
 
+/// Opens the type-hierarchy panel and resolves the symbol under the caret with
+/// `prepareTypeHierarchy`; the reply chains into the supertypes or subtypes.
+pub fn request_type_hierarchy(state: EditorState, supertypes: bool) {
+    let Some((path, line, character)) = caret_position(state) else {
+        return;
+    };
+    state.lsp.type_hierarchy_super.set(supertypes);
+    state.panels.type_hierarchy.set(true);
+    let id = next_id();
+    track(id, Pending::TypeHierarchyPrepare { supertypes });
+    send_request_id(
+        id,
+        "textDocument/prepareTypeHierarchy",
+        json!({
+            "textDocument": { "uri": file_uri(&path) },
+            "position": { "line": line, "character": character },
+        }),
+    );
+}
+
 /// Opens the rename prompt for the symbol at the caret.
 pub fn start_rename(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {

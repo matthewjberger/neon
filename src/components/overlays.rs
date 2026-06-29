@@ -38,6 +38,7 @@ use crate::components::panels::lsp_panel::{LspConsent, LspLog};
 use crate::components::panels::outline::Outline;
 use crate::components::panels::problems::ProblemsPanel;
 use crate::components::panels::source_control::SourceControl;
+use crate::components::panels::type_hierarchy::TypeHierarchy;
 use crate::components::panels::undo_tree::UndoTree;
 use crate::state::EditorState;
 
@@ -61,6 +62,7 @@ pub fn Overlays(
         <SourceControl state />
         <Outline state />
         <CallHierarchy state />
+        <TypeHierarchy state />
         <MultiCursorOverlay state />
         <RenamePrompt state />
         <CodeActionMenu state />

@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use web_sys::WebSocket;
 
 use crate::state::{
-    CallHierarchyEntry, CompletionEntry, CompletionMenu, EditorState, HoverCard, OutlineNode,
+    CompletionEntry, CompletionMenu, EditorState, HierarchyEntry, HoverCard, OutlineNode,
     PluginKind, SidebarView, basename, language_for_path, lsp_language_for,
 };
 
@@ -30,8 +30,8 @@ pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
     organize_imports, request_call_hierarchy, request_code_actions, request_completion,
     request_hover_at, request_hover_at_caret, request_locations, request_outline,
-    request_references, request_signature_help, request_symbols, request_workspace_symbols,
-    start_rename, submit_rename,
+    request_references, request_signature_help, request_symbols, request_type_hierarchy,
+    request_workspace_symbols, start_rename, submit_rename,
 };
 use transport::{
     connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
@@ -48,6 +48,8 @@ enum Pending {
     Outline { path: String },
     CallHierarchyPrepare { incoming: bool },
     CallHierarchyCalls { incoming: bool },
+    TypeHierarchyPrepare { supertypes: bool },
+    TypeHierarchyCalls { supertypes: bool },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -235,6 +237,7 @@ fn initialize_params(state: EditorState) -> Value {
                 "foldingRange": { "lineFoldingOnly": true },
                 "selectionRange": {},
                 "callHierarchy": {},
+                "typeHierarchy": {},
             },
             "window": {
                 "workDoneProgress": true,
@@ -595,7 +598,7 @@ fn apply_call_hierarchy_calls(state: EditorState, value: &Value, incoming: bool)
         .map(|calls| {
             calls
                 .iter()
-                .filter_map(|call| call_hierarchy_entry(call.get(key)?))
+                .filter_map(|call| hierarchy_entry(call.get(key)?))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
@@ -603,7 +606,41 @@ fn apply_call_hierarchy_calls(state: EditorState, value: &Value, incoming: bool)
     state.lsp.call_hierarchy.set(entries);
 }
 
-fn call_hierarchy_entry(item: &Value) -> Option<CallHierarchyEntry> {
+/// The first reply of the type-hierarchy gesture. `prepareTypeHierarchy` resolves
+/// the symbol under the caret; we hand the item back as `typeHierarchy/supertypes`
+/// or `/subtypes` to list its parents or children in the type graph.
+fn apply_type_hierarchy_prepare(value: &Value, supertypes: bool) {
+    let Some(item) = value
+        .get("result")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .cloned()
+    else {
+        return;
+    };
+    let method = if supertypes {
+        "typeHierarchy/supertypes"
+    } else {
+        "typeHierarchy/subtypes"
+    };
+    let id = next_id();
+    track(id, Pending::TypeHierarchyCalls { supertypes });
+    send_request_id(id, method, json!({ "item": item }));
+}
+
+/// The second reply: the supertypes or subtypes, each a `TypeHierarchyItem`
+/// directly (not wrapped), flattened to rows that jump to the related type.
+fn apply_type_hierarchy_calls(state: EditorState, value: &Value, supertypes: bool) {
+    let entries = value
+        .get("result")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(hierarchy_entry).collect::<Vec<_>>())
+        .unwrap_or_default();
+    state.lsp.type_hierarchy_super.set(supertypes);
+    state.lsp.type_hierarchy.set(entries);
+}
+
+fn hierarchy_entry(item: &Value) -> Option<HierarchyEntry> {
     let name = item.get("name").and_then(Value::as_str)?.to_string();
     let detail = item
         .get("detail")
@@ -616,7 +653,7 @@ fn call_hierarchy_entry(item: &Value) -> Option<CallHierarchyEntry> {
         .or_else(|| item.pointer("/range/start/line"))
         .and_then(Value::as_u64)? as u32
         + 1;
-    Some(CallHierarchyEntry {
+    Some(HierarchyEntry {
         name,
         detail,
         path,
@@ -812,6 +849,12 @@ fn handle_rpc(state: EditorState, value: Value) {
             }
             Pending::CallHierarchyCalls { incoming } => {
                 apply_call_hierarchy_calls(state, &value, incoming)
+            }
+            Pending::TypeHierarchyPrepare { supertypes } => {
+                apply_type_hierarchy_prepare(&value, supertypes)
+            }
+            Pending::TypeHierarchyCalls { supertypes } => {
+                apply_type_hierarchy_calls(state, &value, supertypes)
             }
             Pending::Rename => {
                 if let Some(result) = value.get("result") {

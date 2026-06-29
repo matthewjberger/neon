@@ -217,10 +217,10 @@ pub struct OutlineNode {
     pub children: Vec<OutlineNode>,
 }
 
-/// One row in the call-hierarchy panel: a caller or callee of the queried
-/// symbol, with the location to jump to (its definition's selection range).
+/// One row in a hierarchy panel: a related symbol (a caller/callee, or a
+/// supertype/subtype) with the location to jump to (its selection range).
 #[derive(Clone, Debug, PartialEq)]
-pub struct CallHierarchyEntry {
+pub struct HierarchyEntry {
     pub name: String,
     pub detail: String,
     pub path: String,
@@ -259,9 +259,15 @@ pub struct LspState {
     /// The path the outline tree describes, so its rows know where to jump.
     pub outline_path: RwSignal<String>,
     /// The callers or callees of the queried symbol, for the call-hierarchy panel.
-    pub call_hierarchy: RwSignal<Vec<CallHierarchyEntry>>,
+    pub call_hierarchy: RwSignal<Vec<HierarchyEntry>>,
     /// Whether the call-hierarchy panel is showing callers (`true`) or callees.
     pub call_hierarchy_incoming: RwSignal<bool>,
+    /// The supertypes or subtypes of the queried symbol, for the type-hierarchy
+    /// panel.
+    pub type_hierarchy: RwSignal<Vec<HierarchyEntry>>,
+    /// Whether the type-hierarchy panel is showing supertypes (`true`) or
+    /// subtypes.
+    pub type_hierarchy_super: RwSignal<bool>,
     /// The rename prompt's current text, when the rename box is open.
     pub rename: RwSignal<Option<String>>,
     /// Every diagnostic across open files, by path, for the problems panel.
@@ -289,6 +295,8 @@ impl LspState {
             outline_path: RwSignal::new(String::new()),
             call_hierarchy: RwSignal::new(Vec::new()),
             call_hierarchy_incoming: RwSignal::new(true),
+            type_hierarchy: RwSignal::new(Vec::new()),
+            type_hierarchy_super: RwSignal::new(true),
             rename: RwSignal::new(None),
             problems: RwSignal::new(Vec::new()),
             problems_open: RwSignal::new(false),
@@ -425,6 +433,8 @@ pub struct PanelsState {
     pub outline: RwSignal<bool>,
     /// Whether the call-hierarchy panel is shown.
     pub call_hierarchy: RwSignal<bool>,
+    /// Whether the type-hierarchy panel is shown.
+    pub type_hierarchy: RwSignal<bool>,
 }
 
 impl PanelsState {
@@ -437,6 +447,7 @@ impl PanelsState {
             git: RwSignal::new(false),
             outline: RwSignal::new(false),
             call_hierarchy: RwSignal::new(false),
+            type_hierarchy: RwSignal::new(false),
         }
     }
 }
