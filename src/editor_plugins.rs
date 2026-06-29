@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
+use document::{Document, Selection};
 use leptos::prelude::*;
 use rhai::{AST, Array, Dynamic, Engine, Map, Scope};
 use web_sys::HtmlTextAreaElement;
@@ -58,6 +59,242 @@ thread_local! {
     static MACRO_DEPTH: Cell<usize> = const { Cell::new(0) };
     /// The stack of prior selection ranges, so a shrink undoes an expand.
     static EXPAND_STACK: RefCell<Vec<(usize, usize)>> = const { RefCell::new(Vec::new()) };
+    /// Whether the document surface is extending a selection (visual mode).
+    static DOC_EXTENDING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs the editor plugins for a keystroke against a [`Document`] (the custom
+/// surface's model) and applies the resulting ops. Returns whether the text
+/// changed. The subset of ops the surface maps is the modal core: motions,
+/// edits, visual selection, text objects, and yank/paste; richer ops (registers,
+/// search, marks, macros, repeat) are not wired to the surface yet.
+pub fn handle_key_document(
+    state: EditorState,
+    document: &mut Document,
+    event: &KeyEvent,
+) -> KeyOutcome {
+    let mode = state.editing.mode.get_untracked();
+    let introspection = introspect_document(document);
+    let ops = dispatch(state, event, &mode, &introspection);
+    if ops.is_empty() {
+        return KeyOutcome {
+            consumed: false,
+            changed: false,
+        };
+    }
+    let consumed = ops.iter().any(|op| matches!(op, EditorOp::Consume));
+    let changed = apply_document(state, document, ops);
+    KeyOutcome { consumed, changed }
+}
+
+/// Reads the introspection a keystroke exposes from a document's primary
+/// selection.
+fn introspect_document(document: &Document) -> Introspection {
+    let caret = document.primary().head;
+    let line = document.char_to_line(caret);
+    let line_start = document.line_to_char(line);
+    let (word_start, word_end) = document.word_bounds(caret);
+    Introspection {
+        caret_line: line as i64,
+        caret_column: (caret - line_start) as i64,
+        caret_offset: caret as i64,
+        line_text: document.line(line),
+        selection: document.primary_text(),
+        word: document.slice(word_start, word_end),
+    }
+}
+
+fn extending() -> bool {
+    DOC_EXTENDING.with(Cell::get)
+}
+
+/// Selects the inner or around text object at the caret in a document.
+fn select_object(document: &mut Document, caret: usize, spec: &str, around: bool) {
+    let chars: Vec<char> = document.text().chars().collect();
+    if let Some((start, end)) = object_bounds(&chars, caret, spec, around) {
+        document.set_primary(Selection::new(start, end));
+        DOC_EXTENDING.set(true);
+    }
+}
+
+/// Applies plugin ops to a document. Mirrors the textarea `apply`, but the
+/// selection lives in the document, so the anchor is the visual-mode mark.
+fn apply_document(state: EditorState, document: &mut Document, ops: Vec<EditorOp>) -> bool {
+    let mut changed = false;
+    let mut new_mode: Option<String> = None;
+    for op in ops {
+        let caret = document.primary().head;
+        let len = document.len_chars();
+        match op {
+            EditorOp::Consume => {}
+            EditorOp::SetMode(mode) => new_mode = Some(mode),
+            EditorOp::SetStatus(status) => state.editing.status.set(status),
+            EditorOp::Insert(value) => {
+                document.insert(&value);
+                DOC_EXTENDING.set(false);
+                changed = true;
+            }
+            EditorOp::Move(delta) => document.move_horizontal(extending(), delta as isize),
+            EditorOp::MoveLine(delta) => document.move_vertical(extending(), delta as isize),
+            EditorOp::LineStart => document.move_line_start(extending()),
+            EditorOp::LineEnd => document.move_line_end(extending()),
+            EditorOp::NextWord => document.move_word_next(extending()),
+            EditorOp::PrevWord => document.move_word_prev(extending()),
+            EditorOp::SmartLineStart => {
+                let line = document.char_to_line(caret);
+                let start = document.line_to_char(line);
+                let text = document.line(line);
+                let indent = text.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+                let first = start + indent;
+                let target = if caret == first { start } else { first };
+                document.set_primary(Selection::caret(target));
+            }
+            EditorOp::DeleteForward(count) => {
+                document.replace_range(caret, (caret + count.max(0) as usize).min(len), "");
+                changed = true;
+            }
+            EditorOp::DeleteBackward(count) => {
+                document.replace_range(caret.saturating_sub(count.max(0) as usize), caret, "");
+                changed = true;
+            }
+            EditorOp::DeleteLine => {
+                let line = document.char_to_line(caret);
+                let start = document.line_to_char(line);
+                let mut end = document.line_end(line);
+                if end < len {
+                    end += 1;
+                }
+                document.replace_range(start, end, "");
+                changed = true;
+            }
+            EditorOp::DeleteToLineEnd => {
+                let end = document.line_end(document.char_to_line(caret));
+                document.replace_range(caret, end, "");
+                changed = true;
+            }
+            EditorOp::DeleteWordForward => {
+                document.set_primary(Selection::caret(caret));
+                document.move_word_next(true);
+                let selection = document.primary();
+                document.replace_range(selection.start(), selection.end(), "");
+                changed = true;
+            }
+            EditorOp::DeleteWordBackward => {
+                document.set_primary(Selection::caret(caret));
+                document.move_word_prev(true);
+                let selection = document.primary();
+                document.replace_range(selection.start(), selection.end(), "");
+                changed = true;
+            }
+            EditorOp::Anchor => {
+                document.collapse();
+                DOC_EXTENDING.set(true);
+            }
+            EditorOp::Collapse => {
+                document.collapse();
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::SwapEnds => {
+                let selection = document.primary();
+                document.set_primary(Selection::new(selection.head, selection.anchor));
+            }
+            EditorOp::SelectLine => {
+                let line = document.char_to_line(caret);
+                document.set_primary(Selection::new(
+                    document.line_to_char(line),
+                    document.line_end(line),
+                ));
+                DOC_EXTENDING.set(true);
+            }
+            EditorOp::SelectWord => {
+                let (start, end) = document.word_bounds(caret);
+                document.set_primary(Selection::new(start, end));
+                DOC_EXTENDING.set(true);
+            }
+            EditorOp::SelectAll => {
+                document.set_primary(Selection::new(0, len));
+                DOC_EXTENDING.set(true);
+            }
+            EditorOp::SelectInner(spec) => select_object(document, caret, &spec, false),
+            EditorOp::SelectAround(spec) => select_object(document, caret, &spec, true),
+            EditorOp::DeleteSelection => {
+                let selection = document.primary();
+                if !selection.is_empty() {
+                    document.replace_range(selection.start(), selection.end(), "");
+                    changed = true;
+                }
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::Copy => {
+                let selection = document.primary();
+                let yanked = if selection.is_empty() {
+                    format!("{}\n", document.line(document.char_to_line(caret)))
+                } else {
+                    document.primary_text()
+                };
+                store_yank(yanked);
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::Cut => {
+                let selection = document.primary();
+                if !selection.is_empty() {
+                    store_yank(document.primary_text());
+                    document.replace_range(selection.start(), selection.end(), "");
+                    changed = true;
+                }
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::Paste => {
+                let (paste, _) = paste_source();
+                if !paste.is_empty() {
+                    document.insert(&paste);
+                    changed = true;
+                }
+            }
+            EditorOp::Indent => {
+                let line = document.char_to_line(caret);
+                let start = document.line_to_char(line);
+                document.replace_range(start, start, "    ");
+                changed = true;
+            }
+            EditorOp::Outdent => {
+                let line = document.char_to_line(caret);
+                let start = document.line_to_char(line);
+                let text = document.line(line);
+                let removed = text.chars().take(4).take_while(|c| *c == ' ').count();
+                if removed > 0 {
+                    document.replace_range(start, start + removed, "");
+                    changed = true;
+                }
+            }
+            EditorOp::ToggleComment(marker) => {
+                let line = document.char_to_line(caret);
+                let start = document.line_to_char(line);
+                let text = document.line(line);
+                let indent = text.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+                let body = &text[indent..];
+                if let Some(rest) = body.strip_prefix(&marker) {
+                    let rest = rest.strip_prefix(' ').unwrap_or(rest);
+                    let rebuilt = format!("{}{}", &text[..indent], rest);
+                    document.replace_range(start, document.line_end(line), &rebuilt);
+                } else {
+                    document.replace_range(start + indent, start + indent, &format!("{marker} "));
+                }
+                changed = true;
+            }
+            EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
+            EditorOp::OpenPalette => state.editing.palette_open.set(true),
+            EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
+            EditorOp::HideMenu => state.editing.leader.set(None),
+            // Ops the surface does not map yet (registers, search, marks, macros,
+            // repeat, case, line tools, scrolling, expand-region).
+            _ => {}
+        }
+    }
+    if let Some(mode) = new_mode {
+        state.editing.mode.set(mode);
+    }
+    changed
 }
 
 /// One recorded keystroke in a macro.

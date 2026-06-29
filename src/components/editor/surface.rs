@@ -78,6 +78,37 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
 
     let on_keydown = move |event: KeyboardEvent| {
         let key = event.key();
+        if matches!(
+            key.as_str(),
+            "Shift" | "Control" | "Alt" | "Meta" | "CapsLock" | "AltGraph"
+        ) {
+            return;
+        }
+        // The editor plugins (the modal layer) get first crack at the key, run
+        // against the document; only an unconsumed key falls through to the
+        // built-in navigation (so insert-mode typing reaches the hidden input).
+        if crate::editor_plugins::any_enabled(state) {
+            let key_event = crate::editor_plugins::KeyEvent {
+                key: key.clone(),
+                ctrl: event.ctrl_key(),
+                shift: event.shift_key(),
+                alt: event.alt_key(),
+            };
+            let mut outcome = crate::editor_plugins::KeyOutcome {
+                consumed: false,
+                changed: false,
+            };
+            doc.update(|document| {
+                outcome = crate::editor_plugins::handle_key_document(state, document, &key_event);
+            });
+            if outcome.changed {
+                persist();
+            }
+            if outcome.consumed {
+                event.prevent_default();
+                return;
+            }
+        }
         let shift = event.shift_key();
         let ctrl = event.ctrl_key() || event.meta_key();
         let mut handled = true;

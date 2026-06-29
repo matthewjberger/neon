@@ -221,13 +221,55 @@ impl Document {
     }
 
     pub fn move_left(&mut self, extend: bool) {
-        self.move_each(extend, |_, selection| selection.head.saturating_sub(1));
+        self.move_horizontal(extend, -1);
     }
 
     pub fn move_right(&mut self, extend: bool) {
-        self.move_each(extend, |document, selection| {
-            (selection.head + 1).min(document.len_chars())
+        self.move_horizontal(extend, 1);
+    }
+
+    /// Moves every head by a signed number of characters, clamped to the buffer.
+    pub fn move_horizontal(&mut self, extend: bool, delta: isize) {
+        let len = self.len_chars();
+        self.move_each(extend, |_, selection| {
+            (selection.head as isize + delta).clamp(0, len as isize) as usize
         });
+    }
+
+    /// Moves every head a signed number of lines, keeping the column.
+    pub fn move_vertical(&mut self, extend: bool, delta: isize) {
+        self.move_each(extend, |document, selection| {
+            let line = document.char_to_line(selection.head);
+            let column = selection.head - document.line_to_char(line);
+            let target =
+                (line as isize + delta).clamp(0, document.len_lines() as isize - 1) as usize;
+            (document.line_to_char(target) + column).min(document.line_end(target))
+        });
+    }
+
+    /// Replaces a character range with text, leaving a caret after it.
+    pub fn replace_range(&mut self, start: usize, end: usize, text: &str) {
+        self.set_selections(vec![Selection::new(start, end)]);
+        self.insert(text);
+    }
+
+    /// Sets the primary selection's anchor and head (a single-caret operation).
+    pub fn set_primary(&mut self, selection: Selection) {
+        self.set_selections(vec![selection]);
+    }
+
+    /// The word boundaries `(start, end)` around an offset.
+    pub fn word_bounds(&self, at: usize) -> (usize, usize) {
+        let len = self.len_chars();
+        let mut start = at.min(len);
+        while start > 0 && is_word(self.text.char(start - 1)) {
+            start -= 1;
+        }
+        let mut end = at.min(len);
+        while end < len && is_word(self.text.char(end)) {
+            end += 1;
+        }
+        (start, end)
     }
 
     pub fn move_up(&mut self, extend: bool) {
@@ -284,6 +326,17 @@ impl Document {
         self.move_each(extend, |document, selection| {
             document.prev_word(selection.head)
         });
+    }
+
+    /// The text of a character range.
+    pub fn slice(&self, start: usize, end: usize) -> String {
+        let len = self.len_chars();
+        self.text.slice(start.min(len)..end.min(len)).to_string()
+    }
+
+    /// The text of a line, without its trailing newline.
+    pub fn line(&self, line: usize) -> String {
+        self.slice(self.line_to_char(line), self.line_end(line))
     }
 
     /// The text covered by the primary selection.
@@ -408,6 +461,17 @@ mod tests {
         assert_eq!(document.primary(), Selection::caret(0));
         document.move_doc_end(false);
         assert_eq!(document.primary(), Selection::caret(7));
+    }
+
+    #[test]
+    fn parameterized_motion_and_word_bounds() {
+        let mut document = Document::new("hello world");
+        document.set_primary(Selection::caret(0));
+        document.move_horizontal(false, 5);
+        assert_eq!(document.primary(), Selection::caret(5));
+        assert_eq!(document.word_bounds(7), (6, 11));
+        document.replace_range(0, 5, "hi");
+        assert_eq!(document.text(), "hi world");
     }
 
     #[test]
