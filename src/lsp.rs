@@ -11,6 +11,8 @@ use std::collections::{HashMap, HashSet};
 use leptos::prelude::*;
 use protocol::{Diagnostic, LspServerMessage, SearchHit, Severity};
 use serde_json::{Value, json};
+use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::Closure;
 use web_sys::WebSocket;
 
 use crate::state::{
@@ -77,6 +79,12 @@ struct Client {
     pending_edits: HashMap<String, Vec<RangeEdit>>,
     raw_diagnostics: HashMap<String, Vec<Value>>,
     save_after_format: HashSet<String>,
+    /// The last text synced to the server per file, so `didChange` can send the
+    /// minimal changed range instead of the whole document every keystroke.
+    last_text: HashMap<String, String>,
+    /// The pending debounce timer for the per-edit feature requests (inlay
+    /// hints, folding, code lenses), so they fire once the user pauses.
+    feature_timer: Option<i32>,
 }
 
 impl Client {
@@ -94,6 +102,8 @@ impl Client {
             pending_edits: HashMap::new(),
             raw_diagnostics: HashMap::new(),
             save_after_format: HashSet::new(),
+            last_text: HashMap::new(),
+            feature_timer: None,
         }
     }
 }
@@ -298,21 +308,103 @@ pub fn did_change(state: EditorState, path: &str) {
         return;
     }
     let text = state.buffer_source(PluginKind::File, &Some(path.to_string()));
-    let version = client(|client| {
+    let (change, version) = client(|client| {
+        let last = client.last_text.get(path).cloned().unwrap_or_default();
+        let change = incremental_change(&last, &text);
+        client.last_text.insert(path.to_string(), text);
         let entry = client.versions.entry(path.to_string()).or_insert(0);
         *entry += 1;
-        *entry
+        (change, *entry)
     });
+    let Some(change) = change else {
+        return;
+    };
     notify(
         "textDocument/didChange",
         json!({
             "textDocument": { "uri": file_uri(path), "version": version },
-            "contentChanges": [{ "text": text }],
+            "contentChanges": [change],
         }),
     );
-    request_inlay_hints(state, path);
-    request_folding_ranges(path);
-    request_code_lenses(path);
+    schedule_feature_refresh(state, path);
+}
+
+/// The minimal LSP `contentChanges` entry turning `old` into `new`: the changed
+/// range (in old-text UTF-16 positions) and its replacement, found by trimming
+/// the common prefix and suffix. `None` when the texts are identical.
+fn incremental_change(old: &str, new: &str) -> Option<Value> {
+    let old_chars: Vec<char> = old.chars().collect();
+    let new_chars: Vec<char> = new.chars().collect();
+    let bound = old_chars.len().min(new_chars.len());
+    let mut prefix = 0;
+    while prefix < bound && old_chars[prefix] == new_chars[prefix] {
+        prefix += 1;
+    }
+    let tail = (old_chars.len() - prefix).min(new_chars.len() - prefix);
+    let mut suffix = 0;
+    while suffix < tail
+        && old_chars[old_chars.len() - 1 - suffix] == new_chars[new_chars.len() - 1 - suffix]
+    {
+        suffix += 1;
+    }
+    if prefix == old_chars.len() && prefix == new_chars.len() {
+        return None;
+    }
+    let old_end = old_chars.len() - suffix;
+    let new_end = new_chars.len() - suffix;
+    let replacement: String = new_chars[prefix..new_end].iter().collect();
+    let start = position_in(&old_chars, prefix);
+    let end = position_in(&old_chars, old_end);
+    Some(json!({
+        "range": {
+            "start": { "line": start.0, "character": start.1 },
+            "end": { "line": end.0, "character": end.1 },
+        },
+        "text": replacement,
+    }))
+}
+
+/// The `(line, utf16-character)` position of a character offset in a char slice,
+/// for the incremental change range.
+fn position_in(chars: &[char], offset: usize) -> (u32, u32) {
+    let mut line = 0u32;
+    let mut character = 0u32;
+    for &value in &chars[..offset.min(chars.len())] {
+        if value == '\n' {
+            line += 1;
+            character = 0;
+        } else {
+            character += value.len_utf16() as u32;
+        }
+    }
+    (line, character)
+}
+
+/// Schedules the per-edit feature requests (inlay hints, folding, code lenses)
+/// to fire once typing pauses, replacing any pending timer, so a burst of
+/// keystrokes makes one request each instead of one per character.
+fn schedule_feature_refresh(state: EditorState, path: &str) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    client(|client| {
+        if let Some(handle) = client.feature_timer.take() {
+            window.clear_timeout_with_handle(handle);
+        }
+    });
+    let path = path.to_string();
+    let callback = Closure::once_into_js(move || {
+        client(|client| client.feature_timer = None);
+        request_inlay_hints(state, &path);
+        request_folding_ranges(&path);
+        request_code_lenses(&path);
+    });
+    if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        callback.as_ref().unchecked_ref(),
+        250,
+    ) {
+        client(|client| client.feature_timer = Some(handle));
+    }
 }
 
 /// Notifies the server a file was saved, carrying its text so server-side
@@ -1039,10 +1131,13 @@ fn open_document(state: EditorState, path: &str) {
                 "uri": file_uri(path),
                 "languageId": language_for_path(path),
                 "version": 0,
-                "text": text,
+                "text": text.clone(),
             }
         }),
     );
+    client(|client| {
+        client.last_text.insert(path.to_string(), text);
+    });
     request_inlay_hints(state, path);
     request_folding_ranges(path);
     request_code_lenses(path);

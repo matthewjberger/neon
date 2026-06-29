@@ -13,6 +13,11 @@ use crate::state::{EditorState, PluginKind};
 
 const COALESCE_MS: f64 = 600.0;
 
+/// The most history nodes a buffer keeps. Past this, the oldest leaves are pruned
+/// so a long session on a large file does not grow the full-text snapshots
+/// without bound.
+const MAX_NODES: usize = 256;
+
 /// One state in a buffer's history: its full text, its parent, and the branches
 /// off it.
 #[derive(Clone)]
@@ -101,7 +106,40 @@ pub fn record(kind: PluginKind, id: &Option<String>, old_text: &str, new_text: &
             entry.fresh = true;
         }
         entry.last = now;
+        prune(entry);
     });
+}
+
+/// Drops the oldest leaf nodes (never the live node) until the history is back
+/// under [`MAX_NODES`], remapping the parent, child, and current indices each
+/// time so the tree stays consistent.
+fn prune(entry: &mut History) {
+    while entry.nodes.len() > MAX_NODES {
+        let victim = entry
+            .nodes
+            .iter()
+            .enumerate()
+            .position(|(index, node)| node.children.is_empty() && index != entry.current);
+        let Some(victim) = victim else {
+            break;
+        };
+        if let Some(parent) = entry.nodes[victim].parent {
+            entry.nodes[parent]
+                .children
+                .retain(|&child| child != victim);
+        }
+        entry.nodes.remove(victim);
+        let shift = |index: usize| if index > victim { index - 1 } else { index };
+        for node in &mut entry.nodes {
+            node.parent = node.parent.map(shift);
+            for child in &mut node.children {
+                *child = shift(*child);
+            }
+        }
+        if entry.current > victim {
+            entry.current -= 1;
+        }
+    }
 }
 
 /// Restores the parent of the live node for the focused buffer.

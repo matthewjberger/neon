@@ -27,11 +27,16 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     let input = NodeRef::<html::Textarea>::new();
     let content = NodeRef::<html::Div>::new();
     let text_node = NodeRef::<html::Div>::new();
+    let gutter = NodeRef::<html::Div>::new();
     let metric = NodeRef::<html::Div>::new();
     // Caret and selection overlay rectangles, measured from the rendered text DOM
     // so inline decorations (inlay hints) and proportional glyphs stay aligned.
     let carets = RwSignal::new(Vec::<(f64, f64, f64)>::new());
     let selection_boxes = RwSignal::new(Vec::<(f64, f64, f64, f64)>::new());
+    // The content scroll position and viewport height, so the text renders only
+    // the visible rows instead of the whole file.
+    let scroll_top = RwSignal::new(0.0_f64);
+    let viewport_height = RwSignal::new(600.0_f64);
 
     let command_set = Memo::new(move |_| {
         state
@@ -105,6 +110,32 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         let line_count = doc.with(|document| document.len_lines());
         build_rows(line_count, &folds, &lenses)
     });
+
+    // The half-open range of visual rows to actually render, from the scroll
+    // position and viewport height, padded with overscan so a small scroll does
+    // not reveal a blank edge before the effect repaints.
+    let visible_window = Memo::new(move |_| {
+        let (_, cell_height) = cell();
+        let total = fold_view.with(|(rows, _)| rows.len());
+        let overscan = 12_usize;
+        let first = ((scroll_top.get() / cell_height).floor() as usize).saturating_sub(overscan);
+        let span = (viewport_height.get() / cell_height).ceil() as usize + overscan * 2;
+        (first, (first + span).min(total))
+    });
+
+    // Track the content scroll so the window follows it, and keep the gutter
+    // (which sits outside the scroll container) aligned with the text.
+    let on_scroll = move |_: web_sys::Event| {
+        if let Some(element) = content.get() {
+            let element: web_sys::HtmlElement = element.into();
+            scroll_top.set(element.scroll_top() as f64);
+            viewport_height.set(element.client_height() as f64);
+            if let Some(gutter) = gutter.get() {
+                let gutter: web_sys::HtmlElement = gutter.into();
+                gutter.set_scroll_top(element.scroll_top());
+            }
+        }
+    };
 
     // Toggles the fold whose header is `header_line`, looking up its extent in the
     // server's folding ranges and recording or clearing it for the focused file.
@@ -255,14 +286,15 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     // The hidden textarea mirrors the whole document and its primary selection, so
     // it is the source the LSP client reads and the target completion-accept and
     // find-replace write to. Typed text, IME, paste, and those programmatic edits
-    // all surface here: rebuild the document from the new value and caret.
+    // all surface here: splice the minimal changed range into the rope rather than
+    // rebuilding it, and move the caret.
     let on_input = move |_| {
         if let Some(element) = input.get() {
             let value = element.value();
             let caret = element.selection_start().ok().flatten().unwrap_or(0);
             let head = utf16_to_char(&value, caret);
             doc.update(|document| {
-                *document = Document::new(&value);
+                splice_text(document, &value);
                 document.set_primary(Selection::caret(head));
             });
             persist();
@@ -324,6 +356,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         let element: web_sys::HtmlElement = element.into();
         let (_, cell_height) = cell();
         let view_height = element.client_height() as f64;
+        viewport_height.set(view_height);
         let scroll_top = element.scroll_top() as f64;
         let visible_lines = (view_height / cell_height).floor().max(1.0) as usize;
         let first_line = (scroll_top / cell_height).floor() as usize;
@@ -463,7 +496,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     view! {
         <div class="surface" on:pointerdown=on_pointerdown>
             <div class="surface-metric" node_ref=metric>"0"</div>
-            <div class="surface-gutter">
+            <div class="surface-gutter" node_ref=gutter>
                 {move || {
                     let rows = fold_view.get().0;
                     let (id, kind) = buffer();
@@ -517,46 +550,60 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                         .collect_view()
                 }}
             </div>
-            <div class="surface-content" node_ref=content>
-                <div class="surface-text" node_ref=text_node>
-                    {move || {
-                        state.editing.highlight.get();
-                        let language = language();
-                        let set = command_set.get();
-                        let (id, kind) = buffer();
-                        let hints = if kind == PluginKind::File {
-                            id.and_then(|path| {
-                                    state.lsp.inlay_hints.with(|map| map.get(&path).cloned())
-                                })
-                                .unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
-                        let rows = fold_view.get().0;
-                        doc.with(|document| {
-                            let text = document.text();
-                            let lines = text.split('\n').collect::<Vec<_>>();
-                            rows.into_iter()
-                                .map(|row| match row {
-                                    SurfaceRow::Lens(_, title) => view! {
-                                        <div class="surface-line surface-lens">
-                                            <span class="surface-lens-text">{title}</span>
-                                        </div>
-                                    }
-                                    .into_any(),
-                                    SurfaceRow::Text(doc_line) => {
-                                        let line = lines.get(doc_line).copied().unwrap_or("");
-                                        let line_hints = hints
-                                            .iter()
-                                            .filter(|hint| hint.line as usize == doc_line)
-                                            .cloned()
-                                            .collect::<Vec<_>>();
-                                        render_line(doc_line, line, language, &set, &line_hints)
-                                    }
-                                })
-                                .collect_view()
-                        })
-                    }}
+            <div class="surface-content" node_ref=content on:scroll=on_scroll>
+                <div
+                    class="surface-text"
+                    node_ref=text_node
+                    style=move || {
+                        format!("height:{}px;", fold_view.with(|(rows, _)| rows.len()) as f64 * cell().1)
+                    }
+                >
+                    <div
+                        class="surface-window"
+                        style=move || {
+                            format!("transform:translateY({}px);", visible_window.get().0 as f64 * cell().1)
+                        }
+                    >
+                        {move || {
+                            state.editing.highlight.get();
+                            let language = language();
+                            let set = command_set.get();
+                            let (id, kind) = buffer();
+                            let hints = if kind == PluginKind::File {
+                                id.and_then(|path| {
+                                        state.lsp.inlay_hints.with(|map| map.get(&path).cloned())
+                                    })
+                                    .unwrap_or_default()
+                            } else {
+                                Vec::new()
+                            };
+                            let (first, last) = visible_window.get();
+                            let rows = fold_view.with(|(rows, _)| rows[first..last.max(first)].to_vec());
+                            doc.with(|document| {
+                                let text = document.text();
+                                let lines = text.split('\n').collect::<Vec<_>>();
+                                rows.into_iter()
+                                    .map(|row| match row {
+                                        SurfaceRow::Lens(_, title) => view! {
+                                            <div class="surface-line surface-lens">
+                                                <span class="surface-lens-text">{title}</span>
+                                            </div>
+                                        }
+                                        .into_any(),
+                                        SurfaceRow::Text(doc_line) => {
+                                            let line = lines.get(doc_line).copied().unwrap_or("");
+                                            let line_hints = hints
+                                                .iter()
+                                                .filter(|hint| hint.line as usize == doc_line)
+                                                .cloned()
+                                                .collect::<Vec<_>>();
+                                            render_line(doc_line, line, language, &set, &line_hints)
+                                        }
+                                    })
+                                    .collect_view()
+                            })
+                        }}
+                    </div>
                 </div>
                 {move || {
                     selection_boxes
@@ -592,6 +639,29 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// Splices the minimal changed range of `value` into the document, trimming the
+/// common prefix and suffix, so a keystroke is a rope splice rather than a full
+/// rope rebuild.
+fn splice_text(document: &mut Document, value: &str) {
+    let old: Vec<char> = document.text().chars().collect();
+    let new: Vec<char> = value.chars().collect();
+    if old == new {
+        return;
+    }
+    let bound = old.len().min(new.len());
+    let mut prefix = 0;
+    while prefix < bound && old[prefix] == new[prefix] {
+        prefix += 1;
+    }
+    let tail = (old.len() - prefix).min(new.len() - prefix);
+    let mut suffix = 0;
+    while suffix < tail && old[old.len() - 1 - suffix] == new[new.len() - 1 - suffix] {
+        suffix += 1;
+    }
+    let replacement: String = new[prefix..new.len() - suffix].iter().collect();
+    document.replace_range(prefix, old.len() - suffix, &replacement);
 }
 
 /// Converts a UTF-16 offset (the textarea's unit) to a character offset (the
