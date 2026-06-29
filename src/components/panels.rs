@@ -5,6 +5,7 @@
 pub mod console;
 pub mod control_panel;
 pub mod lsp_panel;
+pub mod outline;
 pub mod problems;
 pub mod reference;
 pub mod source_control;

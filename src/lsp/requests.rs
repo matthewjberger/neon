@@ -196,6 +196,20 @@ pub fn request_symbols(state: EditorState) {
     );
 }
 
+/// Requests the focused file's document symbols into the outline panel.
+pub fn request_outline(state: EditorState) {
+    let Some((path, _, _)) = caret_position(state) else {
+        return;
+    };
+    let id = next_id();
+    track(id, Pending::Outline { path: path.clone() });
+    send_request_id(
+        id,
+        "textDocument/documentSymbol",
+        json!({ "textDocument": { "uri": file_uri(&path) } }),
+    );
+}
+
 /// Opens the rename prompt for the symbol at the caret.
 pub fn start_rename(state: EditorState) {
     let Some((path, line, character)) = caret_position(state) else {

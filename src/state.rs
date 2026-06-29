@@ -206,6 +206,17 @@ impl SceneState {
     }
 }
 
+/// One node in the document outline: a symbol, its LSP `SymbolKind`, the 0-based
+/// line it starts on, and its nested children (the methods inside an impl, the
+/// variants inside an enum). Built from a hierarchical `documentSymbol` reply.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OutlineNode {
+    pub name: String,
+    pub kind: u8,
+    pub line: u32,
+    pub children: Vec<OutlineNode>,
+}
+
 /// The rust-analyzer client surface as the UI sees it: server lifecycle plus
 /// the popups and panels driven by LSP replies. Reached as `state.lsp`.
 #[derive(Clone, Copy)]
@@ -230,6 +241,10 @@ pub struct LspState {
     /// The document symbols offered in the fuzzy symbol picker. Empty means
     /// closed; selecting one jumps to it.
     pub symbol_picker: RwSignal<Vec<SearchHit>>,
+    /// The focused file's symbols as a hierarchical tree, for the outline panel.
+    pub outline: RwSignal<Vec<OutlineNode>>,
+    /// The path the outline tree describes, so its rows know where to jump.
+    pub outline_path: RwSignal<String>,
     /// The rename prompt's current text, when the rename box is open.
     pub rename: RwSignal<Option<String>>,
     /// Every diagnostic across open files, by path, for the problems panel.
@@ -252,6 +267,8 @@ impl LspState {
             hover: RwSignal::new(None),
             code_actions: RwSignal::new(Vec::new()),
             symbol_picker: RwSignal::new(Vec::new()),
+            outline: RwSignal::new(Vec::new()),
+            outline_path: RwSignal::new(String::new()),
             rename: RwSignal::new(None),
             problems: RwSignal::new(Vec::new()),
             problems_open: RwSignal::new(false),
@@ -384,6 +401,8 @@ pub struct PanelsState {
     pub undo_tree: RwSignal<bool>,
     /// Whether the source-control panel is shown.
     pub git: RwSignal<bool>,
+    /// Whether the document outline panel is shown.
+    pub outline: RwSignal<bool>,
 }
 
 impl PanelsState {
@@ -394,6 +413,7 @@ impl PanelsState {
             help: RwSignal::new(false),
             undo_tree: RwSignal::new(false),
             git: RwSignal::new(false),
+            outline: RwSignal::new(false),
         }
     }
 }

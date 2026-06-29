@@ -14,8 +14,8 @@ use serde_json::{Value, json};
 use web_sys::WebSocket;
 
 use crate::state::{
-    CompletionEntry, CompletionMenu, EditorState, HoverCard, PluginKind, SidebarView, basename,
-    language_for_path,
+    CompletionEntry, CompletionMenu, EditorState, HoverCard, OutlineNode, PluginKind, SidebarView,
+    basename, language_for_path,
 };
 
 mod edits;
@@ -29,8 +29,9 @@ use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
     organize_imports, request_code_actions, request_completion, request_hover_at,
-    request_hover_at_caret, request_locations, request_references, request_signature_help,
-    request_symbols, request_workspace_symbols, start_rename, submit_rename,
+    request_hover_at_caret, request_locations, request_outline, request_references,
+    request_signature_help, request_symbols, request_workspace_symbols, start_rename,
+    submit_rename,
 };
 use transport::{connect, file_uri, notify, path_from_uri, send_raw, send_request};
 
@@ -42,6 +43,7 @@ enum Pending {
     Format { path: String },
     References,
     Symbols { path: String },
+    Outline { path: String },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -508,6 +510,42 @@ fn collect_symbols(items: &[Value], path: &str, out: &mut Vec<SearchHit>) {
     }
 }
 
+fn apply_outline(state: EditorState, value: &Value, path: &str) {
+    let nodes = value
+        .get("result")
+        .and_then(Value::as_array)
+        .map(|items| build_outline(items))
+        .unwrap_or_default();
+    state.lsp.outline_path.set(path.to_string());
+    state.lsp.outline.set(nodes);
+}
+
+fn build_outline(items: &[Value]) -> Vec<OutlineNode> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let name = item.get("name").and_then(Value::as_str)?.to_string();
+            let kind = item.get("kind").and_then(Value::as_u64).unwrap_or(0) as u8;
+            let line = item
+                .pointer("/selectionRange/start/line")
+                .or_else(|| item.pointer("/range/start/line"))
+                .or_else(|| item.pointer("/location/range/start/line"))
+                .and_then(Value::as_u64)? as u32;
+            let children = item
+                .get("children")
+                .and_then(Value::as_array)
+                .map(|nested| build_outline(nested))
+                .unwrap_or_default();
+            Some(OutlineNode {
+                name,
+                kind,
+                line,
+                children,
+            })
+        })
+        .collect()
+}
+
 fn apply_code_actions(state: EditorState, value: &Value) {
     let Some(items) = value.get("result").and_then(Value::as_array) else {
         return;
@@ -690,6 +728,7 @@ fn handle_rpc(state: EditorState, value: Value) {
             Pending::Format { path } => apply_format(state, &value, &path),
             Pending::References => apply_references(state, &value),
             Pending::Symbols { path } => apply_symbols(state, &value, &path),
+            Pending::Outline { path } => apply_outline(state, &value, &path),
             Pending::Rename => {
                 if let Some(result) = value.get("result") {
                     apply_workspace_edit(state, result);

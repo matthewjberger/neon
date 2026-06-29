@@ -62,6 +62,7 @@ pub enum EditorCommand {
     ToggleProblems,
     ToggleUndoTree,
     ToggleGit,
+    ToggleOutline,
     ToggleSurface,
     NextHunk,
     PrevHunk,
@@ -172,6 +173,7 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("toggle-problems", Some("Toggle problems"), ToggleProblems),
         ("toggle-undo-tree", Some("Toggle undo tree"), ToggleUndoTree),
         ("toggle-git", Some("Toggle source control"), ToggleGit),
+        ("toggle-outline", Some("Toggle outline"), ToggleOutline),
         ("next-hunk", Some("Next change"), NextHunk),
         ("prev-hunk", Some("Previous change"), PrevHunk),
         (
@@ -429,6 +431,13 @@ pub fn run(
             state.panels.git.set(open);
             if open {
                 crate::git::refresh_status(state);
+            }
+        }
+        EditorCommand::ToggleOutline => {
+            let open = !state.panels.outline.get_untracked();
+            state.panels.outline.set(open);
+            if open {
+                crate::lsp::request_outline(state);
             }
         }
         EditorCommand::NextHunk => crate::git::goto_hunk(state, true),

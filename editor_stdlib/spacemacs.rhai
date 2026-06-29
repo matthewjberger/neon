@@ -25,8 +25,10 @@
 //   SPC x  u/U/s/w/r case lower / upper / sort lines / trim / rename
 //          i/R/.     organize imports / refactor / code action
 //          J/>/<     join lines / indent / outdent
-//   SPC t  p/c/r/a/o/l/f  toggles: preview / console / reference / Claude /
-//                       control panel / rust-analyzer log / format on save
+//   SPC t  p/c/r/a/o/l/f/u/g/s/t  toggles: preview / console / reference /
+//                       Claude / control panel / rust-analyzer log /
+//                       format on save / undo tree / source control /
+//                       outline / next theme
 //   SPC e  n/p/f/e/l errors: next / previous / quick fix / problems / log
 //   SPC p  f/t//     project: search / files / search
 //   SPC P  n/m/i     plugins: new / manager / installed
@@ -208,6 +210,7 @@ fn toggle_menu() {
         #{ key: "f", label: "Format on save" },
         #{ key: "u", label: "Undo tree" },
         #{ key: "g", label: "Source control" },
+        #{ key: "s", label: "Outline" },
         #{ key: "t", label: "Next theme" },
     ] };
 }
@@ -559,6 +562,7 @@ fn on_key() {
         else if key == "f" { ops.push(#{ RunCommand: "toggle-format-on-save" }); }
         else if key == "u" { ops.push(#{ RunCommand: "toggle-undo-tree" }); }
         else if key == "g" { ops.push(#{ RunCommand: "toggle-git" }); }
+        else if key == "s" { ops.push(#{ RunCommand: "toggle-outline" }); }
         else if key == "t" { ops.push(#{ RunCommand: "next-theme" }); }
         return;
     }
