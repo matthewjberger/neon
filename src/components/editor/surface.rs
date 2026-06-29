@@ -1,8 +1,9 @@
 //! The custom editing surface: a rope-backed [`Document`] rendered as DOM, with
 //! native multi-cursor. It is the opt-in alternative to the textarea (toggled by
 //! `state.editing.surface`). A hidden textarea captures keystrokes, IME, and
-//! clipboard; the text, carets, and selections are rendered as overlays measured
-//! against a monospace cell. Edits persist through `set_buffer_text`, so
+//! clipboard; the text is rendered as DOM, and the caret and selection overlays
+//! are positioned by measuring the rendered glyphs with a `Range`, so inline
+//! decorations stay aligned. Edits persist through `set_buffer_text`, so
 //! highlighting and saving keep working. The modal plugin layer runs against the
 //! document through `handle_key_document`, including macros, the dot-repeat, and
 //! the view motions, so the surface is a full modal editor.
@@ -12,6 +13,7 @@ use std::collections::HashSet;
 use document::{Document, Selection};
 use leptos::html;
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
 use crate::highlight::highlight;
@@ -23,7 +25,12 @@ use super::current_buffer;
 pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     let input = NodeRef::<html::Textarea>::new();
     let content = NodeRef::<html::Div>::new();
+    let text_node = NodeRef::<html::Div>::new();
     let metric = NodeRef::<html::Div>::new();
+    // Caret and selection overlay rectangles, measured from the rendered text DOM
+    // so inline decorations (inlay hints) and proportional glyphs stay aligned.
+    let carets = RwSignal::new(Vec::<(f64, f64, f64)>::new());
+    let selection_boxes = RwSignal::new(Vec::<(f64, f64, f64, f64)>::new());
 
     let command_set = Memo::new(move |_| {
         state
@@ -234,6 +241,69 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         }
     });
 
+    // Measure the caret and selection rectangles from the rendered text after
+    // every change. Vertical positions stay on the uniform line grid; horizontal
+    // positions are measured per line, so inline decorations cannot misalign them.
+    Effect::new(move |_| {
+        state.editing.highlight.get();
+        command_set.track();
+        let (cell_width, cell_height) = cell();
+        let (Some(text_element), Some(content_element)) = (text_node.get(), content.get()) else {
+            return;
+        };
+        let text_element: web_sys::Element = text_element.into();
+        let content_element: web_sys::HtmlElement = content_element.into();
+        let content_rect = content_element.get_bounding_client_rect();
+        let scroll_left = content_element.scroll_left() as f64;
+        let measure = |line: usize, column: usize| {
+            measure_x(&text_element, &content_rect, scroll_left, line, column)
+        };
+
+        doc.with(|document| {
+            let mut caret_rects = Vec::new();
+            let mut box_rects = Vec::new();
+            for selection in document.selections() {
+                let head_line = document.char_to_line(selection.head);
+                let head_column = selection.head - document.line_to_char(head_line);
+                if let Some(left) = measure(head_line, head_column) {
+                    caret_rects.push((left, head_line as f64 * cell_height, cell_height));
+                }
+                if selection.is_empty() {
+                    continue;
+                }
+                let start = selection.start();
+                let end = selection.end();
+                let first_line = document.char_to_line(start);
+                let last_line = document.char_to_line(end);
+                for line in first_line..=last_line {
+                    let line_start = document.line_to_char(line);
+                    let line_length = document.line_end(line) - line_start;
+                    let from = if line == first_line {
+                        start - line_start
+                    } else {
+                        0
+                    };
+                    let to = if line == last_line {
+                        end - line_start
+                    } else {
+                        line_length
+                    };
+                    if let (Some(left), Some(right)) = (measure(line, from), measure(line, to)) {
+                        let trailing = if line == last_line { 0.0 } else { cell_width };
+                        box_rects.push((
+                            left,
+                            line as f64 * cell_height,
+                            (right - left + trailing).max(2.0),
+                            cell_height,
+                        ));
+                    }
+                }
+            }
+            carets.set(caret_rects);
+            selection_boxes.set(box_rects);
+        });
+    });
+
     view! {
         <div class="surface" on:pointerdown=on_pointerdown>
             <div class="surface-metric" node_ref=metric>"0"</div>
@@ -244,7 +314,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                 }}
             </div>
             <div class="surface-content" node_ref=content>
-                <div class="surface-text">
+                <div class="surface-text" node_ref=text_node>
                     {move || {
                         state.editing.highlight.get();
                         let language = language();
@@ -274,43 +344,28 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                     }}
                 </div>
                 {move || {
-                    let (cell_width, cell_height) = cell();
-                    doc.with(|document| {
-                        document
-                            .selections()
-                            .iter()
-                            .flat_map(|selection| {
-                                selection_rects(document, selection, cell_width, cell_height)
-                            })
-                            .map(|rect| {
-                                let style = format!(
-                                    "left:{}px;top:{}px;width:{}px;height:{}px;",
-                                    rect.0, rect.1, rect.2, rect.3,
-                                );
-                                view! { <div class="surface-selection" style=style></div> }
-                            })
-                            .collect_view()
-                    })
+                    selection_boxes
+                        .get()
+                        .into_iter()
+                        .map(|rect| {
+                            let style = format!(
+                                "left:{}px;top:{}px;width:{}px;height:{}px;",
+                                rect.0, rect.1, rect.2, rect.3,
+                            );
+                            view! { <div class="surface-selection" style=style></div> }
+                        })
+                        .collect_view()
                 }}
                 {move || {
-                    let (cell_width, cell_height) = cell();
-                    doc.with(|document| {
-                        document
-                            .selections()
-                            .iter()
-                            .map(|selection| {
-                                let line = document.char_to_line(selection.head);
-                                let column = selection.head - document.line_to_char(line);
-                                let style = format!(
-                                    "left:{}px;top:{}px;height:{}px;",
-                                    column as f64 * cell_width,
-                                    line as f64 * cell_height,
-                                    cell_height,
-                                );
-                                view! { <div class="surface-caret" style=style></div> }
-                            })
-                            .collect_view()
-                    })
+                    carets
+                        .get()
+                        .into_iter()
+                        .map(|(left, top, height)| {
+                            let style =
+                                format!("left:{left}px;top:{top}px;height:{height}px;");
+                            view! { <div class="surface-caret" style=style></div> }
+                        })
+                        .collect_view()
                 }}
                 <textarea
                     class="surface-input"
@@ -352,33 +407,50 @@ fn cell_at(
     Some((line, column))
 }
 
-/// The highlight rectangles a selection covers, one per line it spans.
-fn selection_rects(
-    document: &Document,
-    selection: &Selection,
-    cell_width: f64,
-    cell_height: f64,
-) -> Vec<(f64, f64, f64, f64)> {
-    if selection.is_empty() {
-        return Vec::new();
-    }
-    let start = selection.start();
-    let end = selection.end();
-    let first_line = document.char_to_line(start);
-    let last_line = document.char_to_line(end);
-    let mut rects = Vec::new();
-    for line in first_line..=last_line {
-        let line_start = document.line_to_char(line);
-        let line_end = document.line_end(line);
-        let from = start.max(line_start) - line_start;
-        let to = if line == last_line {
-            end - line_start
-        } else {
-            (line_end - line_start) + 1
+/// The x coordinate (in the content's scroll space) of a character column on a
+/// rendered line, measured with a DOM `Range` so inline decorations and any
+/// non-monospace glyphs do not throw the caret and selection out of alignment.
+fn measure_x(
+    text_element: &web_sys::Element,
+    content_rect: &web_sys::DomRect,
+    scroll_left: f64,
+    line: usize,
+    column: usize,
+) -> Option<f64> {
+    let lines = text_element.query_selector_all(".surface-line").ok()?;
+    let line_element: web_sys::Element = lines.item(line as u32)?.dyn_into().ok()?;
+    let (node, offset) = locate_offset(&line_element, column)?;
+    let range = web_sys::Range::new().ok()?;
+    range.set_start(&node, offset).ok()?;
+    range.collapse_with_to_start(true);
+    let rect = range.get_bounding_client_rect();
+    Some(rect.left() - content_rect.left() + scroll_left)
+}
+
+/// Resolves a character column on a line to the text node and its UTF-16 offset,
+/// walking the line's highlight spans (selected by tag so Leptos marker nodes do
+/// not throw off the count). Past the end, lands on the last node's end.
+fn locate_offset(line_element: &web_sys::Element, column: usize) -> Option<(web_sys::Node, u32)> {
+    let spans = line_element.query_selector_all("span").ok()?;
+    let mut remaining = column;
+    let mut last: Option<(web_sys::Node, u32)> = None;
+    for index in 0..spans.length() {
+        let span = spans.item(index)?;
+        let Some(text) = span.first_child() else {
+            continue;
         };
-        let left = from as f64 * cell_width;
-        let width = (to.saturating_sub(from)) as f64 * cell_width;
-        rects.push((left, line as f64 * cell_height, width.max(2.0), cell_height));
+        let content = text.text_content().unwrap_or_default();
+        let char_count = content.chars().count();
+        if remaining <= char_count {
+            let utf16_offset = content
+                .chars()
+                .take(remaining)
+                .map(char::len_utf16)
+                .sum::<usize>() as u32;
+            return Some((text, utf16_offset));
+        }
+        remaining -= char_count;
+        last = Some((text, content.encode_utf16().count() as u32));
     }
-    rects
+    last
 }
