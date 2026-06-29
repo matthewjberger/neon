@@ -156,6 +156,69 @@ impl Document {
         self.set_selections(selections);
     }
 
+    /// Adds a caret one line below the primary, at the same column.
+    pub fn add_cursor_below(&mut self) {
+        self.add_cursor_vertical(1);
+    }
+
+    /// Adds a caret one line above the primary, at the same column.
+    pub fn add_cursor_above(&mut self) {
+        self.add_cursor_vertical(-1);
+    }
+
+    fn add_cursor_vertical(&mut self, delta: isize) {
+        let head = self.primary().head;
+        let line = self.char_to_line(head);
+        let target = line as isize + delta;
+        if target < 0 || target as usize >= self.len_lines() {
+            return;
+        }
+        let target = target as usize;
+        let column = head - self.line_to_char(line);
+        let offset = (self.line_to_char(target) + column).min(self.line_end(target));
+        self.add_cursor(offset);
+        self.primary = self
+            .selections
+            .iter()
+            .position(|selection| selection.head == offset)
+            .unwrap_or(self.primary);
+    }
+
+    /// Selects the word under the primary caret, or — when text is already
+    /// selected — adds a selection at the next occurrence of that text. The
+    /// VS Code "add selection to next find match" gesture.
+    pub fn select_next_occurrence(&mut self) {
+        let primary = self.primary();
+        if primary.is_empty() {
+            let (start, end) = self.word_bounds(primary.head);
+            if end > start {
+                self.set_primary(Selection::new(start, end));
+            }
+            return;
+        }
+        let needle: Vec<char> = self.slice(primary.start(), primary.end()).chars().collect();
+        if needle.is_empty() {
+            return;
+        }
+        let from = self
+            .selections
+            .iter()
+            .map(Selection::end)
+            .max()
+            .unwrap_or(0);
+        let chars: Vec<char> = self.text().chars().collect();
+        if let Some(index) = find_next(&chars, from, &needle) {
+            let mut selections = self.selections.clone();
+            selections.push(Selection::new(index, index + needle.len()));
+            self.set_selections(selections);
+            self.primary = self
+                .selections
+                .iter()
+                .position(|selection| selection.start() == index)
+                .unwrap_or(self.primary);
+        }
+    }
+
     /// Replaces every selection with `text` (typing, paste). Empty selections
     /// just insert. Applies left to right with a running offset so every edit
     /// lands correctly.
@@ -375,6 +438,18 @@ fn is_word(character: char) -> bool {
     character.is_alphanumeric() || character == '_'
 }
 
+/// The index of the next occurrence of `needle` at or after `from`, wrapping.
+fn find_next(text: &[char], from: usize, needle: &[char]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > text.len() {
+        return None;
+    }
+    let last = text.len() - needle.len();
+    let matches = |index: usize| text[index..index + needle.len()] == *needle;
+    (from..=last)
+        .find(|index| matches(*index))
+        .or_else(|| (0..from.min(last + 1)).find(|index| matches(*index)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,6 +547,27 @@ mod tests {
         assert_eq!(document.word_bounds(7), (6, 11));
         document.replace_range(0, 5, "hi");
         assert_eq!(document.text(), "hi world");
+    }
+
+    #[test]
+    fn add_cursor_below_then_type() {
+        let mut document = Document::new("ab\ncd\nef");
+        document.set_primary(Selection::caret(0));
+        document.add_cursor_below();
+        assert_eq!(document.selections().len(), 2);
+        document.insert("X");
+        assert_eq!(document.text(), "Xab\nXcd\nef");
+    }
+
+    #[test]
+    fn select_next_occurrence_adds_a_cursor() {
+        let mut document = Document::new("foo foo foo");
+        document.set_primary(Selection::caret(0));
+        document.select_next_occurrence();
+        assert_eq!(document.primary(), Selection::new(0, 3));
+        document.select_next_occurrence();
+        assert_eq!(document.selections().len(), 2);
+        assert!(document.selections().contains(&Selection::new(4, 7)));
     }
 
     #[test]

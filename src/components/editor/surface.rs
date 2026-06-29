@@ -111,8 +111,12 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         }
         let shift = event.shift_key();
         let ctrl = event.ctrl_key() || event.meta_key();
+        let alt = event.alt_key();
         let mut handled = true;
         match key.as_str() {
+            "ArrowDown" if ctrl && alt => edit(&move |document| document.add_cursor_below()),
+            "ArrowUp" if ctrl && alt => edit(&move |document| document.add_cursor_above()),
+            "d" if ctrl && alt => edit(&move |document| document.select_next_occurrence()),
             "ArrowLeft" => edit(&move |document| document.move_left(shift)),
             "ArrowRight" => edit(&move |document| document.move_right(shift)),
             "ArrowUp" => edit(&move |document| document.move_up(shift)),
@@ -131,6 +135,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                     edit(&move |document| document.move_line_end(shift));
                 }
             }
+            "Escape" => edit(&move |document| document.collapse()),
             "Backspace" => edit(&move |document| document.backspace()),
             "Delete" => edit(&move |document| document.delete_forward()),
             "Enter" => edit(&move |document| document.insert("\n")),
