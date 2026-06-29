@@ -3,8 +3,9 @@
 //! `state.editing.surface`). A hidden textarea captures keystrokes, IME, and
 //! clipboard; the text, carets, and selections are rendered as overlays measured
 //! against a monospace cell. Edits persist through `set_buffer_text`, so
-//! highlighting and saving keep working. The vim plugin layer is not yet wired to
-//! it, so the surface is a plain editor for now.
+//! highlighting and saving keep working. The modal plugin layer runs against the
+//! document through `handle_key_document`, including macros, the dot-repeat, and
+//! the view motions, so the surface is a full modal editor.
 
 use std::collections::HashSet;
 
@@ -47,6 +48,9 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     };
 
     let doc = RwSignal::new(Document::new(&source()));
+    // Bumped on every handled key, so the scroll effect runs even for keys that
+    // only move the view (`zz`/`zt`/`zb`) without changing the document.
+    let tick = RwSignal::new(0_u32);
 
     // Reset the document when the buffer text changes from the outside (a tab
     // switch, an LSP edit), but not from our own edits, which already match.
@@ -84,6 +88,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         ) {
             return;
         }
+        tick.update(|count| *count = count.wrapping_add(1));
         // The editor plugins (the modal layer) get first crack at the key, run
         // against the document; only an unconsumed key falls through to the
         // built-in navigation (so insert-mode typing reaches the hidden input).
@@ -193,6 +198,39 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             && let Some(element) = input.get()
         {
             let _ = element.focus();
+        }
+    });
+
+    // After each key, record the viewport for the surface's view motions and
+    // scroll the caret into view, honouring any pending `zz`/`zt`/`zb` intent.
+    Effect::new(move |_| {
+        tick.get();
+        let Some(element) = content.get() else {
+            return;
+        };
+        let element: web_sys::HtmlElement = element.into();
+        let (_, cell_height) = cell();
+        let view_height = element.client_height() as f64;
+        let scroll_top = element.scroll_top() as f64;
+        let visible_lines = (view_height / cell_height).floor().max(1.0) as usize;
+        let first_line = (scroll_top / cell_height).floor() as usize;
+        crate::editor_plugins::set_doc_viewport(visible_lines, first_line);
+
+        let caret_line =
+            doc.with_untracked(|document| document.char_to_line(document.primary().head)) as f64;
+        let caret_top = caret_line * cell_height;
+        let target_top = if let Some(fraction) = crate::editor_plugins::take_doc_scroll_intent() {
+            caret_top - (view_height - cell_height) * fraction
+        } else if caret_top < scroll_top {
+            caret_top
+        } else if caret_top > scroll_top + view_height - cell_height {
+            caret_top - (view_height - cell_height)
+        } else {
+            scroll_top
+        };
+        let target_top = target_top.max(0.0);
+        if (target_top - scroll_top).abs() >= 1.0 {
+            element.set_scroll_top(target_top as i32);
         }
     });
 

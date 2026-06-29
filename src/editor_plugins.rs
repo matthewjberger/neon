@@ -61,6 +61,25 @@ thread_local! {
     static EXPAND_STACK: RefCell<Vec<(usize, usize)>> = const { RefCell::new(Vec::new()) };
     /// Whether the document surface is extending a selection (visual mode).
     static DOC_EXTENDING: Cell<bool> = const { Cell::new(false) };
+    /// The surface viewport height in lines, for the half-page and `H`/`M`/`L`
+    /// motions that the document model cannot read off a textarea.
+    static DOC_VIEWPORT_LINES: Cell<usize> = const { Cell::new(20) };
+    /// The first visible line on the surface, for the `H`/`M`/`L` motions.
+    static DOC_SCROLL_TOP: Cell<usize> = const { Cell::new(0) };
+    /// A pending scroll on the surface: the fraction of the view the caret line
+    /// should sit at (`zz`/`zt`/`zb`), consumed by the surface after a key.
+    static DOC_SCROLL_INTENT: Cell<Option<f64>> = const { Cell::new(None) };
+}
+
+/// Records the surface viewport so the half-page and view motions land right.
+pub fn set_doc_viewport(visible_lines: usize, first_line: usize) {
+    DOC_VIEWPORT_LINES.with(|cell| cell.set(visible_lines.max(1)));
+    DOC_SCROLL_TOP.with(|cell| cell.set(first_line));
+}
+
+/// Takes the pending scroll intent the surface should apply, if any.
+pub fn take_doc_scroll_intent() -> Option<f64> {
+    DOC_SCROLL_INTENT.with(Cell::take)
 }
 
 /// Runs the editor plugins for a keystroke against a [`Document`] (the custom
@@ -75,16 +94,118 @@ pub fn handle_key_document(
 ) -> KeyOutcome {
     let mode = state.editing.mode.get_untracked();
     let introspection = introspect_document(document);
-    let ops = dispatch(state, event, &mode, &introspection);
+    let mut ops = dispatch(state, event, &mode, &introspection);
     if ops.is_empty() {
         return KeyOutcome {
             consumed: false,
             changed: false,
         };
     }
-    let consumed = ops.iter().any(|op| matches!(op, EditorOp::Consume));
-    let changed = apply_document(state, document, ops);
+
+    // Macros: record this key into the active register unless it is the one that
+    // starts or stops recording, then apply any macro control the ops carry. The
+    // registers are shared with the textarea path, so a macro recorded on one
+    // replays on the other.
+    let starts = ops.iter().any(|op| matches!(op, EditorOp::StartMacro(_)));
+    let stops = ops.iter().any(|op| matches!(op, EditorOp::StopMacro));
+    if let Some(register) = MACRO_RECORDING.with(Cell::get)
+        && !MACRO_REPLAYING.with(Cell::get)
+        && !starts
+        && !stops
+    {
+        MACROS.with(|macros| {
+            macros
+                .borrow_mut()
+                .entry(register)
+                .or_default()
+                .push(MacroKey {
+                    key: event.key.clone(),
+                    ctrl: event.ctrl,
+                    shift: event.shift,
+                    alt: event.alt,
+                });
+        });
+    }
+    let mut play: Option<String> = None;
+    for op in &ops {
+        match op {
+            EditorOp::StartMacro(register) => {
+                if let Some(letter) = register.chars().next() {
+                    MACRO_RECORDING.with(|cell| cell.set(Some(letter)));
+                    MACROS.with(|macros| {
+                        macros.borrow_mut().insert(letter, Vec::new());
+                    });
+                }
+            }
+            EditorOp::StopMacro => MACRO_RECORDING.with(|cell| cell.set(None)),
+            EditorOp::PlayMacro(register) => play = Some(register.clone()),
+            _ => {}
+        }
+    }
+
+    // A dot replays the recorded change rather than its own batch, and is never
+    // itself recorded, so repeating a repeat repeats the original change.
+    let is_repeat = ops.iter().any(|op| matches!(op, EditorOp::Repeat));
+    if is_repeat {
+        ops = LAST_CHANGE.with(|cell| cell.borrow().clone());
+        if ops.is_empty() {
+            return KeyOutcome {
+                consumed: true,
+                changed: false,
+            };
+        }
+    }
+    let consumed = is_repeat
+        || starts
+        || stops
+        || play.is_some()
+        || ops.iter().any(|op| matches!(op, EditorOp::Consume));
+    let record = if is_repeat { None } else { Some(ops.clone()) };
+    let mut changed = apply_document(state, document, ops);
+    if changed && let Some(batch) = record {
+        LAST_CHANGE.with(|cell| *cell.borrow_mut() = batch);
+    }
+    if let Some(register) = play {
+        changed |= play_macro_document(state, document, &register);
+    }
     KeyOutcome { consumed, changed }
+}
+
+/// Replays a register's recorded keys against a document, guarding against a
+/// macro that calls itself. Mirrors `play_macro` for the surface.
+fn play_macro_document(state: EditorState, document: &mut Document, register: &str) -> bool {
+    let letter = if register == "@" {
+        LAST_MACRO.with(Cell::get)
+    } else {
+        register.chars().next()
+    };
+    let Some(letter) = letter else {
+        return false;
+    };
+    LAST_MACRO.with(|cell| cell.set(Some(letter)));
+    if MACRO_DEPTH.with(Cell::get) > 64 {
+        return false;
+    }
+    let keys = MACROS.with(|macros| macros.borrow().get(&letter).cloned());
+    let Some(keys) = keys else {
+        return false;
+    };
+    let was_replaying = MACRO_REPLAYING.with(Cell::get);
+    MACRO_REPLAYING.with(|cell| cell.set(true));
+    MACRO_DEPTH.with(|cell| cell.set(cell.get() + 1));
+    let mut changed = false;
+    for macro_key in keys {
+        let event = KeyEvent {
+            key: macro_key.key,
+            ctrl: macro_key.ctrl,
+            shift: macro_key.shift,
+            alt: macro_key.alt,
+        };
+        changed |= handle_key_document(state, document, &event).changed;
+    }
+    MACRO_DEPTH.with(|cell| cell.set(cell.get().saturating_sub(1)));
+    MACRO_REPLAYING.with(|cell| cell.set(was_replaying));
+    changed
 }
 
 /// Reads the introspection a keystroke exposes from a document's primary
@@ -125,6 +246,32 @@ fn move_to(document: &mut Document, offset: usize) {
         offset
     };
     document.set_primary(Selection::new(anchor, offset));
+}
+
+/// Moves the caret a signed number of lines, keeping the column, for the
+/// half-page motions on the surface.
+fn move_document_lines(document: &mut Document, delta: isize) {
+    let caret = document.primary().head;
+    let line = document.char_to_line(caret);
+    let column = caret - document.line_to_char(line);
+    let last_line = document.len_lines().saturating_sub(1) as isize;
+    let target_line = (line as isize + delta).clamp(0, last_line) as usize;
+    let line_start = document.line_to_char(target_line);
+    let offset = (line_start + column).min(document.line_end(target_line));
+    move_to(document, offset);
+}
+
+/// Moves the caret to the line a fraction down the visible viewport (`H`/`M`/`L`).
+fn move_caret_to_view(document: &mut Document, fraction: f64) {
+    let top = DOC_SCROLL_TOP.with(Cell::get);
+    let viewport = DOC_VIEWPORT_LINES.with(Cell::get).max(1);
+    let target = top + (((viewport - 1) as f64) * fraction).round() as usize;
+    let target_line = target.min(document.len_lines().saturating_sub(1));
+    let caret = document.primary().head;
+    let column = caret - document.line_to_char(document.char_to_line(caret));
+    let line_start = document.line_to_char(target_line);
+    let offset = (line_start + column).min(document.line_end(target_line));
+    move_to(document, offset);
 }
 
 /// Moves to a character on the caret's line in a document, storing the find.
@@ -276,12 +423,43 @@ fn apply_document(state: EditorState, document: &mut Document, ops: Vec<EditorOp
                 DOC_EXTENDING.set(false);
             }
             EditorOp::Paste => {
-                let (paste, _) = paste_source();
+                let (paste, ring_index) = paste_source();
                 if !paste.is_empty() {
+                    let start = document.primary().head;
                     document.insert(&paste);
+                    let count = paste.chars().count();
+                    LAST_PASTE.with(|cell| cell.set(ring_index.map(|index| (start, count, index))));
                     changed = true;
                 }
             }
+            EditorOp::PastePop => {
+                if let Some((start, length, index)) = LAST_PASTE.with(Cell::get)
+                    && index > 0
+                    && let Some(replacement) =
+                        KILL_RING.with(|ring| ring.borrow().get(index - 1).cloned())
+                {
+                    let end = (start + length).min(document.len_chars());
+                    let count = replacement.chars().count();
+                    document.replace_range(start, end, &replacement);
+                    document.set_primary(Selection::caret(start + count));
+                    LAST_PASTE.with(|cell| cell.set(Some((start, count, index - 1))));
+                    changed = true;
+                }
+            }
+            EditorOp::HalfPageDown => {
+                let lines = (DOC_VIEWPORT_LINES.with(Cell::get) / 2).max(1);
+                move_document_lines(document, lines as isize);
+            }
+            EditorOp::HalfPageUp => {
+                let lines = (DOC_VIEWPORT_LINES.with(Cell::get) / 2).max(1);
+                move_document_lines(document, -(lines as isize));
+            }
+            EditorOp::CaretViewTop => move_caret_to_view(document, 0.0),
+            EditorOp::CaretViewMiddle => move_caret_to_view(document, 0.5),
+            EditorOp::CaretViewBottom => move_caret_to_view(document, 1.0),
+            EditorOp::Center => DOC_SCROLL_INTENT.with(|cell| cell.set(Some(0.5))),
+            EditorOp::ScrollLineTop => DOC_SCROLL_INTENT.with(|cell| cell.set(Some(0.0))),
+            EditorOp::ScrollLineBottom => DOC_SCROLL_INTENT.with(|cell| cell.set(Some(1.0))),
             EditorOp::Indent => {
                 let line = document.char_to_line(caret);
                 let start = document.line_to_char(line);
