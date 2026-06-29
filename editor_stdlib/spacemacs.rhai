@@ -41,7 +41,8 @@
 // form (dd, cc, yy). r replaces a char, O opens a line above, >> / << indent the
 // line. v starts a charwise selection, V a linewise one; in visual the motions
 // extend it and d/c/x/s act on it, > / < indent, u / U change case, gc comments,
-// i/a select a text object, and S wraps it (S) ' " ( [ { < `).
+// i/a select a text object, S wraps it (S) ' " ( [ { < `, and + / - grow / shrink
+// the selection to the enclosing syntax (expand-region).
 //
 // Yank and paste: yy yanks the line, yiw / yi" yank an object, y in visual yanks
 // the selection; p / P paste. "a before a yank or paste uses register a.
@@ -369,6 +370,8 @@ fn on_key() {
         else if key == "B" { ops.push("BigWordBack"); }
         else if key == "%" { ops.push("MatchPair"); }
         else if key == "~" { ops.push("ToggleCase"); ops.push(#{ SetMode: "normal" }); }
+        else if key == "+" || key == "=" { ops.push("ExpandSelection"); }
+        else if key == "-" { ops.push("ShrinkSelection"); }
         else if key == "o" { ops.push("SwapEnds"); }
         else if key == "f" { state.vpending = "f"; }
         else if key == "F" { state.vpending = "F"; }

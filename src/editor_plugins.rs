@@ -56,6 +56,8 @@ thread_local! {
     static LAST_MACRO: Cell<Option<char>> = const { Cell::new(None) };
     /// Replay recursion depth, a guard against a macro that calls itself.
     static MACRO_DEPTH: Cell<usize> = const { Cell::new(0) };
+    /// The stack of prior selection ranges, so a shrink undoes an expand.
+    static EXPAND_STACK: RefCell<Vec<(usize, usize)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// One recorded keystroke in a macro.
@@ -228,6 +230,10 @@ enum EditorOp {
     StopMacro,
     /// Replay a register's macro (`@{a}`; `@` means the last one).
     PlayMacro(String),
+    /// Grow the selection to the smallest enclosing syntactic range.
+    ExpandSelection,
+    /// Shrink the selection back to the previous expand step.
+    ShrinkSelection,
 }
 
 /// One keystroke handed to the editor plugins.
@@ -565,6 +571,8 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "CaretViewMiddle" => Some(EditorOp::CaretViewMiddle),
             "CaretViewBottom" => Some(EditorOp::CaretViewBottom),
             "StopMacro" => Some(EditorOp::StopMacro),
+            "ExpandSelection" => Some(EditorOp::ExpandSelection),
+            "ShrinkSelection" => Some(EditorOp::ShrinkSelection),
             _ => None,
         };
     }
@@ -1065,6 +1073,25 @@ fn apply(
             EditorOp::CaretViewBottom => caret = caret_to_view(textarea, &text, 1.0),
             // Macro control is handled in `handle_key`, around the dispatch.
             EditorOp::StartMacro(_) | EditorOp::StopMacro | EditorOp::PlayMacro(_) => {}
+            EditorOp::ExpandSelection => {
+                let (start, end) = selection_range(mark, caret).unwrap_or((caret, caret));
+                if let Some((wider_start, wider_end)) = enclosing_range(&text, start, end) {
+                    EXPAND_STACK.with(|stack| stack.borrow_mut().push((start, end)));
+                    mark = Some(wider_start);
+                    caret = wider_end;
+                }
+            }
+            EditorOp::ShrinkSelection => {
+                if let Some((start, end)) = EXPAND_STACK.with(|stack| stack.borrow_mut().pop()) {
+                    if end > start {
+                        mark = Some(start);
+                        caret = end;
+                    } else {
+                        mark = None;
+                        caret = start;
+                    }
+                }
+            }
             EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
@@ -1428,6 +1455,34 @@ fn paragraph_bounds(text: &[char], caret: usize, around: bool) -> Option<(usize,
         }
     }
     Some((start, end))
+}
+
+/// The smallest syntactic range that strictly contains `[start, end)`: the word,
+/// then each enclosing bracket or quote pair (inner then around), the paragraph,
+/// then the whole buffer. The basis for expand-region.
+fn enclosing_range(text: &[char], start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut best: Option<(usize, usize)> = None;
+    let mut consider = |range: Option<(usize, usize)>| {
+        if let Some((lo, hi)) = range
+            && lo <= start
+            && hi >= end
+            && (lo < start || hi > end)
+        {
+            match best {
+                Some((best_lo, best_hi)) if hi - lo >= best_hi - best_lo => {}
+                _ => best = Some((lo, hi)),
+            }
+        }
+    };
+    consider(Some(word_bounds(text, start)));
+    for spec in ["(", "{", "[", "<", "\"", "'", "`"] {
+        consider(object_bounds(text, start, spec, false));
+        consider(object_bounds(text, start, spec, true));
+    }
+    consider(paragraph_bounds(text, start, false));
+    consider(paragraph_bounds(text, start, true));
+    consider(Some((0, text.len())));
+    best
 }
 
 /// The number of text lines visible in the textarea.
