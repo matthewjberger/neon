@@ -741,6 +741,18 @@ fn on_key() {
         if key.len() == 1 { ops.push(#{ PlayMacro: key }); }
         return;
     }
+    if pending == "]" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == "c" { ops.push(#{ RunCommand: "next-hunk" }); }
+        return;
+    }
+    if pending == "[" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == "c" { ops.push(#{ RunCommand: "prev-hunk" }); }
+        return;
+    }
     if pending == "r" {
         ops.push("Consume");
         state.pending = "";
@@ -836,6 +848,8 @@ fn on_key() {
         else { state.pending = "q"; }
     }
     else if key == "@" { state.pending = "@"; }
+    else if key == "]" { state.pending = "]"; }
+    else if key == "[" { state.pending = "["; }
     else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
     else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }

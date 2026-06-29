@@ -10,7 +10,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
-use crate::state::EditorState;
+use crate::state::{EditorState, PluginKind};
 
 const URL: &str = "ws://127.0.0.1:8795";
 const RECONNECT_MS: i32 = 1000;
@@ -137,6 +137,55 @@ pub fn commit(state: EditorState, message: &str) {
             root,
             message: message.to_string(),
         });
+    }
+}
+
+/// Moves the caret to the next or previous changed line of the focused file.
+pub fn goto_hunk(state: EditorState, forward: bool) {
+    let buffer = state.focused_buffer();
+    if buffer.kind != PluginKind::File {
+        return;
+    }
+    let Some(path) = buffer.id else {
+        return;
+    };
+    let mut lines: Vec<u32> = state.git_changes.with(|map| {
+        map.get(&path)
+            .map(|changes| changes.iter().map(|(line, _)| *line).collect())
+            .unwrap_or_default()
+    });
+    if lines.is_empty() {
+        return;
+    }
+    lines.sort_unstable();
+    lines.dedup();
+    let Some(element) = crate::components::overlays::find::active() else {
+        return;
+    };
+    let value = element.value();
+    let caret = element.selection_start().ok().flatten().unwrap_or(0);
+    let current = value
+        .encode_utf16()
+        .take(caret as usize)
+        .filter(|unit| *unit == u16::from(b'\n'))
+        .count() as u32
+        + 1;
+    let target = if forward {
+        lines
+            .iter()
+            .find(|line| **line > current)
+            .copied()
+            .or_else(|| lines.first().copied())
+    } else {
+        lines
+            .iter()
+            .rev()
+            .find(|line| **line < current)
+            .copied()
+            .or_else(|| lines.last().copied())
+    };
+    if let Some(line) = target {
+        state.explorer.goto.set(Some((path, line)));
     }
 }
 

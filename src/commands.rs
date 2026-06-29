@@ -62,6 +62,8 @@ pub enum EditorCommand {
     ToggleProblems,
     ToggleUndoTree,
     ToggleGit,
+    NextHunk,
+    PrevHunk,
     ToggleLspLog,
     CargoCheck,
     CargoBuild,
@@ -169,6 +171,8 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("toggle-problems", Some("Toggle problems"), ToggleProblems),
         ("toggle-undo-tree", Some("Toggle undo tree"), ToggleUndoTree),
         ("toggle-git", Some("Toggle source control"), ToggleGit),
+        ("next-hunk", Some("Next change"), NextHunk),
+        ("prev-hunk", Some("Previous change"), PrevHunk),
         ("cargo-check", Some("Cargo check"), CargoCheck),
         ("cargo-build", Some("Cargo build"), CargoBuild),
         ("cargo-test", Some("Cargo test"), CargoTest),
@@ -421,6 +425,8 @@ pub fn run(
                 crate::git::refresh_status(state);
             }
         }
+        EditorCommand::NextHunk => crate::git::goto_hunk(state, true),
+        EditorCommand::PrevHunk => crate::git::goto_hunk(state, false),
         EditorCommand::ToggleLspLog => state.lsp.log_open.update(|open| *open = !*open),
         EditorCommand::CargoCheck => crate::terminal::run(state, "cargo check"),
         EditorCommand::CargoBuild => crate::terminal::run(state, "cargo build"),
