@@ -55,7 +55,8 @@
 //
 // Repeat and jumps: . replays the last change, a count repeats a motion (5j,
 // 3l), gg / G go to the top / bottom (42G to a line), zz / zt / zb center / top /
-// bottom the view, H / M / L move to the top / middle / bottom line.
+// bottom the view, zM / zR fold / unfold all, H / M / L move to the top / middle
+// / bottom line.
 //
 // Marks and the jump list: m{a} sets mark a, `a jumps to it, 'a to its line;
 // Ctrl-o / Ctrl-i walk the jump list; Ctrl-d / Ctrl-u scroll a half page.
@@ -721,6 +722,8 @@ fn on_key() {
         if key == "z" { ops.push("Center"); }
         else if key == "t" { ops.push("ScrollLineTop"); }
         else if key == "b" { ops.push("ScrollLineBottom"); }
+        else if key == "M" { ops.push(#{ RunCommand: "fold-all" }); }
+        else if key == "R" { ops.push(#{ RunCommand: "unfold-all" }); }
         return;
     }
     if pending == "m" {

@@ -67,6 +67,8 @@ pub enum EditorCommand {
     CallHierarchyOutgoing,
     TypeHierarchy,
     TypeHierarchySubtypes,
+    FoldAll,
+    UnfoldAll,
     ToggleSurface,
     NextHunk,
     PrevHunk,
@@ -190,6 +192,8 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
             Some("Show subtypes"),
             TypeHierarchySubtypes,
         ),
+        ("fold-all", Some("Fold all regions"), FoldAll),
+        ("unfold-all", Some("Unfold all regions"), UnfoldAll),
         ("next-hunk", Some("Next change"), NextHunk),
         ("prev-hunk", Some("Previous change"), PrevHunk),
         (
@@ -297,6 +301,14 @@ fn entry_target(state: EditorState) -> Option<(String, bool)> {
 }
 
 /// The parent directory of a path, splitting on either separator.
+/// The path of the focused buffer when it is a file, for the fold commands.
+fn focused_file(state: EditorState) -> Option<String> {
+    let buffer = state.focused_buffer();
+    (buffer.kind == PluginKind::File)
+        .then_some(buffer.id)
+        .flatten()
+}
+
 fn parent_of(path: &str) -> String {
     match path.rfind(['\\', '/']) {
         Some(index) => path[..index].to_string(),
@@ -460,6 +472,30 @@ pub fn run(
         EditorCommand::CallHierarchyOutgoing => crate::lsp::request_call_hierarchy(state, false),
         EditorCommand::TypeHierarchy => crate::lsp::request_type_hierarchy(state, true),
         EditorCommand::TypeHierarchySubtypes => crate::lsp::request_type_hierarchy(state, false),
+        EditorCommand::FoldAll => {
+            if let Some(path) = focused_file(state) {
+                let ranges = state.lsp.folding_ranges.with_untracked(|map| {
+                    map.get(&path)
+                        .map(|ranges| {
+                            ranges
+                                .iter()
+                                .map(|(start, end)| (*start as usize, *end as usize))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default()
+                });
+                state.editing.folds.update(|map| {
+                    map.insert(path, ranges);
+                });
+            }
+        }
+        EditorCommand::UnfoldAll => {
+            if let Some(path) = focused_file(state) {
+                state.editing.folds.update(|map| {
+                    map.remove(&path);
+                });
+            }
+        }
         EditorCommand::NextHunk => crate::git::goto_hunk(state, true),
         EditorCommand::PrevHunk => crate::git::goto_hunk(state, false),
         EditorCommand::ToggleSurface => state.editing.surface.update(|on| *on = !*on),
