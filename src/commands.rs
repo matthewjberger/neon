@@ -481,6 +481,12 @@ pub fn run(
         EditorCommand::OpenMultibuffer => {
             let excerpts = state.explorer.search_results.get_untracked();
             if !excerpts.is_empty() {
+                let mut seen = std::collections::HashSet::new();
+                for hit in &excerpts {
+                    if seen.insert(hit.path.clone()) {
+                        crate::fs::read_file(&hit.path);
+                    }
+                }
                 state.multibuffer.set(Some(crate::state::MultiBuffer {
                     title: "Search results".to_string(),
                     excerpts,

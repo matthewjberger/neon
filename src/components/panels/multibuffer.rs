@@ -1,26 +1,16 @@
 //! The multibuffer view: excerpts gathered from across files into one scrollable
-//! view, grouped by file. Each excerpt is a syntax-highlighted line that jumps to
-//! its source. This is the navigable foundation; editing the excerpts in place is
-//! layered on top of it.
-
-use std::collections::HashSet;
+//! view, grouped by file. Each excerpt's line is editable in place; committing
+//! (Enter or blur) splices the new text back into the source file's buffer and
+//! notifies the language server. The line number jumps to the source.
 
 use leptos::prelude::*;
 use protocol::SearchHit;
+use web_sys::KeyboardEvent;
 
-use crate::highlight::highlight;
-use crate::state::{EditorState, basename, language_for_path};
+use crate::state::{EditorState, PluginKind, basename};
 
 #[component]
 pub fn MultiBufferView(state: EditorState) -> impl IntoView {
-    let command_set = Memo::new(move |_| {
-        state
-            .commands
-            .get()
-            .into_iter()
-            .map(|command| command.method)
-            .collect::<HashSet<String>>()
-    });
     view! {
         <div class="multibuffer">
             {move || {
@@ -30,7 +20,6 @@ pub fn MultiBufferView(state: EditorState) -> impl IntoView {
                     }
                     .into_any();
                 };
-                let set = command_set.get();
                 let mut groups: Vec<(String, Vec<SearchHit>)> = Vec::new();
                 for hit in buffer.excerpts {
                     match groups.last_mut() {
@@ -44,32 +33,10 @@ pub fn MultiBufferView(state: EditorState) -> impl IntoView {
                         {groups
                             .into_iter()
                             .map(|(path, hits)| {
-                                let language = language_for_path(&path);
                                 let header = basename(&path).to_string();
                                 let rows = hits
                                     .into_iter()
-                                    .map(|hit| {
-                                        let runs = highlight(&hit.text, language, &set);
-                                        let target = path.clone();
-                                        let line = hit.line;
-                                        let jump = move |_| {
-                                            crate::fs::read_file(&target);
-                                            state.explorer.goto.set(Some((target.clone(), line)));
-                                        };
-                                        view! {
-                                            <div class="multibuffer-row" on:click=jump>
-                                                <span class="multibuffer-line">{hit.line}</span>
-                                                <span class="multibuffer-code">
-                                                    {runs
-                                                        .into_iter()
-                                                        .map(|(class, run)| {
-                                                            view! { <span class=class>{run}</span> }
-                                                        })
-                                                        .collect_view()}
-                                                </span>
-                                            </div>
-                                        }
-                                    })
+                                    .map(move |hit| excerpt_row(state, &path, hit))
                                     .collect_view();
                                 view! {
                                     <div class="multibuffer-group">
@@ -85,4 +52,56 @@ pub fn MultiBufferView(state: EditorState) -> impl IntoView {
             }}
         </div>
     }
+}
+
+/// One editable excerpt row: a jump-to-source line number and the line's text in
+/// an input that writes back to the source file on Enter or blur.
+fn excerpt_row(state: EditorState, path: &str, hit: SearchHit) -> AnyView {
+    let line = hit.line;
+    let jump_path = path.to_string();
+    let commit_path = path.to_string();
+    let blur_path = path.to_string();
+    let jump = move |_| {
+        crate::fs::read_file(&jump_path);
+        state.explorer.goto.set(Some((jump_path.clone(), line)));
+    };
+    let on_keydown = move |event: KeyboardEvent| match event.key().as_str() {
+        "Enter" => {
+            event.prevent_default();
+            commit_line(state, &commit_path, line, &event_target_value(&event));
+        }
+        "Escape" => event.prevent_default(),
+        _ => {}
+    };
+    let on_blur = move |event| {
+        commit_line(state, &blur_path, line, &event_target_value(&event));
+    };
+    view! {
+        <div class="multibuffer-row">
+            <span class="multibuffer-line" on:click=jump>{line}</span>
+            <input
+                class="multibuffer-edit"
+                spellcheck="false"
+                value=hit.text
+                on:keydown=on_keydown
+                on:blur=on_blur
+            />
+        </div>
+    }
+    .into_any()
+}
+
+/// Splices a replacement line back into a file's buffer and notifies the server.
+fn commit_line(state: EditorState, path: &str, line: u32, new_text: &str) {
+    let id = Some(path.to_string());
+    let text = state.buffer_source(PluginKind::File, &id);
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    let index = (line as usize).saturating_sub(1);
+    if index >= lines.len() || lines[index] == new_text {
+        return;
+    }
+    lines[index] = new_text;
+    let updated = lines.join("\n");
+    state.set_buffer_text(PluginKind::File, &id, updated);
+    crate::lsp::did_change(state, path);
 }

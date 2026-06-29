@@ -2024,7 +2024,6 @@ body {
   padding: 1px 12px;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 13px;
-  cursor: pointer;
   white-space: pre;
 }
 
@@ -2037,6 +2036,26 @@ body {
   min-width: 36px;
   text-align: right;
   user-select: none;
+  cursor: pointer;
+}
+
+.multibuffer-line:hover {
+  color: var(--accent);
+}
+
+.multibuffer-edit {
+  flex: 1;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.multibuffer-edit:focus {
+  outline: none;
+  background: var(--input-bg);
 }
 
 /* The document outline: a hierarchical symbol tree for the focused file. */
