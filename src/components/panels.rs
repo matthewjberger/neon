@@ -7,5 +7,6 @@ pub mod control_panel;
 pub mod lsp_panel;
 pub mod problems;
 pub mod reference;
+pub mod source_control;
 pub mod terminal;
 pub mod undo_tree;

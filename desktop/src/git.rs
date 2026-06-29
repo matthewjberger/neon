@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures_util::{SinkExt, StreamExt};
-use protocol::{GitChange, GitClientMessage, GitServerMessage};
+use protocol::{GitChange, GitClientMessage, GitFile, GitServerMessage};
 use tokio::process::Command;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -82,13 +82,111 @@ async fn handle_page(stream: tokio::net::TcpStream) {
 }
 
 async fn handle(request: GitClientMessage) -> GitServerMessage {
-    let GitClientMessage::DiffFile { request_id, path } = request;
-    let changes = diff(&path).await.unwrap_or_default();
-    GitServerMessage::Diff {
-        request_id,
-        path,
-        changes,
+    match request {
+        GitClientMessage::DiffFile { request_id, path } => {
+            let changes = diff(&path).await.unwrap_or_default();
+            GitServerMessage::Diff {
+                request_id,
+                path,
+                changes,
+            }
+        }
+        GitClientMessage::Status { request_id, root } => {
+            let (branch, files) = status(&root).await.unwrap_or_default();
+            GitServerMessage::Status {
+                request_id,
+                branch,
+                files,
+            }
+        }
+        GitClientMessage::Stage {
+            request_id,
+            root,
+            path,
+        } => {
+            run_git(&root, &["add", "--", &path]).await;
+            GitServerMessage::Done { request_id }
+        }
+        GitClientMessage::Unstage {
+            request_id,
+            root,
+            path,
+        } => {
+            run_git(&root, &["reset", "-q", "HEAD", "--", &path]).await;
+            GitServerMessage::Done { request_id }
+        }
+        GitClientMessage::Commit {
+            request_id,
+            root,
+            message,
+        } => {
+            run_git(&root, &["commit", "-m", &message]).await;
+            GitServerMessage::Done { request_id }
+        }
     }
+}
+
+/// Runs a git subcommand in a repo, ignoring its output.
+async fn run_git(root: &str, args: &[&str]) {
+    let _ = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .await;
+}
+
+/// The repo's branch and changed files from `git status --porcelain -b`.
+async fn status(root: &str) -> Option<(String, Vec<GitFile>)> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .arg("status")
+        .arg("--porcelain=v1")
+        .arg("-b")
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return Some((String::new(), Vec::new()));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    Some(parse_status(&text))
+}
+
+/// Parses porcelain status into the branch name and per-path change entries.
+fn parse_status(text: &str) -> (String, Vec<GitFile>) {
+    let mut branch = String::new();
+    let mut files = Vec::new();
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            branch = rest
+                .split(['.', ' '])
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            continue;
+        }
+        if line.len() < 3 {
+            continue;
+        }
+        let index = line.chars().next().unwrap_or(' ');
+        let worktree = line.chars().nth(1).unwrap_or(' ');
+        let path = line[3..].to_string();
+        if index != ' ' && index != '?' {
+            files.push(GitFile {
+                path: path.clone(),
+                staged: true,
+                status: index.to_string(),
+            });
+        }
+        if worktree != ' ' {
+            files.push(GitFile {
+                path,
+                staged: false,
+                status: worktree.to_string(),
+            });
+        }
+    }
+    (branch, files)
 }
 
 /// Runs `git diff` for one file and turns its hunk headers into per-line change

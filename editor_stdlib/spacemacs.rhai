@@ -207,6 +207,7 @@ fn toggle_menu() {
         #{ key: "l", label: "rust-analyzer log" },
         #{ key: "f", label: "Format on save" },
         #{ key: "u", label: "Undo tree" },
+        #{ key: "g", label: "Source control" },
         #{ key: "t", label: "Next theme" },
     ] };
 }
@@ -557,6 +558,7 @@ fn on_key() {
         else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
         else if key == "f" { ops.push(#{ RunCommand: "toggle-format-on-save" }); }
         else if key == "u" { ops.push(#{ RunCommand: "toggle-undo-tree" }); }
+        else if key == "g" { ops.push(#{ RunCommand: "toggle-git" }); }
         else if key == "t" { ops.push(#{ RunCommand: "next-theme" }); }
         return;
     }

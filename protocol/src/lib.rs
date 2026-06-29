@@ -393,6 +393,36 @@ pub enum LspServerMessage {
 pub enum GitClientMessage {
     /// Compute the diff of a file against HEAD.
     DiffFile { request_id: u64, path: String },
+    /// List the working-tree status of a repo.
+    Status { request_id: u64, root: String },
+    /// Stage a path.
+    Stage {
+        request_id: u64,
+        root: String,
+        path: String,
+    },
+    /// Unstage a path.
+    Unstage {
+        request_id: u64,
+        root: String,
+        path: String,
+    },
+    /// Commit the staged changes with a message.
+    Commit {
+        request_id: u64,
+        root: String,
+        message: String,
+    },
+}
+
+/// One changed path in a repo's status.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GitFile {
+    pub path: String,
+    /// Whether the change is staged (in the index).
+    pub staged: bool,
+    /// The git status letter (`M`, `A`, `D`, `?`, ...).
+    pub status: String,
 }
 
 /// The kind of change on a gutter line.
@@ -412,6 +442,14 @@ pub enum GitServerMessage {
         path: String,
         changes: Vec<(u32, GitChange)>,
     },
+    /// The repo's branch and changed files.
+    Status {
+        request_id: u64,
+        branch: String,
+        files: Vec<GitFile>,
+    },
+    /// A stage, unstage, or commit finished; the page re-reads status.
+    Done { request_id: u64 },
 }
 
 /// One highlighted run of source: a half-open UTF-8 byte range over the

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use leptos::prelude::*;
 use protocol::{
-    CommandInfo, Diagnostic, GitChange, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity,
-    StdModule, TermGrid,
+    CommandInfo, Diagnostic, GitChange, GitFile, LogEntry, LogKind, PluginSource, SearchHit,
+    SelectedEntity, StdModule, TermGrid,
 };
 use serde::{Deserialize, Serialize};
 
@@ -378,6 +378,8 @@ pub struct PanelsState {
     pub help: RwSignal<bool>,
     /// Whether the undo-tree visualizer panel is shown.
     pub undo_tree: RwSignal<bool>,
+    /// Whether the source-control panel is shown.
+    pub git: RwSignal<bool>,
 }
 
 impl PanelsState {
@@ -387,6 +389,7 @@ impl PanelsState {
             control_panel: RwSignal::new(false),
             help: RwSignal::new(false),
             undo_tree: RwSignal::new(false),
+            git: RwSignal::new(false),
         }
     }
 }
@@ -418,6 +421,8 @@ pub struct EditorState {
     pub files: RwSignal<Vec<FileBuffer>>,
     /// Working-tree diff against HEAD per file path, for the editor's git gutter.
     pub git_changes: RwSignal<HashMap<String, Vec<(u32, GitChange)>>>,
+    /// The repo's branch and changed files, for the source-control panel.
+    pub git_status: RwSignal<(String, Vec<GitFile>)>,
     /// The unified command-and-event console log.
     pub log: RwSignal<Vec<LogEntry>>,
     /// Diagnostics for the active plugin, from the language worker.
@@ -499,6 +504,7 @@ impl EditorState {
             split_vertical: RwSignal::new(true),
             files: RwSignal::new(Vec::new()),
             git_changes: RwSignal::new(HashMap::new()),
+            git_status: RwSignal::new((String::new(), Vec::new())),
             log: RwSignal::new(Vec::new()),
             diagnostics: RwSignal::new(Vec::new()),
             running: RwSignal::new(true),

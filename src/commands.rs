@@ -61,6 +61,7 @@ pub enum EditorCommand {
     PrevError,
     ToggleProblems,
     ToggleUndoTree,
+    ToggleGit,
     ToggleLspLog,
     CargoCheck,
     CargoBuild,
@@ -167,6 +168,7 @@ fn static_commands() -> Vec<(&'static str, Option<&'static str>, EditorCommand)>
         ("prev-error", Some("Previous error"), PrevError),
         ("toggle-problems", Some("Toggle problems"), ToggleProblems),
         ("toggle-undo-tree", Some("Toggle undo tree"), ToggleUndoTree),
+        ("toggle-git", Some("Toggle source control"), ToggleGit),
         ("cargo-check", Some("Cargo check"), CargoCheck),
         ("cargo-build", Some("Cargo build"), CargoBuild),
         ("cargo-test", Some("Cargo test"), CargoTest),
@@ -412,6 +414,13 @@ pub fn run(
         EditorCommand::PrevError => crate::lsp::goto_diagnostic(state, false),
         EditorCommand::ToggleProblems => state.lsp.problems_open.update(|open| *open = !*open),
         EditorCommand::ToggleUndoTree => state.panels.undo_tree.update(|open| *open = !*open),
+        EditorCommand::ToggleGit => {
+            let open = !state.panels.git.get_untracked();
+            state.panels.git.set(open);
+            if open {
+                crate::git::refresh_status(state);
+            }
+        }
         EditorCommand::ToggleLspLog => state.lsp.log_open.update(|open| *open = !*open),
         EditorCommand::CargoCheck => crate::terminal::run(state, "cargo check"),
         EditorCommand::CargoBuild => crate::terminal::run(state, "cargo build"),

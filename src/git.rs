@@ -31,12 +31,22 @@ fn connect(state: EditorState) {
     };
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
         if let Some(text) = event.data().as_string()
-            && let Ok(GitServerMessage::Diff { path, changes, .. }) =
-                serde_json::from_str::<GitServerMessage>(&text)
+            && let Ok(message) = serde_json::from_str::<GitServerMessage>(&text)
         {
-            state.git_changes.update(|map| {
-                map.insert(path, changes);
-            });
+            match message {
+                GitServerMessage::Diff { path, changes, .. } => {
+                    state.git_changes.update(|map| {
+                        map.insert(path, changes);
+                    });
+                }
+                GitServerMessage::Status { branch, files, .. } => {
+                    state.git_status.set((branch, files));
+                }
+                GitServerMessage::Done { .. } => {
+                    refresh_status(state);
+                    refresh_open_files(state);
+                }
+            }
         }
     });
     websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -66,20 +76,68 @@ fn schedule_reconnect(state: EditorState) {
     callback.forget();
 }
 
-/// Requests the diff for one file. Called when a file opens and when it is saved.
-pub fn refresh(path: &str) {
-    let request = GitClientMessage::DiffFile {
-        request_id: 0,
-        path: path.to_string(),
-    };
+/// Sends one request to the git relay, when the socket is open.
+fn send(request: &GitClientMessage) {
     SOCKET.with(|slot| {
         if let Some(websocket) = slot.borrow().as_ref()
             && websocket.ready_state() == WebSocket::OPEN
-            && let Ok(text) = serde_json::to_string(&request)
+            && let Ok(text) = serde_json::to_string(request)
         {
             let _ = websocket.send_with_str(&text);
         }
     });
+}
+
+/// Requests the diff for one file. Called when a file opens and when it is saved.
+pub fn refresh(path: &str) {
+    send(&GitClientMessage::DiffFile {
+        request_id: 0,
+        path: path.to_string(),
+    });
+}
+
+/// Requests the repo status for the source-control panel.
+pub fn refresh_status(state: EditorState) {
+    let Some(root) = state.explorer.root.get_untracked() else {
+        return;
+    };
+    send(&GitClientMessage::Status {
+        request_id: 0,
+        root,
+    });
+}
+
+/// Stages a path, then the relay's `Done` reply refreshes the status.
+pub fn stage(state: EditorState, path: &str) {
+    if let Some(root) = state.explorer.root.get_untracked() {
+        send(&GitClientMessage::Stage {
+            request_id: 0,
+            root,
+            path: path.to_string(),
+        });
+    }
+}
+
+/// Unstages a path.
+pub fn unstage(state: EditorState, path: &str) {
+    if let Some(root) = state.explorer.root.get_untracked() {
+        send(&GitClientMessage::Unstage {
+            request_id: 0,
+            root,
+            path: path.to_string(),
+        });
+    }
+}
+
+/// Commits the staged changes with a message.
+pub fn commit(state: EditorState, message: &str) {
+    if let Some(root) = state.explorer.root.get_untracked() {
+        send(&GitClientMessage::Commit {
+            request_id: 0,
+            root,
+            message: message.to_string(),
+        });
+    }
 }
 
 /// Requests diffs for every open file, on connect.
