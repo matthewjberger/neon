@@ -322,6 +322,9 @@ pub struct EditingState {
     /// A tick bumped when fresh tree-sitter spans land, so the highlight overlay
     /// repaints with them in place of the built-in scanner's runs.
     pub highlight: RwSignal<u32>,
+    /// Opt-in: render the editor with the custom document surface (rope-backed,
+    /// native multi-cursor) instead of the textarea. Experimental.
+    pub surface: RwSignal<bool>,
     /// Active jump mode (avy-style labeled motion), when on.
     pub jump: RwSignal<Option<JumpState>>,
     /// The leader menu an editor plugin published for the pending prefix, shown
@@ -352,6 +355,7 @@ impl EditingState {
             cursors: RwSignal::new(Vec::new()),
             scroll: RwSignal::new(0),
             highlight: RwSignal::new(0),
+            surface: RwSignal::new(false),
             jump: RwSignal::new(None),
             leader: RwSignal::new(None),
             find_open: RwSignal::new(false),

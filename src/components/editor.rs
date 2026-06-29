@@ -18,10 +18,12 @@ use crate::tiles;
 
 mod diagnostics;
 mod keys;
+mod surface;
 mod tab_bar;
 
 use diagnostics::DiagnosticStrip;
 use keys::{KeyContext, handle_keydown};
+use surface::CodeSurface;
 use tab_bar::TabBar;
 
 const APPLY_DELAY_MS: i32 = 350;
@@ -206,6 +208,10 @@ pub fn EditorPane(
                 when=move || active_id().is_some()
                 fallback=move || tiles::body(content.get(), bridge, state)
             >
+                <Show
+                    when=move || !state.editing.surface.get()
+                    fallback=move || view! { <CodeSurface state pane_key /> }
+                >
                 <div class="editor-wrap">
                     <div class="editor-gutter" node_ref=gutter>
                         {move || {
@@ -331,6 +337,7 @@ pub fn EditorPane(
                     />
                 </div>
                 <DiagnosticStrip state pane_key />
+                </Show>
             </Show>
         </div>
     }
