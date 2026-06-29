@@ -32,9 +32,9 @@
 //   SPC P  n/m/i     plugins: new / manager / installed
 //   SPC r            run or pause     SPC T  next theme
 //
-// Normal mode: hjkl move, i/a/A/I insert, o open line, x/X delete, D/C to line
-// end, dd delete line, J join, 0/$ ends, w/b words, / find, Escape leaves
-// insert.
+// Normal mode: hjkl move, i/a/A/I insert, o/O open line, x/X delete, D/C to line
+// end, dd delete line, J join, 0/$ ends, w/b/e words, W/B/E WORDs, ge prev end,
+// % match pair, ~ toggle case, gu/gU/g~ case ops, / find, Escape leaves insert.
 //
 // Operators and text objects: d, c, y take any motion (dw, d$, d0, db, dj, dG,
 // 3dw), a find (dt) df), a text object (diw, ci", daw), gg (dgg), or the doubled
@@ -255,10 +255,21 @@ fn motion_for(key, count) {
     if key == "k" || key == "ArrowUp" { return [#{ MoveLine: -n }]; }
     if key == "w" { let ops = []; for step in 0..n { ops.push("NextWord"); } return ops; }
     if key == "b" { let ops = []; for step in 0..n { ops.push("PrevWord"); } return ops; }
+    if key == "e" { let ops = []; for step in 0..n { ops.push("WordEnd"); } return ops; }
+    if key == "E" { let ops = []; for step in 0..n { ops.push("BigWordEnd"); } return ops; }
+    if key == "W" { let ops = []; for step in 0..n { ops.push("BigWord"); } return ops; }
+    if key == "B" { let ops = []; for step in 0..n { ops.push("BigWordBack"); } return ops; }
     if key == "0" { return ["LineStart"]; }
     if key == "$" { return ["LineEnd"]; }
     if key == "G" { return ["BufferEnd"]; }
+    if key == "%" { return ["MatchPair"]; }
     return [];
+}
+
+// Whether an operator motion includes its endpoint, so the operator extends one
+// more before cutting (e, E, and % land on the last char).
+fn motion_inclusive(key) {
+    return key == "e" || key == "E" || key == "%";
 }
 
 // The ops that finish an operator once its range is selected: d cuts, c cuts and
@@ -341,6 +352,12 @@ fn on_key() {
         else if key == "$" { ops.push("LineEnd"); }
         else if key == "w" { ops.push("NextWord"); }
         else if key == "b" { ops.push("PrevWord"); }
+        else if key == "e" { ops.push("WordEnd"); }
+        else if key == "E" { ops.push("BigWordEnd"); }
+        else if key == "W" { ops.push("BigWord"); }
+        else if key == "B" { ops.push("BigWordBack"); }
+        else if key == "%" { ops.push("MatchPair"); }
+        else if key == "~" { ops.push("ToggleCase"); ops.push(#{ SetMode: "normal" }); }
         else if key == "o" { ops.push("SwapEnds"); }
         else if key == "f" { state.vpending = "f"; }
         else if key == "F" { state.vpending = "F"; }
@@ -577,7 +594,28 @@ fn on_key() {
         if motion.len() > 0 {
             ops.push("Anchor");
             for o in motion { ops.push(o); }
+            if motion_inclusive(key) { ops.push(#{ Move: 1 }); }
             for o in finish_for(op) { ops.push(o); }
+        }
+        return;
+    }
+    if pending == "gu" || pending == "gU" || pending == "g~" {
+        ops.push("Consume");
+        let cop = pending;
+        state.pending = "";
+        let case_op = if cop == "gu" { "LowerCaseWord" } else if cop == "gU" { "UpperCaseWord" } else { "ToggleCase" };
+        let doubled = (cop == "gu" && key == "u") || (cop == "gU" && key == "U") || (cop == "g~" && key == "~");
+        if doubled {
+            ops.push("SelectLine");
+            ops.push(case_op);
+        } else {
+            let motion = motion_for(key, "");
+            if motion.len() > 0 {
+                ops.push("Anchor");
+                for o in motion { ops.push(o); }
+                if motion_inclusive(key) { ops.push(#{ Move: 1 }); }
+                ops.push(case_op);
+            }
         }
         return;
     }
@@ -638,10 +676,14 @@ fn on_key() {
     }
     if pending == "g" {
         ops.push("Consume");
+        if key == "u" { state.pending = "gu"; return; }
+        if key == "U" { state.pending = "gU"; return; }
+        if key == "~" { state.pending = "g~"; return; }
         state.pending = "";
         if key == "d" { ops.push(#{ RunCommand: "go-to-definition" }); }
         else if key == "c" { ops.push(#{ ToggleComment: "//" }); }
         else if key == "g" { ops.push("BufferStart"); }
+        else if key == "e" { ops.push("WordEndBack"); }
         return;
     }
     if pending == "z" {
@@ -698,6 +740,12 @@ fn on_key() {
     else if key == "$" { ops.push("LineEnd"); }
     else if key == "w" { ops.push("NextWord"); }
     else if key == "b" { ops.push("PrevWord"); }
+    else if key == "e" { ops.push("WordEnd"); }
+    else if key == "E" { ops.push("BigWordEnd"); }
+    else if key == "W" { ops.push("BigWord"); }
+    else if key == "B" { ops.push("BigWordBack"); }
+    else if key == "%" { ops.push("MatchPair"); }
+    else if key == "~" { ops.push("ToggleCase"); }
     else if key == "f" { state.pending = "f"; }
     else if key == "F" { state.pending = "F"; }
     else if key == "t" { state.pending = "t"; }

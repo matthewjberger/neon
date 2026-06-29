@@ -163,6 +163,20 @@ enum EditorOp {
     BufferEnd,
     /// Scroll so the caret line sits at the middle of the view (`zz`).
     Center,
+    /// Toggle the case of the selection, or the char under the caret (`~`).
+    ToggleCase,
+    /// Jump to the bracket matching the one at or after the caret (`%`).
+    MatchPair,
+    /// Move to the end of the next word (`e`).
+    WordEnd,
+    /// Move to the end of the previous word (`ge`).
+    WordEndBack,
+    /// Move to the start of the next whitespace-delimited WORD (`W`).
+    BigWord,
+    /// Move to the start of the previous WORD (`B`).
+    BigWordBack,
+    /// Move to the end of the next WORD (`E`).
+    BigWordEnd,
 }
 
 /// One keystroke handed to the editor plugins.
@@ -393,6 +407,13 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "BufferStart" => Some(EditorOp::BufferStart),
             "BufferEnd" => Some(EditorOp::BufferEnd),
             "Center" => Some(EditorOp::Center),
+            "ToggleCase" => Some(EditorOp::ToggleCase),
+            "MatchPair" => Some(EditorOp::MatchPair),
+            "WordEnd" => Some(EditorOp::WordEnd),
+            "WordEndBack" => Some(EditorOp::WordEndBack),
+            "BigWord" => Some(EditorOp::BigWord),
+            "BigWordBack" => Some(EditorOp::BigWordBack),
+            "BigWordEnd" => Some(EditorOp::BigWordEnd),
             _ => None,
         };
     }
@@ -814,6 +835,30 @@ fn apply(
                 let target = (line_index as f64) * line_height - view / 2.0;
                 textarea.set_scroll_top(target.max(0.0) as i32);
             }
+            EditorOp::ToggleCase => {
+                if let Some((start, end)) = selection_range(mark, caret) {
+                    for character in text.iter_mut().take(end).skip(start) {
+                        *character = toggle_case(*character);
+                    }
+                    caret = start;
+                    mark = None;
+                    changed = true;
+                } else if caret < text.len() {
+                    text[caret] = toggle_case(text[caret]);
+                    caret = (caret + 1).min(text.len());
+                    changed = true;
+                }
+            }
+            EditorOp::MatchPair => {
+                if let Some(index) = match_pair(&text, caret) {
+                    caret = index;
+                }
+            }
+            EditorOp::WordEnd => caret = word_end(&text, caret),
+            EditorOp::WordEndBack => caret = word_end_back(&text, caret),
+            EditorOp::BigWord => caret = big_word(&text, caret),
+            EditorOp::BigWordBack => caret = big_word_back(&text, caret),
+            EditorOp::BigWordEnd => caret = big_word_end(&text, caret),
             EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
@@ -1020,6 +1065,165 @@ fn find_on_line(text: &[char], caret: usize, needle: char, kind: FindKind) -> Op
     }
 }
 
+/// Toggles the case of an ASCII letter, leaving anything else unchanged.
+fn toggle_case(character: char) -> char {
+    if character.is_ascii_uppercase() {
+        character.to_ascii_lowercase()
+    } else if character.is_ascii_lowercase() {
+        character.to_ascii_uppercase()
+    } else {
+        character
+    }
+}
+
+/// Whitespace, the delimiter for WORD motions.
+fn is_blank(character: char) -> bool {
+    character == ' ' || character == '\t' || character == '\n'
+}
+
+/// The end of the next word (vim `e`).
+fn word_end(text: &[char], caret: usize) -> usize {
+    let len = text.len();
+    let mut index = caret;
+    if index < len {
+        index += 1;
+    }
+    while index < len && !is_word(text[index]) {
+        index += 1;
+    }
+    while index + 1 < len && is_word(text[index + 1]) {
+        index += 1;
+    }
+    index.min(len.saturating_sub(1)).max(caret)
+}
+
+/// The end of the previous word (vim `ge`).
+fn word_end_back(text: &[char], caret: usize) -> usize {
+    let mut index = caret.saturating_sub(1);
+    while index > 0 && !is_word(text[index]) {
+        index -= 1;
+    }
+    index
+}
+
+/// The start of the next WORD (vim `W`).
+fn big_word(text: &[char], caret: usize) -> usize {
+    let len = text.len();
+    let mut index = caret;
+    while index < len && !is_blank(text[index]) {
+        index += 1;
+    }
+    while index < len && is_blank(text[index]) {
+        index += 1;
+    }
+    index.min(len)
+}
+
+/// The start of the previous WORD (vim `B`).
+fn big_word_back(text: &[char], caret: usize) -> usize {
+    let mut index = caret.saturating_sub(1);
+    while index > 0 && is_blank(text[index]) {
+        index -= 1;
+    }
+    while index > 0 && !is_blank(text[index - 1]) {
+        index -= 1;
+    }
+    index
+}
+
+/// The end of the next WORD (vim `E`).
+fn big_word_end(text: &[char], caret: usize) -> usize {
+    let len = text.len();
+    let mut index = caret;
+    if index < len {
+        index += 1;
+    }
+    while index < len && is_blank(text[index]) {
+        index += 1;
+    }
+    while index + 1 < len && !is_blank(text[index + 1]) {
+        index += 1;
+    }
+    index.min(len.saturating_sub(1)).max(caret)
+}
+
+/// The match of the bracket at or after the caret on its line (vim `%`).
+fn match_pair(text: &[char], caret: usize) -> Option<usize> {
+    const PAIRS: [(char, char); 4] = [('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')];
+    let hi = line_end(text, caret);
+    let mut index = caret;
+    while index < hi {
+        let character = text[index];
+        for (open, close) in PAIRS {
+            if character == open {
+                return scan_pair(text, index, open, close, true);
+            }
+            if character == close {
+                return scan_pair(text, index, open, close, false);
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+/// The partner of the bracket at `from`, scanning forward for an opener or
+/// backward for a closer, balanced.
+fn scan_pair(text: &[char], from: usize, open: char, close: char, forward: bool) -> Option<usize> {
+    let mut depth = 0;
+    if forward {
+        for (offset, character) in text.iter().enumerate().skip(from) {
+            if *character == open {
+                depth += 1;
+            } else if *character == close {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(offset);
+                }
+            }
+        }
+    } else {
+        let mut index = from + 1;
+        while index > 0 {
+            index -= 1;
+            if text[index] == close {
+                depth += 1;
+            } else if text[index] == open {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The bounds of the paragraph (a run of non-blank lines) around the caret.
+fn paragraph_bounds(text: &[char], caret: usize, around: bool) -> Option<(usize, usize)> {
+    let blank = |line: usize| {
+        let start = line_start(text, line);
+        let end = line_end(text, line);
+        text[start..end]
+            .iter()
+            .all(|character| *character == ' ' || *character == '\t')
+    };
+    let mut start = line_start(text, caret);
+    while start > 0 && !blank(start - 1) {
+        start = line_start(text, start - 1);
+    }
+    let mut end = line_end(text, caret);
+    while end < text.len() && !blank(end + 1) {
+        end = line_end(text, end + 1);
+    }
+    if around {
+        while end < text.len() && blank(end + 1) {
+            end = line_end(text, end + 1);
+        }
+    }
+    Some((start, end))
+}
+
 /// The opposite direction of a find, for `,`.
 fn opposite_find(kind: FindKind) -> FindKind {
     match kind {
@@ -1133,6 +1337,7 @@ fn object_bounds(text: &[char], caret: usize, spec: &str, around: bool) -> Optio
                 Some((start, end))
             }
         }
+        'p' => paragraph_bounds(text, caret, around),
         quote @ ('"' | '\'' | '`') => quote_bounds(text, caret, quote, around),
         '(' | ')' | 'b' => bracket_bounds(text, caret, '(', ')', around),
         '{' | '}' | 'B' => bracket_bounds(text, caret, '{', '}', around),

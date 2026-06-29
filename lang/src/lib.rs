@@ -347,6 +347,31 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_case_and_word_end() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        // ~ toggles case.
+        let mut state_map = rhai::Map::new();
+        let tilde = run_key(&engine, &ast, &mut state_map, "~");
+        assert!(has_string_op(&tilde, "ToggleCase"), "~ did not toggle case");
+        // de cuts to the end of the word, inclusive.
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "d");
+        let de = run_key(&engine, &ast, &mut state_map, "e");
+        assert!(has_string_op(&de, "WordEnd"), "de did not move to word end");
+        assert!(has_string_op(&de, "Cut"), "de did not cut");
+        // gUU upper-cases the line.
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "g");
+        run_key(&engine, &ast, &mut state_map, "U");
+        let upper = run_key(&engine, &ast, &mut state_map, "U");
+        assert!(
+            has_string_op(&upper, "UpperCaseWord"),
+            "gUU did not upper-case"
+        );
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (

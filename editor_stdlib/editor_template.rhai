@@ -52,6 +52,11 @@
 //   "Repeat"                         replay the last buffer change (the dot)
 //   #{ Goto: 42 } "BufferStart" "BufferEnd" "Center"
 //
+// More motions and case:
+//   "WordEnd" "WordEndBack" "BigWord" "BigWordBack" "BigWordEnd"  e/ge/W/B/E
+//   "MatchPair"                      jump to the matching bracket (%)
+//   "ToggleCase"                     toggle case of the selection or char (~)
+//
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"
 //   #{ RunCommand: "rename-symbol" }      "code-action" "hover" "jump-symbol"
