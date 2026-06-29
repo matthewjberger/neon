@@ -48,20 +48,20 @@ dist: workers
 build-desktop: dist
     cargo build --release -p desktop
 
-# Runs the language-worker tests
+# Runs the language-worker and document-core tests
 test:
-    cargo test -p lang
+    cargo test -p lang -p document
 
 # Runs cargo check, the tests, and a format check across the workspace
 check: test
     cargo check -p protocol -p worker -p lang -p neon --target wasm32-unknown-unknown
-    cargo check -p desktop
+    cargo check -p desktop -p document
     cargo fmt --all -- --check
 
 # Runs clippy across the workspace and denies warnings
 lint:
     cargo clippy -p protocol -p worker -p lang -p neon --target wasm32-unknown-unknown -- -D warnings
-    cargo clippy -p desktop -- -D warnings
+    cargo clippy -p desktop -p document -- -D warnings
 
 # Formats the code
 format:
