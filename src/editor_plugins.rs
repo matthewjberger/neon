@@ -40,6 +40,12 @@ thread_local! {
     static LAST_FIND: Cell<Option<(char, FindKind)>> = const { Cell::new(None) };
     /// The op batch of the last buffer change, replayed by `Repeat` (the dot).
     static LAST_CHANGE: RefCell<Vec<EditorOp>> = const { RefCell::new(Vec::new()) };
+    /// Named marks: a char-offset per mark letter (`m{a}` / `` `{a} ``).
+    static MARKS: RefCell<HashMap<char, usize>> = RefCell::new(HashMap::new());
+    /// The jump list of caret positions, walked by `Ctrl-o` / `Ctrl-i`.
+    static JUMPLIST: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    /// The cursor into the jump list.
+    static JUMP_INDEX: Cell<usize> = const { Cell::new(0) };
 }
 
 /// How an in-line find lands: on the character (`f`/`F`) or just before/after it
@@ -177,6 +183,26 @@ enum EditorOp {
     BigWordBack,
     /// Move to the end of the next WORD (`E`).
     BigWordEnd,
+    /// Record the caret under a named mark (`m{a}`).
+    SetMark(String),
+    /// Jump to a named mark's exact position (`` `{a} ``).
+    GotoMark(String),
+    /// Jump to the start of a named mark's line (`'{a}`).
+    GotoMarkLine(String),
+    /// Step back through the jump list (`Ctrl-o`).
+    JumpBack,
+    /// Step forward through the jump list (`Ctrl-i`).
+    JumpForward,
+    /// Scroll and move the caret by half a page (`Ctrl-d` / `Ctrl-u`).
+    HalfPageDown,
+    HalfPageUp,
+    /// Scroll the caret line to the top or bottom of the view (`zt` / `zb`).
+    ScrollLineTop,
+    ScrollLineBottom,
+    /// Move the caret to the top, middle, or bottom visible line (`H`/`M`/`L`).
+    CaretViewTop,
+    CaretViewMiddle,
+    CaretViewBottom,
 }
 
 /// One keystroke handed to the editor plugins.
@@ -414,6 +440,15 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "BigWord" => Some(EditorOp::BigWord),
             "BigWordBack" => Some(EditorOp::BigWordBack),
             "BigWordEnd" => Some(EditorOp::BigWordEnd),
+            "JumpBack" => Some(EditorOp::JumpBack),
+            "JumpForward" => Some(EditorOp::JumpForward),
+            "HalfPageDown" => Some(EditorOp::HalfPageDown),
+            "HalfPageUp" => Some(EditorOp::HalfPageUp),
+            "ScrollLineTop" => Some(EditorOp::ScrollLineTop),
+            "ScrollLineBottom" => Some(EditorOp::ScrollLineBottom),
+            "CaretViewTop" => Some(EditorOp::CaretViewTop),
+            "CaretViewMiddle" => Some(EditorOp::CaretViewMiddle),
+            "CaretViewBottom" => Some(EditorOp::CaretViewBottom),
             _ => None,
         };
     }
@@ -428,6 +463,9 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "Search" => Some(EditorOp::Search(payload.into_string().ok()?)),
         "SearchBack" => Some(EditorOp::SearchBack(payload.into_string().ok()?)),
         "Goto" => Some(EditorOp::Goto(payload.as_int().ok()?)),
+        "SetMark" => Some(EditorOp::SetMark(payload.into_string().ok()?)),
+        "GotoMark" => Some(EditorOp::GotoMark(payload.into_string().ok()?)),
+        "GotoMarkLine" => Some(EditorOp::GotoMarkLine(payload.into_string().ok()?)),
         "FindCharBack" => Some(EditorOp::FindCharBack(payload.into_string().ok()?)),
         "TillChar" => Some(EditorOp::TillChar(payload.into_string().ok()?)),
         "TillCharBack" => Some(EditorOp::TillCharBack(payload.into_string().ok()?)),
@@ -783,6 +821,7 @@ fn apply(
             EditorOp::Search(needle) => {
                 let chars: Vec<char> = needle.chars().collect();
                 if let Some(index) = find_match(&text, caret, &chars, true) {
+                    record_jump(caret);
                     caret = index;
                 }
                 LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, true)));
@@ -790,6 +829,7 @@ fn apply(
             EditorOp::SearchBack(needle) => {
                 let chars: Vec<char> = needle.chars().collect();
                 if let Some(index) = find_match(&text, caret, &chars, false) {
+                    record_jump(caret);
                     caret = index;
                 }
                 LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, false)));
@@ -812,6 +852,7 @@ fn apply(
             }
             EditorOp::Repeat => {}
             EditorOp::Goto(line) => {
+                record_jump(caret);
                 let target = (line.max(1) - 1) as usize;
                 let mut offset = 0;
                 let mut current = 0;
@@ -823,8 +864,14 @@ fn apply(
                 }
                 caret = offset.min(text.len());
             }
-            EditorOp::BufferStart => caret = 0,
-            EditorOp::BufferEnd => caret = line_start(&text, text.len()),
+            EditorOp::BufferStart => {
+                record_jump(caret);
+                caret = 0;
+            }
+            EditorOp::BufferEnd => {
+                record_jump(caret);
+                caret = line_start(&text, text.len());
+            }
             EditorOp::Center => {
                 let line_index = text[..caret.min(text.len())]
                     .iter()
@@ -851,6 +898,7 @@ fn apply(
             }
             EditorOp::MatchPair => {
                 if let Some(index) = match_pair(&text, caret) {
+                    record_jump(caret);
                     caret = index;
                 }
             }
@@ -859,6 +907,44 @@ fn apply(
             EditorOp::BigWord => caret = big_word(&text, caret),
             EditorOp::BigWordBack => caret = big_word_back(&text, caret),
             EditorOp::BigWordEnd => caret = big_word_end(&text, caret),
+            EditorOp::SetMark(name) => {
+                if let Some(letter) = name.chars().next() {
+                    MARKS.with(|marks| marks.borrow_mut().insert(letter, caret));
+                }
+            }
+            EditorOp::GotoMark(name) => {
+                if let Some(letter) = name.chars().next()
+                    && let Some(offset) = MARKS.with(|marks| marks.borrow().get(&letter).copied())
+                {
+                    record_jump(caret);
+                    caret = offset.min(text.len());
+                }
+            }
+            EditorOp::GotoMarkLine(name) => {
+                if let Some(letter) = name.chars().next()
+                    && let Some(offset) = MARKS.with(|marks| marks.borrow().get(&letter).copied())
+                {
+                    record_jump(caret);
+                    caret = line_start(&text, offset.min(text.len()));
+                }
+            }
+            EditorOp::JumpBack => caret = jump_back(caret, text.len()),
+            EditorOp::JumpForward => caret = jump_forward(caret, text.len()),
+            EditorOp::HalfPageDown => {
+                let lines = visible_lines(textarea) / 2;
+                caret = move_line(&text, caret, lines.max(1));
+                scroll_by(textarea, lines.max(1));
+            }
+            EditorOp::HalfPageUp => {
+                let lines = visible_lines(textarea) / 2;
+                caret = move_line(&text, caret, -lines.max(1));
+                scroll_by(textarea, -lines.max(1));
+            }
+            EditorOp::ScrollLineTop => scroll_caret_to(textarea, &text, caret, 0.0),
+            EditorOp::ScrollLineBottom => scroll_caret_to(textarea, &text, caret, 1.0),
+            EditorOp::CaretViewTop => caret = caret_to_view(textarea, &text, 0.0),
+            EditorOp::CaretViewMiddle => caret = caret_to_view(textarea, &text, 0.5),
+            EditorOp::CaretViewBottom => caret = caret_to_view(textarea, &text, 1.0),
             EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
@@ -1222,6 +1308,105 @@ fn paragraph_bounds(text: &[char], caret: usize, around: bool) -> Option<(usize,
         }
     }
     Some((start, end))
+}
+
+/// The number of text lines visible in the textarea.
+fn visible_lines(textarea: &HtmlTextAreaElement) -> i64 {
+    let line_height = crate::caret::line_height(textarea).max(1.0);
+    let view = textarea.client_height() as f64;
+    ((view / line_height) as i64).max(1)
+}
+
+/// The 0-based line the caret sits on.
+fn caret_line_index(text: &[char], caret: usize) -> usize {
+    text[..caret.min(text.len())]
+        .iter()
+        .filter(|character| **character == '\n')
+        .count()
+}
+
+/// The char offset of the start of a 0-based line.
+fn line_at(text: &[char], line_index: usize) -> usize {
+    let mut offset = 0;
+    let mut current = 0;
+    while offset < text.len() && current < line_index {
+        if text[offset] == '\n' {
+            current += 1;
+        }
+        offset += 1;
+    }
+    offset
+}
+
+/// Scrolls the textarea by a signed number of lines.
+fn scroll_by(textarea: &HtmlTextAreaElement, lines: i64) {
+    let line_height = crate::caret::line_height(textarea).max(1.0);
+    let target = textarea.scroll_top() as f64 + lines as f64 * line_height;
+    textarea.set_scroll_top(target.max(0.0) as i32);
+}
+
+/// Scrolls so the caret's line sits at a fraction of the view (0 top, 1 bottom).
+fn scroll_caret_to(textarea: &HtmlTextAreaElement, text: &[char], caret: usize, fraction: f64) {
+    let line_height = crate::caret::line_height(textarea).max(1.0);
+    let view = textarea.client_height() as f64;
+    let line = caret_line_index(text, caret) as f64;
+    let target = line * line_height - fraction * (view - line_height);
+    textarea.set_scroll_top(target.max(0.0) as i32);
+}
+
+/// The caret offset at the start of the visible line a fraction down the view.
+fn caret_to_view(textarea: &HtmlTextAreaElement, text: &[char], fraction: f64) -> usize {
+    let line_height = crate::caret::line_height(textarea).max(1.0);
+    let view = textarea.client_height() as f64;
+    let scroll = textarea.scroll_top() as f64;
+    let first = (scroll / line_height) as usize;
+    let span = ((view / line_height) as usize).saturating_sub(1);
+    line_at(text, first + (span as f64 * fraction) as usize)
+}
+
+/// Records a position in the jump list before a jump, dropping forward history.
+fn record_jump(caret: usize) {
+    JUMPLIST.with(|list| {
+        let mut list = list.borrow_mut();
+        let index = JUMP_INDEX.with(Cell::get);
+        list.truncate(index);
+        list.push(caret);
+        while list.len() > 100 {
+            list.remove(0);
+        }
+        JUMP_INDEX.with(|cell| cell.set(list.len()));
+    });
+}
+
+/// Steps back through the jump list, remembering the current spot at the tip.
+fn jump_back(caret: usize, len: usize) -> usize {
+    JUMPLIST.with(|list| {
+        let mut list = list.borrow_mut();
+        let index = JUMP_INDEX.with(Cell::get);
+        if index == 0 {
+            return caret;
+        }
+        if index == list.len() {
+            list.push(caret);
+        }
+        let next = index - 1;
+        JUMP_INDEX.with(|cell| cell.set(next));
+        list.get(next).copied().unwrap_or(caret).min(len)
+    })
+}
+
+/// Steps forward through the jump list.
+fn jump_forward(caret: usize, len: usize) -> usize {
+    JUMPLIST.with(|list| {
+        let list = list.borrow();
+        let index = JUMP_INDEX.with(Cell::get);
+        if index + 1 < list.len() {
+            JUMP_INDEX.with(|cell| cell.set(index + 1));
+            list.get(index + 1).copied().unwrap_or(caret).min(len)
+        } else {
+            caret
+        }
+    })
 }
 
 /// The opposite direction of a find, for `,`.

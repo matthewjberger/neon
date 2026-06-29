@@ -57,6 +57,12 @@
 //   "MatchPair"                      jump to the matching bracket (%)
 //   "ToggleCase"                     toggle case of the selection or char (~)
 //
+// Marks, jump list, scrolling:
+//   #{ SetMark: "a" } #{ GotoMark: "a" } #{ GotoMarkLine: "a" }
+//   "JumpBack" "JumpForward"         walk the jump list (Ctrl-o / Ctrl-i)
+//   "HalfPageDown" "HalfPageUp" "ScrollLineTop" "ScrollLineBottom"
+//   "CaretViewTop" "CaretViewMiddle" "CaretViewBottom"   H / M / L
+//
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"
 //   #{ RunCommand: "rename-symbol" }      "code-action" "hover" "jump-symbol"

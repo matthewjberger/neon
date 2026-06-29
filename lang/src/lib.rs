@@ -372,6 +372,19 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_marks() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "m");
+        let set = run_key(&engine, &ast, &mut state_map, "a");
+        assert!(has_map_op(&set, "SetMark"), "ma did not set a mark");
+        run_key(&engine, &ast, &mut state_map, "`");
+        let goto = run_key(&engine, &ast, &mut state_map, "a");
+        assert!(has_map_op(&goto, "GotoMark"), "`a did not jump to a mark");
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (

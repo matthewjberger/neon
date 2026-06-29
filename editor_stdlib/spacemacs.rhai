@@ -51,7 +51,11 @@
 // repeat that.
 //
 // Repeat and jumps: . replays the last change, a count repeats a motion (5j,
-// 3l), gg / G go to the top / bottom (42G to a line), zz centers the view. Edit
+// 3l), gg / G go to the top / bottom (42G to a line), zz / zt / zb center / top /
+// bottom the view, H / M / L move to the top / middle / bottom line.
+//
+// Marks and the jump list: m{a} sets mark a, `a jumps to it, 'a to its line;
+// Ctrl-o / Ctrl-i walk the jump list; Ctrl-d / Ctrl-u scroll a half page. Edit
 // this live to change anything.
 
 fn leader_menu() {
@@ -307,6 +311,10 @@ fn on_key() {
         ops.push(#{ RunCommand: "redo" });
         return;
     }
+    if ctrl && key == "o" { ops.push("Consume"); ops.push("JumpBack"); return; }
+    if ctrl && key == "i" { ops.push("Consume"); ops.push("JumpForward"); return; }
+    if ctrl && key == "d" { ops.push("Consume"); ops.push("HalfPageDown"); return; }
+    if ctrl && key == "u" { ops.push("Consume"); ops.push("HalfPageUp"); return; }
 
     if ctrl || alt {
         return;
@@ -690,6 +698,26 @@ fn on_key() {
         ops.push("Consume");
         state.pending = "";
         if key == "z" { ops.push("Center"); }
+        else if key == "t" { ops.push("ScrollLineTop"); }
+        else if key == "b" { ops.push("ScrollLineBottom"); }
+        return;
+    }
+    if pending == "m" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 { ops.push(#{ SetMark: key }); }
+        return;
+    }
+    if pending == "`" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 { ops.push(#{ GotoMark: key }); }
+        return;
+    }
+    if pending == "'" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 { ops.push(#{ GotoMarkLine: key }); }
         return;
     }
     if pending == "r" {
@@ -746,6 +774,12 @@ fn on_key() {
     else if key == "B" { ops.push("BigWordBack"); }
     else if key == "%" { ops.push("MatchPair"); }
     else if key == "~" { ops.push("ToggleCase"); }
+    else if key == "H" { ops.push("CaretViewTop"); }
+    else if key == "M" { ops.push("CaretViewMiddle"); }
+    else if key == "L" { ops.push("CaretViewBottom"); }
+    else if key == "m" { state.pending = "m"; }
+    else if key == "`" { state.pending = "`"; }
+    else if key == "'" { state.pending = "'"; }
     else if key == "f" { state.pending = "f"; }
     else if key == "F" { state.pending = "F"; }
     else if key == "t" { state.pending = "t"; }
