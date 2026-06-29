@@ -247,6 +247,29 @@ pub fn request_inlay_hints(state: EditorState, path: &str) {
     );
 }
 
+/// Requests the code lenses for a file into the per-file code-lens map.
+pub fn request_code_lenses(path: &str) {
+    if !ready() {
+        return;
+    }
+    let open = client(|client| client.versions.contains_key(path));
+    if !open {
+        return;
+    }
+    let id = next_id();
+    track(
+        id,
+        Pending::CodeLenses {
+            path: path.to_string(),
+        },
+    );
+    send_request_id(
+        id,
+        "textDocument/codeLens",
+        json!({ "textDocument": { "uri": file_uri(path) } }),
+    );
+}
+
 /// Requests the foldable ranges for a file into the per-file folding map.
 pub fn request_folding_ranges(path: &str) {
     if !ready() {

@@ -13,7 +13,6 @@ use std::collections::HashSet;
 use document::{Document, Selection};
 use leptos::html;
 use leptos::prelude::*;
-use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
 use crate::highlight::highlight;
@@ -92,14 +91,17 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
     // line maps to its header). Recomputed when the line count or folds change.
     let fold_view = Memo::new(move |_| {
         let (id, kind) = buffer();
-        let folds = if kind == PluginKind::File {
-            id.and_then(|path| state.editing.folds.with(|map| map.get(&path).cloned()))
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let path = if kind == PluginKind::File { id } else { None };
+        let folds = path
+            .as_ref()
+            .and_then(|path| state.editing.folds.with(|map| map.get(path).cloned()))
+            .unwrap_or_default();
+        let lenses = path
+            .as_ref()
+            .and_then(|path| state.lsp.code_lenses.with(|map| map.get(path).cloned()))
+            .unwrap_or_default();
         let line_count = doc.with(|document| document.len_lines());
-        fold_map(line_count, &folds)
+        build_rows(line_count, &folds, &lenses)
     });
 
     // Toggles the fold whose header is `header_line`, looking up its extent in the
@@ -233,21 +235,14 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             let rows = fold_view.get().0;
             let doc_line = rows
                 .get(visual_row)
-                .copied()
-                .or_else(|| rows.last().copied())
+                .or_else(|| rows.last())
+                .map(SurfaceRow::doc_line)
                 .unwrap_or(0);
             edit(&move |document| {
                 let line = doc_line.min(document.len_lines().saturating_sub(1));
                 let line_start = document.line_to_char(line);
                 let line_length = document.line_end(line) - line_start;
-                let column = column_at_x(
-                    &text_element,
-                    &rect,
-                    scroll_left,
-                    visual_row,
-                    x,
-                    line_length,
-                );
+                let column = column_at_x(&text_element, &rect, scroll_left, line, x, line_length);
                 let offset = line_start + column;
                 let anchor = if extend {
                     document.primary().anchor
@@ -351,7 +346,8 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                 let last_line = document.char_to_line(end);
                 for (offset, &row) in visual_of[first_line..=last_line].iter().enumerate() {
                     let line = first_line + offset;
-                    if rows.get(row) != Some(&line) {
+                    if !matches!(rows.get(row), Some(SurfaceRow::Text(text_line)) if *text_line == line)
+                    {
                         continue;
                     }
                     let line_start = document.line_to_char(line);
@@ -413,20 +409,27 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                         })
                         .unwrap_or_else(HashSet::new);
                     rows.into_iter()
-                        .map(|doc_line| {
-                            let marker = if !foldable.contains(&doc_line) {
-                                ""
-                            } else if folded.contains(&doc_line) {
-                                "\u{25b8}"
-                            } else {
-                                "\u{25be}"
-                            };
-                            let toggle = move |_| toggle_fold(doc_line);
-                            view! {
-                                <div class="surface-gutter-row">
-                                    <span class="surface-fold" on:click=toggle>{marker}</span>
-                                    <span>{doc_line + 1}</span>
-                                </div>
+                        .map(|row| match row {
+                            SurfaceRow::Lens(..) => view! {
+                                <div class="surface-gutter-row"></div>
+                            }
+                            .into_any(),
+                            SurfaceRow::Text(doc_line) => {
+                                let marker = if !foldable.contains(&doc_line) {
+                                    ""
+                                } else if folded.contains(&doc_line) {
+                                    "\u{25b8}"
+                                } else {
+                                    "\u{25be}"
+                                };
+                                let toggle = move |_| toggle_fold(doc_line);
+                                view! {
+                                    <div class="surface-gutter-row">
+                                        <span class="surface-fold" on:click=toggle>{marker}</span>
+                                        <span>{doc_line + 1}</span>
+                                    </div>
+                                }
+                                .into_any()
                             }
                         })
                         .collect_view()
@@ -452,14 +455,22 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
                             let text = document.text();
                             let lines = text.split('\n').collect::<Vec<_>>();
                             rows.into_iter()
-                                .map(|doc_line| {
-                                    let line = lines.get(doc_line).copied().unwrap_or("");
-                                    let line_hints = hints
-                                        .iter()
-                                        .filter(|hint| hint.line as usize == doc_line)
-                                        .cloned()
-                                        .collect::<Vec<_>>();
-                                    render_line(line, language, &set, &line_hints)
+                                .map(|row| match row {
+                                    SurfaceRow::Lens(_, title) => view! {
+                                        <div class="surface-line surface-lens">
+                                            <span class="surface-lens-text">{title}</span>
+                                        </div>
+                                    }
+                                    .into_any(),
+                                    SurfaceRow::Text(doc_line) => {
+                                        let line = lines.get(doc_line).copied().unwrap_or("");
+                                        let line_hints = hints
+                                            .iter()
+                                            .filter(|hint| hint.line as usize == doc_line)
+                                            .cloned()
+                                            .collect::<Vec<_>>();
+                                        render_line(doc_line, line, language, &set, &line_hints)
+                                    }
                                 })
                                 .collect_view()
                         })
@@ -549,10 +560,31 @@ fn column_at_x(
     best
 }
 
-/// The fold layout for a document. Returns `rows`, the document line shown on
-/// each visual row in order, and `visual_of`, the visual row a document line maps
-/// to (a folded line maps to the visual row of its header).
-fn fold_map(line_count: usize, folds: &[(usize, usize)]) -> (Vec<usize>, Vec<usize>) {
+/// A visual row on the surface: a document line of text, or a code-lens label
+/// drawn above the line it annotates.
+#[derive(Clone, PartialEq)]
+enum SurfaceRow {
+    Text(usize),
+    Lens(usize, String),
+}
+
+impl SurfaceRow {
+    /// The document line this row sits on (a lens shares its annotated line).
+    fn doc_line(&self) -> usize {
+        match self {
+            SurfaceRow::Text(line) | SurfaceRow::Lens(line, _) => *line,
+        }
+    }
+}
+
+/// The visual layout for a document. Returns `rows`, the ordered visual rows
+/// (text and lens), and `visual_of`, the visual-row index of each document line's
+/// text row (a folded line maps to the row of its header).
+fn build_rows(
+    line_count: usize,
+    folds: &[(usize, usize)],
+    lenses: &[(u32, String)],
+) -> (Vec<SurfaceRow>, Vec<usize>) {
     let mut hidden = vec![false; line_count];
     for &(start, end) in folds {
         let upper = end.min(line_count.saturating_sub(1));
@@ -563,14 +595,19 @@ fn fold_map(line_count: usize, folds: &[(usize, usize)]) -> (Vec<usize>, Vec<usi
     let mut rows = Vec::new();
     let mut visual_of = vec![0_usize; line_count];
     let mut last_visual = 0_usize;
-    for (line, (slot, is_hidden)) in visual_of.iter_mut().zip(&hidden).enumerate() {
-        if *is_hidden {
-            *slot = last_visual;
-        } else {
-            last_visual = rows.len();
-            *slot = rows.len();
-            rows.push(line);
+    for line in 0..line_count {
+        if hidden[line] {
+            visual_of[line] = last_visual;
+            continue;
         }
+        for (lens_line, title) in lenses {
+            if *lens_line as usize == line {
+                rows.push(SurfaceRow::Lens(line, title.clone()));
+            }
+        }
+        last_visual = rows.len();
+        visual_of[line] = rows.len();
+        rows.push(SurfaceRow::Text(line));
     }
     (rows, visual_of)
 }
@@ -580,6 +617,7 @@ fn fold_map(line_count: usize, folds: &[(usize, usize)]) -> (Vec<usize>, Vec<usi
 /// the column measurement skips, so they shift glyphs visually without moving
 /// the caret's character math.
 fn render_line(
+    doc_line: usize,
     line: &str,
     language: &str,
     commands: &HashSet<String>,
@@ -620,7 +658,7 @@ fn render_line(
     if elements.is_empty() {
         elements.push(view! { <span>" "</span> }.into_any());
     }
-    view! { <div class="surface-line">{elements}</div> }.into_any()
+    view! { <div class="surface-line" data-doc=doc_line.to_string()>{elements}</div> }.into_any()
 }
 
 /// A non-editable inlay-hint span, with the padding the server requested as
@@ -643,11 +681,12 @@ fn measure_x(
     text_element: &web_sys::Element,
     content_rect: &web_sys::DomRect,
     scroll_left: f64,
-    line: usize,
+    doc_line: usize,
     column: usize,
 ) -> Option<f64> {
-    let lines = text_element.query_selector_all(".surface-line").ok()?;
-    let line_element: web_sys::Element = lines.item(line as u32)?.dyn_into().ok()?;
+    let line_element = text_element
+        .query_selector(&format!(".surface-line[data-doc=\"{doc_line}\"]"))
+        .ok()??;
     let (node, offset) = locate_offset(&line_element, column)?;
     let range = web_sys::Range::new().ok()?;
     range.set_start(&node, offset).ok()?;

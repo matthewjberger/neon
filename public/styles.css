@@ -2329,6 +2329,14 @@ body {
   height: 19.5px;
 }
 
+.surface-lens {
+  color: var(--text-dim);
+  font-size: 0.82em;
+  font-style: italic;
+  opacity: 0.8;
+  user-select: none;
+}
+
 .surface-inlay {
   color: var(--text-dim);
   background: color-mix(in srgb, var(--text-dim) 12%, transparent);

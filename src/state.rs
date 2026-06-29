@@ -275,6 +275,8 @@ pub struct LspState {
     /// Foldable line ranges per file path from `foldingRange`, offered as fold
     /// toggles in the surface gutter.
     pub folding_ranges: RwSignal<HashMap<String, Vec<(u32, u32)>>>,
+    /// Code lenses per file path: the `(line, title)` labels drawn above lines.
+    pub code_lenses: RwSignal<HashMap<String, Vec<(u32, String)>>>,
     /// The callers or callees of the queried symbol, for the call-hierarchy panel.
     pub call_hierarchy: RwSignal<Vec<HierarchyEntry>>,
     /// Whether the call-hierarchy panel is showing callers (`true`) or callees.
@@ -312,6 +314,7 @@ impl LspState {
             outline_path: RwSignal::new(String::new()),
             inlay_hints: RwSignal::new(HashMap::new()),
             folding_ranges: RwSignal::new(HashMap::new()),
+            code_lenses: RwSignal::new(HashMap::new()),
             call_hierarchy: RwSignal::new(Vec::new()),
             call_hierarchy_incoming: RwSignal::new(true),
             type_hierarchy: RwSignal::new(Vec::new()),

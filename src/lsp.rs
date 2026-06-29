@@ -28,11 +28,11 @@ use edits::{RangeEdit, apply_edits_to_file, apply_workspace_edit, parse_edits};
 use requests::run_code_action;
 pub use requests::{
     accept_completion, apply_code_action, format_and_save, format_document, goto_diagnostic,
-    organize_imports, request_call_hierarchy, request_code_actions, request_completion,
-    request_folding_ranges, request_hover_at, request_hover_at_caret, request_inlay_hints,
-    request_locations, request_outline, request_references, request_signature_help,
-    request_symbols, request_type_hierarchy, request_workspace_symbols, start_rename,
-    submit_rename,
+    organize_imports, request_call_hierarchy, request_code_actions, request_code_lenses,
+    request_completion, request_folding_ranges, request_hover_at, request_hover_at_caret,
+    request_inlay_hints, request_locations, request_outline, request_references,
+    request_signature_help, request_symbols, request_type_hierarchy, request_workspace_symbols,
+    start_rename, submit_rename,
 };
 use transport::{
     connect, file_uri, notify, path_from_uri, send_raw, send_request, send_request_id,
@@ -53,6 +53,7 @@ enum Pending {
     TypeHierarchyCalls { supertypes: bool },
     InlayHints { path: String },
     FoldingRanges { path: String },
+    CodeLenses { path: String },
     Rename,
     CodeActions,
     OrganizeImports,
@@ -242,6 +243,7 @@ fn initialize_params(state: EditorState) -> Value {
                 "callHierarchy": {},
                 "typeHierarchy": {},
                 "inlayHint": { "resolveSupport": { "properties": [] } },
+                "codeLens": { "dynamicRegistration": false },
             },
             "window": {
                 "workDoneProgress": true,
@@ -310,6 +312,7 @@ pub fn did_change(state: EditorState, path: &str) {
     );
     request_inlay_hints(state, path);
     request_folding_ranges(path);
+    request_code_lenses(path);
 }
 
 /// Notifies the server a file was saved, carrying its text so server-side
@@ -626,6 +629,30 @@ fn apply_folding_ranges(state: EditorState, value: &Value, path: &str) {
     });
 }
 
+/// Parses a `codeLens` reply into the `(line, title)` labels the surface draws
+/// above lines. Only lenses that arrive with a resolved command title are kept;
+/// lenses needing a separate resolve round-trip are skipped.
+fn apply_code_lenses(state: EditorState, value: &Value, path: &str) {
+    let Some(items) = value.get("result").and_then(Value::as_array) else {
+        return;
+    };
+    let lenses = items
+        .iter()
+        .filter_map(|item| {
+            let line = item.pointer("/range/start/line").and_then(Value::as_u64)? as u32;
+            let title = item
+                .pointer("/command/title")
+                .and_then(Value::as_str)
+                .filter(|title| !title.is_empty())?
+                .to_string();
+            Some((line, title))
+        })
+        .collect::<Vec<_>>();
+    state.lsp.code_lenses.update(|map| {
+        map.insert(path.to_string(), lenses);
+    });
+}
+
 /// The display text of an inlay-hint label: a bare string, or the joined `value`
 /// fields of its parts.
 fn inlay_label(label: &Value) -> String {
@@ -937,6 +964,7 @@ fn handle_rpc(state: EditorState, value: Value) {
             }
             Pending::InlayHints { path } => apply_inlay_hints(state, &value, &path),
             Pending::FoldingRanges { path } => apply_folding_ranges(state, &value, &path),
+            Pending::CodeLenses { path } => apply_code_lenses(state, &value, &path),
             Pending::Rename => {
                 if let Some(result) = value.get("result") {
                     apply_workspace_edit(state, result);
@@ -1017,6 +1045,7 @@ fn open_document(state: EditorState, path: &str) {
     );
     request_inlay_hints(state, path);
     request_folding_ranges(path);
+    request_code_lenses(path);
 }
 
 fn apply_diagnostics(state: EditorState, params: &Value) {
