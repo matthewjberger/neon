@@ -117,6 +117,37 @@ fn select_object(document: &mut Document, caret: usize, spec: &str, around: bool
     }
 }
 
+/// Moves the primary caret to an offset, keeping the anchor while extending.
+fn move_to(document: &mut Document, offset: usize) {
+    let anchor = if extending() {
+        document.primary().anchor
+    } else {
+        offset
+    };
+    document.set_primary(Selection::new(anchor, offset));
+}
+
+/// Moves to a character on the caret's line in a document, storing the find.
+fn find_in_doc(document: &mut Document, caret: usize, target: &str, kind: FindKind) {
+    if let Some(needle) = target.chars().next() {
+        let chars: Vec<char> = document.text().chars().collect();
+        if let Some(index) = find_on_line(&chars, caret, needle, kind) {
+            move_to(document, index);
+        }
+        LAST_FIND.with(|cell| cell.set(Some((needle, kind))));
+    }
+}
+
+/// The selected range, or the word under the caret when nothing is selected.
+fn doc_range(document: &Document, caret: usize) -> (usize, usize) {
+    let selection = document.primary();
+    if selection.is_empty() {
+        document.word_bounds(caret)
+    } else {
+        (selection.start(), selection.end())
+    }
+}
+
 /// Applies plugin ops to a document. Mirrors the textarea `apply`, but the
 /// selection lives in the document, so the anchor is the visual-mode mark.
 fn apply_document(state: EditorState, document: &mut Document, ops: Vec<EditorOp>) -> bool {
@@ -286,8 +317,205 @@ fn apply_document(state: EditorState, document: &mut Document, ops: Vec<EditorOp
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),
             EditorOp::HideMenu => state.editing.leader.set(None),
-            // Ops the surface does not map yet (registers, search, marks, macros,
-            // repeat, case, line tools, scrolling, expand-region).
+            EditorOp::WordEnd => {
+                let chars: Vec<char> = document.text().chars().collect();
+                move_to(document, word_end(&chars, caret));
+            }
+            EditorOp::WordEndBack => {
+                let chars: Vec<char> = document.text().chars().collect();
+                move_to(document, word_end_back(&chars, caret));
+            }
+            EditorOp::BigWord => {
+                let chars: Vec<char> = document.text().chars().collect();
+                move_to(document, big_word(&chars, caret));
+            }
+            EditorOp::BigWordBack => {
+                let chars: Vec<char> = document.text().chars().collect();
+                move_to(document, big_word_back(&chars, caret));
+            }
+            EditorOp::BigWordEnd => {
+                let chars: Vec<char> = document.text().chars().collect();
+                move_to(document, big_word_end(&chars, caret));
+            }
+            EditorOp::MatchPair => {
+                let chars: Vec<char> = document.text().chars().collect();
+                if let Some(index) = match_pair(&chars, caret) {
+                    move_to(document, index);
+                }
+            }
+            EditorOp::ToggleCase => {
+                if document.primary().is_empty() {
+                    if caret < len {
+                        let toggled: String = document
+                            .slice(caret, caret + 1)
+                            .chars()
+                            .map(toggle_case)
+                            .collect();
+                        document.replace_range(caret, caret + 1, &toggled);
+                        document
+                            .set_primary(Selection::caret((caret + 1).min(document.len_chars())));
+                        changed = true;
+                    }
+                } else {
+                    let (start, end) = (document.primary().start(), document.primary().end());
+                    let toggled: String = document
+                        .slice(start, end)
+                        .chars()
+                        .map(toggle_case)
+                        .collect();
+                    document.replace_range(start, end, &toggled);
+                    document.set_primary(Selection::caret(start));
+                    changed = true;
+                }
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::UpperCaseWord | EditorOp::LowerCaseWord => {
+                let upper = matches!(op, EditorOp::UpperCaseWord);
+                let (start, end) = doc_range(document, caret);
+                if end > start {
+                    let mapped: String = document
+                        .slice(start, end)
+                        .chars()
+                        .map(|character| {
+                            if upper {
+                                character.to_ascii_uppercase()
+                            } else {
+                                character.to_ascii_lowercase()
+                            }
+                        })
+                        .collect();
+                    document.replace_range(start, end, &mapped);
+                    document.set_primary(Selection::caret(start));
+                    changed = true;
+                }
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::Surround(open, close) => {
+                let (start, end) = doc_range(document, caret);
+                document.replace_range(end, end, &close);
+                document.replace_range(start, start, &open);
+                document.set_primary(Selection::caret(start + open.chars().count()));
+                changed = true;
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::ReplaceSelection(value) => {
+                let selection = document.primary();
+                document.replace_range(selection.start(), selection.end(), &value);
+                changed = true;
+                DOC_EXTENDING.set(false);
+            }
+            EditorOp::Register(name) => {
+                PENDING_REGISTER.with(|cell| cell.set(name.chars().next()));
+            }
+            EditorOp::Search(needle) => {
+                let chars: Vec<char> = document.text().chars().collect();
+                let needle_chars: Vec<char> = needle.chars().collect();
+                if let Some(index) = find_match(&chars, caret, &needle_chars, true) {
+                    move_to(document, index);
+                }
+                LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, true)));
+            }
+            EditorOp::SearchBack(needle) => {
+                let chars: Vec<char> = document.text().chars().collect();
+                let needle_chars: Vec<char> = needle.chars().collect();
+                if let Some(index) = find_match(&chars, caret, &needle_chars, false) {
+                    move_to(document, index);
+                }
+                LAST_SEARCH.with(|cell| *cell.borrow_mut() = Some((needle, false)));
+            }
+            EditorOp::SearchNext | EditorOp::SearchPrev => {
+                let forward_repeat = matches!(op, EditorOp::SearchNext);
+                if let Some((needle, forward)) = LAST_SEARCH.with(|cell| cell.borrow().clone()) {
+                    let chars: Vec<char> = document.text().chars().collect();
+                    let needle_chars: Vec<char> = needle.chars().collect();
+                    let direction = forward == forward_repeat;
+                    if let Some(index) = find_match(&chars, caret, &needle_chars, direction) {
+                        move_to(document, index);
+                    }
+                }
+            }
+            EditorOp::FindChar(target) => find_in_doc(document, caret, &target, FindKind::Find),
+            EditorOp::FindCharBack(target) => {
+                find_in_doc(document, caret, &target, FindKind::FindBack)
+            }
+            EditorOp::TillChar(target) => find_in_doc(document, caret, &target, FindKind::Till),
+            EditorOp::TillCharBack(target) => {
+                find_in_doc(document, caret, &target, FindKind::TillBack)
+            }
+            EditorOp::RepeatFind | EditorOp::RepeatFindBack => {
+                if let Some((needle, kind)) = LAST_FIND.with(Cell::get) {
+                    let kind = if matches!(op, EditorOp::RepeatFindBack) {
+                        opposite_find(kind)
+                    } else {
+                        kind
+                    };
+                    let chars: Vec<char> = document.text().chars().collect();
+                    if let Some(index) = find_on_line(&chars, caret, needle, kind) {
+                        move_to(document, index);
+                    }
+                }
+            }
+            EditorOp::SetMark(name) => {
+                if let Some(letter) = name.chars().next() {
+                    MARKS.with(|marks| marks.borrow_mut().insert(letter, caret));
+                }
+            }
+            EditorOp::GotoMark(name) => {
+                if let Some(letter) = name.chars().next()
+                    && let Some(offset) = MARKS.with(|marks| marks.borrow().get(&letter).copied())
+                {
+                    record_jump(caret);
+                    move_to(document, offset.min(len));
+                }
+            }
+            EditorOp::GotoMarkLine(name) => {
+                if let Some(letter) = name.chars().next()
+                    && let Some(offset) = MARKS.with(|marks| marks.borrow().get(&letter).copied())
+                {
+                    record_jump(caret);
+                    let line = document.char_to_line(offset.min(len));
+                    move_to(document, document.line_to_char(line));
+                }
+            }
+            EditorOp::JumpBack => move_to(document, jump_back(caret, len)),
+            EditorOp::JumpForward => move_to(document, jump_forward(caret, len)),
+            EditorOp::Goto(line) => {
+                record_jump(caret);
+                let target = (line.max(1) - 1) as usize;
+                move_to(document, document.line_to_char(target));
+            }
+            EditorOp::BufferStart => {
+                record_jump(caret);
+                move_to(document, 0);
+            }
+            EditorOp::BufferEnd => {
+                record_jump(caret);
+                let last = document.len_lines().saturating_sub(1);
+                move_to(document, document.line_to_char(last));
+            }
+            EditorOp::ExpandSelection => {
+                let chars: Vec<char> = document.text().chars().collect();
+                let selection = document.primary();
+                if let Some((start, end)) =
+                    enclosing_range(&chars, selection.start(), selection.end())
+                {
+                    EXPAND_STACK.with(|stack| {
+                        stack
+                            .borrow_mut()
+                            .push((selection.start(), selection.end()))
+                    });
+                    document.set_primary(Selection::new(start, end));
+                    DOC_EXTENDING.set(true);
+                }
+            }
+            EditorOp::ShrinkSelection => {
+                if let Some((start, end)) = EXPAND_STACK.with(|stack| stack.borrow_mut().pop()) {
+                    document.set_primary(Selection::new(start, end));
+                    DOC_EXTENDING.set(end > start);
+                }
+            }
+            // Ops not mapped to the surface yet: macros, dot-repeat, scrolling,
+            // paste-pop, and the line-shuffle tools.
             _ => {}
         }
     }
