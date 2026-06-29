@@ -1881,3 +1881,78 @@ body {
   color: var(--text);
   margin: 0 0 8px;
 }
+
+/* The undo-tree visualizer: a floating side panel listing the history nodes. */
+.undo-tree {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  width: 280px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 60;
+  overflow: hidden;
+}
+
+.undo-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.undo-tree-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.undo-tree-close:hover {
+  color: var(--text);
+}
+
+.undo-tree-list {
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.undo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.undo-row:hover {
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.undo-row.current {
+  color: var(--accent);
+}
+
+.undo-row-mark {
+  color: var(--accent);
+  font-size: 9px;
+}
+
+.undo-row-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

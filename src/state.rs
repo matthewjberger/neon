@@ -374,6 +374,8 @@ pub struct PanelsState {
     pub control_panel: RwSignal<bool>,
     /// Whether the help and keybindings overlay is shown.
     pub help: RwSignal<bool>,
+    /// Whether the undo-tree visualizer panel is shown.
+    pub undo_tree: RwSignal<bool>,
 }
 
 impl PanelsState {
@@ -382,6 +384,7 @@ impl PanelsState {
             chat: RwSignal::new(false),
             control_panel: RwSignal::new(false),
             help: RwSignal::new(false),
+            undo_tree: RwSignal::new(false),
         }
     }
 }
@@ -584,7 +587,7 @@ impl EditorState {
         if old == text {
             return;
         }
-        crate::undo::record(kind, id, &old);
+        crate::undo::record(kind, id, &old, &text);
         match kind {
             PluginKind::Builtin => {}
             PluginKind::File => self.files.update(|files| {

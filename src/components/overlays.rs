@@ -35,6 +35,7 @@ use crate::components::overlays::which_key::WhichKey;
 use crate::components::panels::control_panel::ControlPanel;
 use crate::components::panels::lsp_panel::{LspConsent, LspLog};
 use crate::components::panels::problems::ProblemsPanel;
+use crate::components::panels::undo_tree::UndoTree;
 use crate::state::EditorState;
 
 /// Mounts all overlays. The shell renders this once; the overlays decide their
@@ -53,6 +54,7 @@ pub fn Overlays(
         <LspConsent state />
         <LspLog state />
         <ProblemsPanel state />
+        <UndoTree state />
         <MultiCursorOverlay state />
         <RenamePrompt state />
         <CodeActionMenu state />

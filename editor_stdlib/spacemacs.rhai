@@ -203,6 +203,7 @@ fn toggle_menu() {
         #{ key: "o", label: "Control panel" },
         #{ key: "l", label: "rust-analyzer log" },
         #{ key: "f", label: "Format on save" },
+        #{ key: "u", label: "Undo tree" },
         #{ key: "t", label: "Next theme" },
     ] };
 }
@@ -550,6 +551,7 @@ fn on_key() {
         else if key == "o" { ops.push(#{ RunCommand: "toggle-control-panel" }); }
         else if key == "l" { ops.push(#{ RunCommand: "toggle-lsp-log" }); }
         else if key == "f" { ops.push(#{ RunCommand: "toggle-format-on-save" }); }
+        else if key == "u" { ops.push(#{ RunCommand: "toggle-undo-tree" }); }
         else if key == "t" { ops.push(#{ RunCommand: "next-theme" }); }
         return;
     }

@@ -8,3 +8,4 @@ pub mod lsp_panel;
 pub mod problems;
 pub mod reference;
 pub mod terminal;
+pub mod undo_tree;
