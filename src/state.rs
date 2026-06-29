@@ -415,6 +415,9 @@ pub struct EditingState {
     /// Folded line ranges per file path: each `(header, end)` hides the lines
     /// after `header` through `end` on the surface. Toggled from the gutter.
     pub folds: RwSignal<HashMap<String, Vec<(usize, usize)>>>,
+    /// The surface's primary caret in client pixels (just below it), so the LSP
+    /// completion and hover popups anchor to it instead of the hidden textarea.
+    pub surface_caret_pixel: RwSignal<Option<(f64, f64)>>,
 }
 
 impl EditingState {
@@ -436,6 +439,7 @@ impl EditingState {
             prompt: RwSignal::new(None),
             tab_drag: RwSignal::new(None),
             folds: RwSignal::new(HashMap::new()),
+            surface_caret_pixel: RwSignal::new(None),
         }
     }
 }

@@ -38,7 +38,7 @@ pub fn request_completion(state: EditorState) {
     let caret = element.selection_start().ok().flatten().unwrap_or(0);
     let (line, character) = line_character(&value, caret);
     let prefix = word_prefix(&value, caret);
-    let (x, y) = caret_pixel(&element, line, character);
+    let (x, y) = caret_anchor(state, &element, line, character);
     let id = next_id();
     track(id, Pending::Completion { prefix, x, y });
     send_request_id(
@@ -108,7 +108,7 @@ pub fn request_hover_at_caret(state: EditorState) {
     let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
-    let (x, y) = caret_pixel(&element, line, character);
+    let (x, y) = caret_anchor(state, &element, line, character);
     let id = next_id();
     track(id, Pending::Hover { x, y });
     send_request_id(
@@ -129,7 +129,7 @@ pub fn request_signature_help(state: EditorState) {
     let Some(element) = crate::components::overlays::find::active() else {
         return;
     };
-    let (x, y) = caret_pixel(&element, line, character);
+    let (x, y) = caret_anchor(state, &element, line, character);
     let id = next_id();
     track(id, Pending::Signature { x, y });
     send_request_id(
@@ -532,6 +532,22 @@ pub fn goto_diagnostic(state: EditorState, forward: bool) {
     if let Some(line) = target {
         state.explorer.goto.set(Some((path, line)));
     }
+}
+
+/// The client-pixel anchor for a popup at the caret: the surface's measured
+/// caret pixel when the surface is active, else the hidden textarea's geometry.
+fn caret_anchor(
+    state: EditorState,
+    element: &web_sys::HtmlTextAreaElement,
+    line: u32,
+    character: u32,
+) -> (f64, f64) {
+    if state.editing.surface.get_untracked()
+        && let Some(pixel) = state.editing.surface_caret_pixel.get_untracked()
+    {
+        return pixel;
+    }
+    caret_pixel(element, line, character)
 }
 
 /// The focused file served by the active language server, and the caret's

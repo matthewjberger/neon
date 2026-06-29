@@ -6,7 +6,9 @@
 //! decorations stay aligned. Edits persist through `set_buffer_text`, so
 //! highlighting and saving keep working. The modal plugin layer runs against the
 //! document through `handle_key_document`, including macros, the dot-repeat, and
-//! the view motions, so the surface is a full modal editor.
+//! the view motions, so the surface is a full modal editor. The hidden textarea
+//! mirrors the whole document and primary selection and registers as the LSP
+//! source, so completion, hover, go-to, and rename act on the surface's caret.
 
 use std::collections::HashSet;
 
@@ -142,6 +144,47 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             return;
         }
         tick.update(|count| *count = count.wrapping_add(1));
+        // When the completion popup is open it owns navigation and acceptance,
+        // ahead of the modal layer, mirroring the textarea editor.
+        if state.lsp.completion.get_untracked().is_some() {
+            let len = state
+                .lsp
+                .completion
+                .with_untracked(|menu| menu.as_ref().map(|menu| menu.items.len()).unwrap_or(0))
+                .max(1);
+            match key.as_str() {
+                "ArrowDown" => {
+                    event.prevent_default();
+                    state
+                        .lsp
+                        .completion_index
+                        .update(|index| *index = (*index + 1) % len);
+                    return;
+                }
+                "ArrowUp" => {
+                    event.prevent_default();
+                    state
+                        .lsp
+                        .completion_index
+                        .update(|index| *index = (*index + len - 1) % len);
+                    return;
+                }
+                "Enter" | "Tab" => {
+                    event.prevent_default();
+                    crate::lsp::accept_completion(
+                        state,
+                        state.lsp.completion_index.get_untracked(),
+                    );
+                    return;
+                }
+                "Escape" => {
+                    event.prevent_default();
+                    state.lsp.completion.set(None);
+                    return;
+                }
+                _ => {}
+            }
+        }
         // The editor plugins (the modal layer) get first crack at the key, run
         // against the document; only an unconsumed key falls through to the
         // built-in navigation (so insert-mode typing reaches the hidden input).
@@ -209,15 +252,21 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         }
     };
 
-    // Typed text and IME compositions land in the hidden textarea; pull them out,
-    // insert at the carets, and clear it for the next key.
+    // The hidden textarea mirrors the whole document and its primary selection, so
+    // it is the source the LSP client reads and the target completion-accept and
+    // find-replace write to. Typed text, IME, paste, and those programmatic edits
+    // all surface here: rebuild the document from the new value and caret.
     let on_input = move |_| {
         if let Some(element) = input.get() {
-            let typed = element.value();
-            if !typed.is_empty() {
-                element.set_value("");
-                edit(&move |document| document.insert(&typed));
-            }
+            let value = element.value();
+            let caret = element.selection_start().ok().flatten().unwrap_or(0);
+            let head = utf16_to_char(&value, caret);
+            doc.update(|document| {
+                *document = Document::new(&value);
+                document.set_primary(Selection::caret(head));
+            });
+            persist();
+            crate::lsp::request_completion(state);
         }
     };
 
@@ -318,6 +367,7 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
         let content_element: web_sys::HtmlElement = content_element.into();
         let content_rect = content_element.get_bounding_client_rect();
         let scroll_left = content_element.scroll_left() as f64;
+        let scroll_top = content_element.scroll_top() as f64;
         let measure = |line: usize, column: usize| {
             measure_x(&text_element, &content_rect, scroll_left, line, column)
         };
@@ -375,7 +425,39 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             }
             carets.set(caret_rects);
             selection_boxes.set(box_rects);
+
+            let primary = document.primary().head;
+            let primary_line = document.char_to_line(primary);
+            let primary_column = primary - document.line_to_char(primary_line);
+            let pixel = measure(visual_of[primary_line], primary_column).map(|left| {
+                let viewport_x = content_rect.left() + left - scroll_left;
+                let viewport_y = content_rect.top() + visual_of[primary_line] as f64 * cell_height
+                    - scroll_top
+                    + cell_height;
+                (viewport_x, viewport_y)
+            });
+            state.editing.surface_caret_pixel.set(pixel);
         });
+    });
+
+    // Mirror the document and primary selection into the hidden textarea, and
+    // register it as the LSP source. With the whole buffer and caret reflected
+    // there, the existing LSP requests read the surface's caret unchanged.
+    Effect::new(move |_| {
+        let Some(element) = input.get() else {
+            return;
+        };
+        let (text, start, end) = doc.with(|document| {
+            let selection = document.primary();
+            (document.text(), selection.start(), selection.end())
+        });
+        if element.value() != text {
+            element.set_value(&text);
+        }
+        let low = char_to_utf16(&text, start);
+        let high = char_to_utf16(&text, end);
+        let _ = element.set_selection_range(low, high);
+        crate::components::overlays::find::set_active(element);
     });
 
     view! {
@@ -510,6 +592,28 @@ pub fn CodeSurface(state: EditorState, pane_key: usize) -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// Converts a UTF-16 offset (the textarea's unit) to a character offset (the
+/// document's unit).
+fn utf16_to_char(value: &str, utf16_offset: u32) -> usize {
+    let mut units = 0_u32;
+    for (index, character) in value.chars().enumerate() {
+        if units >= utf16_offset {
+            return index;
+        }
+        units += character.len_utf16() as u32;
+    }
+    value.chars().count()
+}
+
+/// Converts a character offset to a UTF-16 offset, for the textarea selection.
+fn char_to_utf16(value: &str, char_offset: usize) -> u32 {
+    value
+        .chars()
+        .take(char_offset)
+        .map(|character| character.len_utf16() as u32)
+        .sum()
 }
 
 /// The width and height of one monospace cell, measured from the probe element.
