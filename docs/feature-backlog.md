@@ -74,8 +74,6 @@ The MCP bridge exists; build editing *modalities* on it, not just a chat pane.
 - AI-aware multibuffer: the agent gathers call sites / matches into one editable buffer
 - the agent reads diagnostics, the scene, and the console it already has access to
 
-(Human pair-programming and real-time collaboration are explicitly out of scope.)
-
 ### B. Live / creative coding with the 3D engine `[B]`
 Nothing else edits code that drives a live 3D scene. Serve that.
 - live-reload of scene values without a full reset; hot-tunable parameters

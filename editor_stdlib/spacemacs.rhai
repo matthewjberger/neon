@@ -36,9 +36,10 @@
 // end, dd delete line, J join, 0/$ ends, w/b words, / find, Escape leaves
 // insert.
 //
-// Operators and text objects: d and c take a motion or an object, so diw / ciw
-// (inner word), di" / ci( (inner pair), daw / da{ (around), plus dw/db/d$ and
-// cc/cw. v starts a charwise selection, V a linewise one; in visual the motions
+// Operators and text objects: d, c, y take any motion (dw, d$, d0, db, dj, dG,
+// 3dw), a find (dt) df), a text object (diw, ci", daw), gg (dgg), or the doubled
+// form (dd, cc, yy). r replaces a char, O opens a line above, >> / << indent the
+// line. v starts a charwise selection, V a linewise one; in visual the motions
 // extend it and d/c/x/s act on it, > / < indent, u / U change case, gc comments,
 // i/a select a text object, and S wraps it (S) ' " ( [ { < `).
 //
@@ -242,6 +243,30 @@ fn count_or(text, fallback) {
     if text == "" { return fallback; }
     let value = parse_int(text);
     if value < 1 { 1 } else { value }
+}
+
+// The ops that perform a charwise motion key, repeated by the count. Empty when
+// the key is not a motion an operator can take.
+fn motion_for(key, count) {
+    let n = count_or(count, 1);
+    if key == "h" || key == "ArrowLeft" { return [#{ Move: -n }]; }
+    if key == "l" || key == "ArrowRight" { return [#{ Move: n }]; }
+    if key == "j" || key == "ArrowDown" { return [#{ MoveLine: n }]; }
+    if key == "k" || key == "ArrowUp" { return [#{ MoveLine: -n }]; }
+    if key == "w" { let ops = []; for step in 0..n { ops.push("NextWord"); } return ops; }
+    if key == "b" { let ops = []; for step in 0..n { ops.push("PrevWord"); } return ops; }
+    if key == "0" { return ["LineStart"]; }
+    if key == "$" { return ["LineEnd"]; }
+    if key == "G" { return ["BufferEnd"]; }
+    return [];
+}
+
+// The ops that finish an operator once its range is selected: d cuts, c cuts and
+// enters insert, y copies.
+fn finish_for(op) {
+    if op == "d" { return ["Cut"]; }
+    if op == "c" { return ["Cut", #{ SetMode: "insert" }]; }
+    return ["Copy"];
 }
 
 // The bracket or quote pair a surround key names, or () for an unknown key.
@@ -531,64 +556,68 @@ fn on_key() {
         else if key == "i" { ops.push(#{ RunCommand: "show-installed" }); }
         return;
     }
-    if pending == "d" {
+    // Operators d/c/y take a text object (i/a), a find (f/F/t/T), gg, the doubled
+    // form (dd/cc/yy = the whole line), or any charwise motion.
+    if pending == "d" || pending == "c" || pending == "y" {
         ops.push("Consume");
-        if key == "i" { state.pending = "di"; }
-        else if key == "a" { state.pending = "da"; }
-        else {
-            state.pending = "";
-            if key == "d" { ops.push("DeleteLine"); }
-            else if key == "w" { ops.push("DeleteWordForward"); }
-            else if key == "b" { ops.push("DeleteWordBackward"); }
-            else if key == "$" { ops.push("DeleteToLineEnd"); }
+        let op = pending;
+        let opcount = if "opcount" in state { state.opcount } else { "" };
+        if key == "i" || key == "a" { state.pending = op + key; return; }
+        if key == "f" || key == "F" || key == "t" || key == "T" { state.pending = op + key; return; }
+        if key == "g" { state.pending = op + "g"; return; }
+        state.pending = "";
+        state.opcount = "";
+        if key == op {
+            if op == "d" { for step in 0..count_or(opcount, 1) { ops.push("DeleteLine"); } }
+            else if op == "y" { ops.push("Copy"); }
+            else { ops.push("LineStart"); ops.push("DeleteToLineEnd"); ops.push(#{ SetMode: "insert" }); }
+            return;
+        }
+        let motion = motion_for(key, opcount);
+        if motion.len() > 0 {
+            ops.push("Anchor");
+            for o in motion { ops.push(o); }
+            for o in finish_for(op) { ops.push(o); }
         }
         return;
     }
-    if pending == "di" || pending == "da" {
+    if pending == "di" || pending == "da" || pending == "ci" || pending == "ca"
+        || pending == "yi" || pending == "ya" {
         ops.push("Consume");
-        let around = pending == "da";
+        let op = pending.sub_string(0, 1);
+        let around = pending.sub_string(1, 1) == "a";
         state.pending = "";
         if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
-        ops.push("DeleteSelection");
+        for o in finish_for(op) { ops.push(o); }
         return;
     }
-    if pending == "c" {
+    if pending.len() == 2 && (pending.sub_string(0, 1) == "d" || pending.sub_string(0, 1) == "c"
+        || pending.sub_string(0, 1) == "y")
+        && (pending.sub_string(1, 1) == "f" || pending.sub_string(1, 1) == "F"
+        || pending.sub_string(1, 1) == "t" || pending.sub_string(1, 1) == "T") {
         ops.push("Consume");
-        if key == "i" { state.pending = "ci"; }
-        else if key == "a" { state.pending = "ca"; }
-        else {
-            state.pending = "";
-            if key == "c" { ops.push("LineStart"); ops.push("DeleteToLineEnd"); ops.push(#{ SetMode: "insert" }); }
-            else if key == "w" { ops.push("DeleteWordForward"); ops.push(#{ SetMode: "insert" }); }
+        let op = pending.sub_string(0, 1);
+        let fk = pending.sub_string(1, 1);
+        state.pending = "";
+        ops.push("Anchor");
+        if fk == "f" { ops.push(#{ FindChar: key }); ops.push(#{ Move: 1 }); }
+        else if fk == "t" { ops.push(#{ FindChar: key }); }
+        else if fk == "F" { ops.push(#{ FindCharBack: key }); }
+        else if fk == "T" { ops.push(#{ FindCharBack: key }); ops.push(#{ Move: 1 }); }
+        for o in finish_for(op) { ops.push(o); }
+        return;
+    }
+    if pending.len() == 2 && pending.sub_string(1, 1) == "g"
+        && (pending.sub_string(0, 1) == "d" || pending.sub_string(0, 1) == "c"
+        || pending.sub_string(0, 1) == "y") {
+        ops.push("Consume");
+        let op = pending.sub_string(0, 1);
+        state.pending = "";
+        if key == "g" {
+            ops.push("Anchor");
+            ops.push("BufferStart");
+            for o in finish_for(op) { ops.push(o); }
         }
-        return;
-    }
-    if pending == "ci" || pending == "ca" {
-        ops.push("Consume");
-        let around = pending == "ca";
-        state.pending = "";
-        if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
-        ops.push("DeleteSelection");
-        ops.push(#{ SetMode: "insert" });
-        return;
-    }
-    if pending == "y" {
-        ops.push("Consume");
-        if key == "i" { state.pending = "yi"; }
-        else if key == "a" { state.pending = "ya"; }
-        else {
-            state.pending = "";
-            if key == "y" { ops.push("Copy"); }
-            else if key == "w" { ops.push("SelectWord"); ops.push("Copy"); }
-        }
-        return;
-    }
-    if pending == "yi" || pending == "ya" {
-        ops.push("Consume");
-        let around = pending == "ya";
-        state.pending = "";
-        if around { ops.push(#{ SelectAround: key }); } else { ops.push(#{ SelectInner: key }); }
-        ops.push("Copy");
         return;
     }
     if pending == "\"" {
@@ -619,6 +648,28 @@ fn on_key() {
         ops.push("Consume");
         state.pending = "";
         if key == "z" { ops.push("Center"); }
+        return;
+    }
+    if pending == "r" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 {
+            ops.push(#{ DeleteForward: 1 });
+            ops.push(#{ Insert: key });
+            ops.push(#{ Move: -1 });
+        }
+        return;
+    }
+    if pending == ">" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == ">" { ops.push("Indent"); }
+        return;
+    }
+    if pending == "<" {
+        ops.push("Consume");
+        state.pending = "";
+        if key == "<" { ops.push("Outdent"); }
         return;
     }
 
@@ -665,14 +716,18 @@ fn on_key() {
     else if key == "J" { ops.push("JoinLines"); }
     else if key == "K" { ops.push(#{ RunCommand: "hover" }); }
     else if key == "u" { ops.push(#{ RunCommand: "undo" }); }
-    else if key == "d" { state.pending = "d"; }
-    else if key == "c" { state.pending = "c"; }
-    else if key == "y" { state.pending = "y"; }
+    else if key == "d" { state.pending = "d"; state.opcount = count; }
+    else if key == "c" { state.pending = "c"; state.opcount = count; }
+    else if key == "y" { state.pending = "y"; state.opcount = count; }
     else if key == "p" || key == "P" { ops.push("Paste"); }
     else if key == "\"" { state.pending = "\""; }
     else if key == "." { ops.push("Repeat"); }
     else if key == "G" { if count != "" { ops.push(#{ Goto: count_or(count, 1) }); } else { ops.push("BufferEnd"); } }
     else if key == "z" { state.pending = "z"; }
+    else if key == "r" { state.pending = "r"; }
+    else if key == ">" { state.pending = ">"; }
+    else if key == "<" { state.pending = "<"; }
+    else if key == "O" { ops.push("LineStart"); ops.push(#{ Insert: "\n" }); ops.push(#{ Move: -1 }); ops.push(#{ SetMode: "insert" }); }
     else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
     else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }

@@ -274,10 +274,7 @@ mod tests {
         run_key(&engine, &ast, &mut state_map, "i");
         let ops = run_key(&engine, &ast, &mut state_map, "w");
         assert!(has_map_op(&ops, "SelectInner"), "diw did not select inner");
-        assert!(
-            has_string_op(&ops, "DeleteSelection"),
-            "diw did not delete the selection"
-        );
+        assert!(has_string_op(&ops, "Cut"), "diw did not cut the selection");
     }
 
     #[test]
@@ -322,6 +319,31 @@ mod tests {
         assert!(moved, "5j did not move five lines");
         let ops = run_key(&engine, &ast, &mut state_map, ".");
         assert!(has_string_op(&ops, "Repeat"), ". did not repeat");
+    }
+
+    #[test]
+    fn spacemacs_operator_motions() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        // dw selects a motion range and cuts it.
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "d");
+        let dw = run_key(&engine, &ast, &mut state_map, "w");
+        assert!(has_string_op(&dw, "Anchor"), "dw did not anchor");
+        assert!(has_string_op(&dw, "NextWord"), "dw did not move a word");
+        assert!(has_string_op(&dw, "Cut"), "dw did not cut");
+        // df, finds the char inclusively and cuts.
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "d");
+        run_key(&engine, &ast, &mut state_map, "f");
+        let comma = run_key(&engine, &ast, &mut state_map, ",");
+        assert!(has_map_op(&comma, "FindChar"), "df did not find the char");
+        assert!(has_string_op(&comma, "Cut"), "df did not cut");
+        // >> indents the line.
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, ">");
+        let indent = run_key(&engine, &ast, &mut state_map, ">");
+        assert!(has_string_op(&indent, "Indent"), ">> did not indent");
     }
 
     #[test]
