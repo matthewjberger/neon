@@ -2,10 +2,12 @@
 //! component and closure without cloning. Plain data: no methods beyond the
 //! constructor.
 
+use std::collections::HashMap;
+
 use leptos::prelude::*;
 use protocol::{
-    CommandInfo, Diagnostic, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity, StdModule,
-    TermGrid,
+    CommandInfo, Diagnostic, GitChange, LogEntry, LogKind, PluginSource, SearchHit, SelectedEntity,
+    StdModule, TermGrid,
 };
 use serde::{Deserialize, Serialize};
 
@@ -414,6 +416,8 @@ pub struct EditorState {
     pub split_vertical: RwSignal<bool>,
     /// Files opened from disk through the desktop filesystem bridge.
     pub files: RwSignal<Vec<FileBuffer>>,
+    /// Working-tree diff against HEAD per file path, for the editor's git gutter.
+    pub git_changes: RwSignal<HashMap<String, Vec<(u32, GitChange)>>>,
     /// The unified command-and-event console log.
     pub log: RwSignal<Vec<LogEntry>>,
     /// Diagnostics for the active plugin, from the language worker.
@@ -494,6 +498,7 @@ impl EditorState {
             focused_key: RwSignal::new(0),
             split_vertical: RwSignal::new(true),
             files: RwSignal::new(Vec::new()),
+            git_changes: RwSignal::new(HashMap::new()),
             log: RwSignal::new(Vec::new()),
             diagnostics: RwSignal::new(Vec::new()),
             running: RwSignal::new(true),

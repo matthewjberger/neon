@@ -27,6 +27,7 @@ mod complete;
 mod components;
 mod editor_plugins;
 mod fs;
+mod git;
 mod highlight;
 mod ipc;
 mod jump;

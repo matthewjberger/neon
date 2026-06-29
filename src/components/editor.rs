@@ -210,7 +210,31 @@ pub fn EditorPane(
                     <div class="editor-gutter" node_ref=gutter>
                         {move || {
                             let count = source().split('\n').count().max(1);
-                            (1..=count).map(|number| view! { <div>{number}</div> }).collect_view()
+                            let path = match active_kind() {
+                                PluginKind::File => active_id(),
+                                _ => None,
+                            };
+                            let changes = path
+                                .as_deref()
+                                .map(|path| {
+                                    state.git_changes.with(|map| map.get(path).cloned())
+                                })
+                                .unwrap_or_default()
+                                .unwrap_or_default();
+                            (1..=count)
+                                .map(|number| {
+                                    let class = changes
+                                        .iter()
+                                        .find(|(line, _)| *line == number as u32)
+                                        .map(|(_, change)| match change {
+                                            protocol::GitChange::Added => "git-added",
+                                            protocol::GitChange::Modified => "git-modified",
+                                            protocol::GitChange::Removed => "git-removed",
+                                        })
+                                        .unwrap_or("");
+                                    view! { <div class=class>{number}</div> }
+                                })
+                                .collect_view()
                         }}
                     </div>
                     <pre class="editor-highlight" node_ref=layer aria-hidden="true">

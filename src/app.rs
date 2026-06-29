@@ -47,6 +47,8 @@ pub fn App() -> impl IntoView {
     crate::terminal::start(state);
     crate::ipc::notify_host("enable-highlight");
     crate::treesitter::start(state);
+    crate::ipc::notify_host("enable-git");
+    crate::git::start(state);
 
     theme::apply_theme(&state.theme.get_untracked());
 

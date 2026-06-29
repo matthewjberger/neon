@@ -386,6 +386,34 @@ pub enum LspServerMessage {
     Exited { code: Option<i32> },
 }
 
+/// Page to the desktop git bridge. Git runs natively in the shell, so the page
+/// asks for a file's working-tree diff against HEAD and gets back the changed
+/// line numbers to mark in the gutter.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GitClientMessage {
+    /// Compute the diff of a file against HEAD.
+    DiffFile { request_id: u64, path: String },
+}
+
+/// The kind of change on a gutter line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GitChange {
+    Added,
+    Modified,
+    Removed,
+}
+
+/// Desktop git bridge to the page: a file's changed lines, 1-based. `Removed`
+/// marks the line below a deletion.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GitServerMessage {
+    Diff {
+        request_id: u64,
+        path: String,
+        changes: Vec<(u32, GitChange)>,
+    },
+}
+
 /// One highlighted run of source: a half-open UTF-8 byte range over the
 /// request's `text` and the CSS class the page paints it with. The bridge emits
 /// the runs in order and may leave gaps, which the page renders as plain text.

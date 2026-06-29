@@ -836,6 +836,24 @@ body {
   user-select: none;
 }
 
+/* Git gutter: a colored bar on the left of a changed line's number. */
+.editor-gutter > div {
+  border-left: 2px solid transparent;
+  padding-left: 4px;
+}
+
+.editor-gutter > div.git-added {
+  border-left-color: var(--git-added, #4ade80);
+}
+
+.editor-gutter > div.git-modified {
+  border-left-color: var(--git-modified, #5b9bff);
+}
+
+.editor-gutter > div.git-removed {
+  border-left-color: var(--git-removed, #ff6b6b);
+}
+
 .editor-wrap {
   position: relative;
   flex: 1;

@@ -219,6 +219,7 @@ fn dispatch(state: EditorState, response: FsResponse) {
                 crate::lsp::did_open(state, &path);
                 crate::lsp::apply_pending_edits(state, &path);
             }
+            crate::git::refresh(&path);
         }
         FsResponse::Wrote { path, .. } => {
             state.files.update(|files| {
@@ -226,6 +227,7 @@ fn dispatch(state: EditorState, response: FsResponse) {
                     file.dirty = false;
                 }
             });
+            crate::git::refresh(&path);
         }
         FsResponse::SearchResults { hits, .. } => {
             state.explorer.search_results.set(hits);
