@@ -514,8 +514,84 @@ fn apply_document(state: EditorState, document: &mut Document, ops: Vec<EditorOp
                     DOC_EXTENDING.set(end > start);
                 }
             }
+            EditorOp::DuplicateLine => {
+                let line = document.char_to_line(caret);
+                let text = document.line(line);
+                let end = document.line_end(line);
+                document.replace_range(end, end, &format!("\n{text}"));
+                document.set_primary(Selection::caret(caret + 1 + text.chars().count()));
+                changed = true;
+            }
+            EditorOp::MoveLineDown => {
+                let line = document.char_to_line(caret);
+                if line + 1 < document.len_lines() {
+                    let start = document.line_to_char(line);
+                    let this = document.line(line);
+                    let next = document.line(line + 1);
+                    let next_end = document.line_end(line + 1);
+                    let column = caret - start;
+                    document.replace_range(start, next_end, &format!("{next}\n{this}"));
+                    let moved_start = start + next.chars().count() + 1;
+                    document.set_primary(Selection::caret(moved_start + column));
+                    changed = true;
+                }
+            }
+            EditorOp::MoveLineUp => {
+                let line = document.char_to_line(caret);
+                if line > 0 {
+                    let previous_start = document.line_to_char(line - 1);
+                    let previous = document.line(line - 1);
+                    let this = document.line(line);
+                    let end = document.line_end(line);
+                    let column = caret - document.line_to_char(line);
+                    document.replace_range(previous_start, end, &format!("{this}\n{previous}"));
+                    document.set_primary(Selection::caret(previous_start + column));
+                    changed = true;
+                }
+            }
+            EditorOp::JoinLines => {
+                let line = document.char_to_line(caret);
+                if line + 1 < document.len_lines() {
+                    let end = document.line_end(line);
+                    let next_start = document.line_to_char(line + 1);
+                    let next = document.line(line + 1);
+                    let lead = next.chars().count() - next.trim_start().chars().count();
+                    let separator = if end > document.line_to_char(line) {
+                        " "
+                    } else {
+                        ""
+                    };
+                    document.replace_range(end, next_start + lead, separator);
+                    document.set_primary(Selection::caret(end));
+                    changed = true;
+                }
+            }
+            EditorOp::SortLines => {
+                let content = document.text();
+                let mut lines: Vec<&str> = content.split('\n').collect();
+                lines.sort_unstable();
+                let sorted = lines.join("\n");
+                if sorted != content {
+                    document.replace_range(0, document.len_chars(), &sorted);
+                    changed = true;
+                }
+            }
+            EditorOp::DeleteTrailingWhitespace => {
+                let content = document.text();
+                let trimmed = content
+                    .split('\n')
+                    .map(|line| line.trim_end_matches([' ', '\t']))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if trimmed != content {
+                    let target = caret.min(trimmed.chars().count());
+                    document.replace_range(0, document.len_chars(), &trimmed);
+                    document.set_primary(Selection::caret(target));
+                    changed = true;
+                }
+            }
             // Ops not mapped to the surface yet: macros, dot-repeat, scrolling,
-            // paste-pop, and the line-shuffle tools.
+            // and paste-pop.
             _ => {}
         }
     }
