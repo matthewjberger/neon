@@ -385,6 +385,19 @@ mod tests {
     }
 
     #[test]
+    fn spacemacs_macros() {
+        let engine = super::make_engine();
+        let ast = engine.compile(SPACEMACS).unwrap();
+        let mut state_map = rhai::Map::new();
+        run_key(&engine, &ast, &mut state_map, "q");
+        let start = run_key(&engine, &ast, &mut state_map, "a");
+        assert!(has_map_op(&start, "StartMacro"), "qa did not start a macro");
+        run_key(&engine, &ast, &mut state_map, "@");
+        let play = run_key(&engine, &ast, &mut state_map, "a");
+        assert!(has_map_op(&play, "PlayMacro"), "@a did not play a macro");
+    }
+
+    #[test]
     fn catalog_plugins_compile() {
         let sources: &[(&str, &str)] = &[
             (

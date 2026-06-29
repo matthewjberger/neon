@@ -55,8 +55,10 @@
 // bottom the view, H / M / L move to the top / middle / bottom line.
 //
 // Marks and the jump list: m{a} sets mark a, `a jumps to it, 'a to its line;
-// Ctrl-o / Ctrl-i walk the jump list; Ctrl-d / Ctrl-u scroll a half page. Edit
-// this live to change anything.
+// Ctrl-o / Ctrl-i walk the jump list; Ctrl-d / Ctrl-u scroll a half page.
+//
+// Macros: q{a} records keystrokes into register a, q stops, @{a} replays, @@
+// replays the last. Edit this live to change anything.
 
 fn leader_menu() {
     #{ title: "Leader", items: [
@@ -722,6 +724,18 @@ fn on_key() {
         if key.len() == 1 { ops.push(#{ GotoMarkLine: key }); }
         return;
     }
+    if pending == "q" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 { ops.push(#{ StartMacro: key }); state.recording = true; }
+        return;
+    }
+    if pending == "@" {
+        ops.push("Consume");
+        state.pending = "";
+        if key.len() == 1 { ops.push(#{ PlayMacro: key }); }
+        return;
+    }
     if pending == "r" {
         ops.push("Consume");
         state.pending = "";
@@ -812,6 +826,11 @@ fn on_key() {
     else if key == ">" { state.pending = ">"; }
     else if key == "<" { state.pending = "<"; }
     else if key == "O" { ops.push("LineStart"); ops.push(#{ Insert: "\n" }); ops.push(#{ Move: -1 }); ops.push(#{ SetMode: "insert" }); }
+    else if key == "q" {
+        if "recording" in state && state.recording { ops.push("StopMacro"); state.recording = false; }
+        else { state.pending = "q"; }
+    }
+    else if key == "@" { state.pending = "@"; }
     else if key == "v" { ops.push("Anchor"); ops.push(#{ SetMode: "visual" }); }
     else if key == "V" { ops.push("SelectLine"); ops.push(#{ SetMode: "visual" }); }
 }

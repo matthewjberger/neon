@@ -46,6 +46,25 @@ thread_local! {
     static JUMPLIST: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     /// The cursor into the jump list.
     static JUMP_INDEX: Cell<usize> = const { Cell::new(0) };
+    /// Recorded macros: the key sequence per register letter.
+    static MACROS: RefCell<HashMap<char, Vec<MacroKey>>> = RefCell::new(HashMap::new());
+    /// The register currently recording, if any.
+    static MACRO_RECORDING: Cell<Option<char>> = const { Cell::new(None) };
+    /// Set while replaying, so a macro is not re-recorded and `@@` resolves.
+    static MACRO_REPLAYING: Cell<bool> = const { Cell::new(false) };
+    /// The last register replayed, for `@@`.
+    static LAST_MACRO: Cell<Option<char>> = const { Cell::new(None) };
+    /// Replay recursion depth, a guard against a macro that calls itself.
+    static MACRO_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+/// One recorded keystroke in a macro.
+#[derive(Clone)]
+struct MacroKey {
+    key: String,
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
 }
 
 /// How an in-line find lands: on the character (`f`/`F`) or just before/after it
@@ -203,6 +222,12 @@ enum EditorOp {
     CaretViewTop,
     CaretViewMiddle,
     CaretViewBottom,
+    /// Start recording keystrokes into a register (`q{a}`).
+    StartMacro(String),
+    /// Stop recording (`q`).
+    StopMacro,
+    /// Replay a register's macro (`@{a}`; `@` means the last one).
+    PlayMacro(String),
 }
 
 /// One keystroke handed to the editor plugins.
@@ -239,6 +264,46 @@ pub fn handle_key(
             changed: false,
         };
     }
+
+    // Macros: record this key into the active register unless it is the one that
+    // starts or stops recording, then apply any macro control the ops carry.
+    let starts = ops.iter().any(|op| matches!(op, EditorOp::StartMacro(_)));
+    let stops = ops.iter().any(|op| matches!(op, EditorOp::StopMacro));
+    if let Some(register) = MACRO_RECORDING.with(Cell::get)
+        && !MACRO_REPLAYING.with(Cell::get)
+        && !starts
+        && !stops
+    {
+        MACROS.with(|macros| {
+            macros
+                .borrow_mut()
+                .entry(register)
+                .or_default()
+                .push(MacroKey {
+                    key: event.key.clone(),
+                    ctrl: event.ctrl,
+                    shift: event.shift,
+                    alt: event.alt,
+                });
+        });
+    }
+    let mut play: Option<String> = None;
+    for op in &ops {
+        match op {
+            EditorOp::StartMacro(register) => {
+                if let Some(letter) = register.chars().next() {
+                    MACRO_RECORDING.with(|cell| cell.set(Some(letter)));
+                    MACROS.with(|macros| {
+                        macros.borrow_mut().insert(letter, Vec::new());
+                    });
+                }
+            }
+            EditorOp::StopMacro => MACRO_RECORDING.with(|cell| cell.set(None)),
+            EditorOp::PlayMacro(register) => play = Some(register.clone()),
+            _ => {}
+        }
+    }
+
     // A dot replays the recorded change rather than its own batch, and is never
     // itself recorded, so repeating a repeat repeats the original change.
     let is_repeat = ops.iter().any(|op| matches!(op, EditorOp::Repeat));
@@ -251,13 +316,63 @@ pub fn handle_key(
             };
         }
     }
-    let consumed = is_repeat || ops.iter().any(|op| matches!(op, EditorOp::Consume));
+    let consumed = is_repeat
+        || starts
+        || stops
+        || play.is_some()
+        || ops.iter().any(|op| matches!(op, EditorOp::Consume));
     let record = if is_repeat { None } else { Some(ops.clone()) };
-    let changed = apply(state, id, kind, textarea, ops);
+    let mut changed = apply(state, id.clone(), kind, textarea, ops);
     if changed && let Some(batch) = record {
         LAST_CHANGE.with(|cell| *cell.borrow_mut() = batch);
     }
+    if let Some(register) = play {
+        changed |= play_macro(state, &id, kind, textarea, &register);
+    }
     KeyOutcome { consumed, changed }
+}
+
+/// Replays a register's recorded keys through the dispatch, guarding against a
+/// macro that calls itself.
+fn play_macro(
+    state: EditorState,
+    id: &Option<String>,
+    kind: PluginKind,
+    textarea: &HtmlTextAreaElement,
+    register: &str,
+) -> bool {
+    let letter = if register == "@" {
+        LAST_MACRO.with(Cell::get)
+    } else {
+        register.chars().next()
+    };
+    let Some(letter) = letter else {
+        return false;
+    };
+    LAST_MACRO.with(|cell| cell.set(Some(letter)));
+    if MACRO_DEPTH.with(Cell::get) > 64 {
+        return false;
+    }
+    let keys = MACROS.with(|macros| macros.borrow().get(&letter).cloned());
+    let Some(keys) = keys else {
+        return false;
+    };
+    let was_replaying = MACRO_REPLAYING.with(Cell::get);
+    MACRO_REPLAYING.with(|cell| cell.set(true));
+    MACRO_DEPTH.with(|cell| cell.set(cell.get() + 1));
+    let mut changed = false;
+    for macro_key in keys {
+        let event = KeyEvent {
+            key: macro_key.key,
+            ctrl: macro_key.ctrl,
+            shift: macro_key.shift,
+            alt: macro_key.alt,
+        };
+        changed |= handle_key(state, id.clone(), kind, textarea, &event).changed;
+    }
+    MACRO_DEPTH.with(|cell| cell.set(cell.get().saturating_sub(1)));
+    MACRO_REPLAYING.with(|cell| cell.set(was_replaying));
+    changed
 }
 
 /// The read-only view of the buffer a plugin's `on_key` sees: where the caret is,
@@ -449,6 +564,7 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
             "CaretViewTop" => Some(EditorOp::CaretViewTop),
             "CaretViewMiddle" => Some(EditorOp::CaretViewMiddle),
             "CaretViewBottom" => Some(EditorOp::CaretViewBottom),
+            "StopMacro" => Some(EditorOp::StopMacro),
             _ => None,
         };
     }
@@ -466,6 +582,8 @@ fn parse_op(value: &Dynamic) -> Option<EditorOp> {
         "SetMark" => Some(EditorOp::SetMark(payload.into_string().ok()?)),
         "GotoMark" => Some(EditorOp::GotoMark(payload.into_string().ok()?)),
         "GotoMarkLine" => Some(EditorOp::GotoMarkLine(payload.into_string().ok()?)),
+        "StartMacro" => Some(EditorOp::StartMacro(payload.into_string().ok()?)),
+        "PlayMacro" => Some(EditorOp::PlayMacro(payload.into_string().ok()?)),
         "FindCharBack" => Some(EditorOp::FindCharBack(payload.into_string().ok()?)),
         "TillChar" => Some(EditorOp::TillChar(payload.into_string().ok()?)),
         "TillCharBack" => Some(EditorOp::TillCharBack(payload.into_string().ok()?)),
@@ -945,6 +1063,8 @@ fn apply(
             EditorOp::CaretViewTop => caret = caret_to_view(textarea, &text, 0.0),
             EditorOp::CaretViewMiddle => caret = caret_to_view(textarea, &text, 0.5),
             EditorOp::CaretViewBottom => caret = caret_to_view(textarea, &text, 1.0),
+            // Macro control is handled in `handle_key`, around the dispatch.
+            EditorOp::StartMacro(_) | EditorOp::StopMacro | EditorOp::PlayMacro(_) => {}
             EditorOp::RunCommand(id) => state.editing.command_request.set(Some(id)),
             EditorOp::OpenPalette => state.editing.palette_open.set(true),
             EditorOp::ShowMenu(menu) => state.editing.leader.set(Some(menu)),

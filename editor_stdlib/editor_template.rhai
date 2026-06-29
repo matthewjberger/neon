@@ -63,6 +63,9 @@
 //   "HalfPageDown" "HalfPageUp" "ScrollLineTop" "ScrollLineBottom"
 //   "CaretViewTop" "CaretViewMiddle" "CaretViewBottom"   H / M / L
 //
+// Macros (the host records and replays the keys):
+//   #{ StartMacro: "a" } "StopMacro" #{ PlayMacro: "a" }   q{a} / q / @{a}
+//
 // Drive the rest of the editor by id (anything in the command palette):
 //   #{ RunCommand: "format-document" }    "go-to-definition" "find-references"
 //   #{ RunCommand: "rename-symbol" }      "code-action" "hover" "jump-symbol"
